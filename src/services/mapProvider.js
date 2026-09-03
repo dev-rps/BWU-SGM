@@ -119,6 +119,10 @@ class MapProviderState {
           type: 'geojson',
           data: initialRouteGeoJson || emptyFeatureCollection,
         },
+        'route-traversed': {
+          type: 'geojson',
+          data: emptyFeatureCollection,
+        },
       },
       layers: [
         {
@@ -135,6 +139,23 @@ class MapProviderState {
           minzoom: 0,
           maxzoom: 20,
         },
+        // Faded dashed trail behind the vehicle (traversed path)
+        {
+          id: 'route-traversed-line',
+          type: 'line',
+          source: 'route-traversed',
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+          paint: {
+            'line-color': '#64748b',
+            'line-width': 5,
+            'line-opacity': 0.3,
+            'line-dasharray': [2, 3],
+          },
+        },
+        // Active remaining route casing (dark blue border)
         {
           id: 'route-casing',
           type: 'line',
@@ -149,6 +170,7 @@ class MapProviderState {
             'line-opacity': 0.9,
           },
         },
+        // Active remaining route core (bright blue)
         {
           id: 'route-core',
           type: 'line',
@@ -158,7 +180,7 @@ class MapProviderState {
             'line-join': 'round',
           },
           paint: {
-            'line-color': '#1a73e8', // Google Maps active route blue
+            'line-color': '#1a73e8',
             'line-width': 7.5,
             'line-opacity': 1.0,
           },

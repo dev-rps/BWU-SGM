@@ -385,6 +385,15 @@ export default function NavigationPage() {
     })
   }, [])
 
+
+
+  const handleMapError = useCallback((e) => {
+    if (e?.error?.status === 404 || e?.error?.status === 403) {
+      console.warn('[NavigationMap] Google tile HTTP error:', e.error?.status)
+      mapProvider.recordTileError('google')
+    }
+  }, [])
+
   // ── Keep built-in route-source data updated on map instance ────────────────
   useEffect(() => {
     if (!mapRef.current || !routeGeoJson) return
@@ -409,91 +418,55 @@ export default function NavigationPage() {
     }
   }, [routeGeoJson])
 
-  const handleMapError = useCallback((e) => {
-    if (e?.error?.status === 404 || e?.error?.status === 403) {
-      console.warn('[NavigationMap] Google tile HTTP error:', e.error?.status)
-      mapProvider.recordTileError('google')
-    }
-  }, [])
-
-  // ── High-Precision Dynamic Progress SVG Route Line Engine ──────────────────
-  const [svgRemainingPath, setSvgRemainingPath] = useState('')
-  const [svgTraversedPath, setSvgTraversedPath] = useState('')
-  const rafRef = useRef(null)
-
-  // Full normalized route coordinates: [[lng, lat], ...]
-  const fullRouteCoords = useMemo(() => {
-    return routeGeoJson?.features?.[0]?.geometry?.coordinates || []
-  }, [routeGeoJson])
-
-  const updateSvgPath = useCallback((overrideLng = null, overrideLat = null, overrideDist = null) => {
-    if (!mapRef.current || !fullRouteCoords.length) return
+  // ── Dynamic Route Progress: split route at vehicle position ────────────────
+  const updateRouteProgress = useCallback((vehicleLng, vehicleLat, distanceAlongRoute) => {
+    if (!mapRef.current || !validCoords || validCoords.length < 2 || !polylineData) return
     const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
     if (!map) return
 
-    const coords = fullRouteCoords
-    if (coords.length < 2) return
+    try {
+      const { cumDists } = polylineData
 
-    const vLng = overrideLng !== null ? overrideLng : currentLng
-    const vLat = overrideLat !== null ? overrideLat : currentLat
-    const vDist = overrideDist !== null ? overrideDist : simDistanceRef.current
-
-    if (rafRef.current) cancelAnimationFrame(rafRef.current)
-
-    rafRef.current = requestAnimationFrame(() => {
-      try {
-        const container = map.getContainer()
-        if (!container) return
-        const width = container.clientWidth || window.innerWidth
-        const height = container.clientHeight || window.innerHeight
-
-        const cumDists = polylineData?.cumDists || []
-        
-        // Find segment index where current vehicle progress is located
-        let activeIdx = 0
-        for (let i = 0; i < cumDists.length - 1; i++) {
-          if (vDist >= cumDists[i]) {
-            activeIdx = i
-          } else {
-            break
-          }
+      // Find the segment index where the vehicle currently is
+      let segIdx = 0
+      for (let i = 0; i < cumDists.length - 1; i++) {
+        if (distanceAlongRoute >= cumDists[i]) {
+          segIdx = i
+        } else {
+          break
         }
+      }
 
-        // Active remaining path ahead of vehicle to destination
-        const aheadCoords = [
-          [vLng, vLat],
-          ...coords.slice(activeIdx + 1)
-        ]
+      const vehiclePoint = [vehicleLng, vehicleLat]
 
-        // Traversed completed path behind vehicle
-        const behindCoords = [
-          ...coords.slice(0, activeIdx + 1),
-          [vLng, vLat]
-        ]
+      // Remaining route: from vehicle position to destination
+      const aheadCoords = [vehiclePoint, ...validCoords.slice(segIdx + 1)]
 
-        const projectToPath = (pts) => {
-          const points = []
-          for (let i = 0; i < pts.length; i++) {
-            const pt = map.project(pts[i])
-            if (isFinite(pt.x) && isFinite(pt.y)) {
-              points.push(`${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
-            }
-          }
-          return points.length >= 2 ? `M ${points.join(' L ')}` : ''
-        }
+      // Traversed route: from start to vehicle position
+      const behindCoords = [...validCoords.slice(0, segIdx + 1), vehiclePoint]
 
-        setSvgRemainingPath(projectToPath(aheadCoords))
-        setSvgTraversedPath(projectToPath(behindCoords))
-      } catch (_) {}
-    })
-  }, [fullRouteCoords, currentLng, currentLat, polylineData])
+      const makeGeoJson = (coords) => ({
+        type: 'FeatureCollection',
+        features: coords.length >= 2 ? [{
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: coords },
+        }] : [],
+      })
 
-  useEffect(() => {
-    updateSvgPath()
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      const routeSrc = map.getSource('route-source')
+      if (routeSrc && routeSrc.setData) {
+        routeSrc.setData(makeGeoJson(aheadCoords))
+      }
+
+      const traversedSrc = map.getSource('route-traversed')
+      if (traversedSrc && traversedSrc.setData) {
+        traversedSrc.setData(makeGeoJson(behindCoords))
+      }
+    } catch (err) {
+      console.debug('[NavigationMap] route progress update:', err)
     }
-  }, [updateSvgPath])
+  }, [validCoords, polylineData])
 
   // ── Speech Synthesis Engine (Clean, Non-overlapping) ────────────────────────
   const speakText = useCallback((text, force = false) => {
@@ -701,9 +674,8 @@ export default function NavigationPage() {
       setArrowHeading(state.bearing)
       setMapBearing(cameraBearingRef.current)
 
-      // Dynamically consume and complete route line in lockstep with simulation at 60 FPS
-      updateSvgPath(state.lng, state.lat, simDistanceRef.current)
-
+      // Dynamically update route line: shrink ahead, grow trail behind
+      updateRouteProgress(state.lng, state.lat, simDistanceRef.current)
       // Throttled UI State updates (at ~4Hz) to keep React thread super light
       if (timestamp - lastUiThrottleRef.current > 220) {
         lastUiThrottleRef.current = timestamp
@@ -739,7 +711,7 @@ export default function NavigationPage() {
     return () => {
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
     }
-  }, [isSimulating, polylineData, getInterpolatedRouteState, stepTargetDistances, steps, isVoiceEnabled, speakText, handleArrived, setLiveUserLocation])
+  }, [isSimulating, polylineData, getInterpolatedRouteState, updateRouteProgress, stepTargetDistances, steps, isVoiceEnabled, speakText, handleArrived, setLiveUserLocation])
 
   // Toggle Simulation Play/Pause
   const toggleSimulation = () => {
@@ -863,18 +835,13 @@ export default function NavigationPage() {
           onPitchStart={() => setIsFollowing(false)}
           onRotateStart={() => setIsFollowing(false)}
           onZoomStart={() => setIsFollowing(false)}
-          onRender={updateSvgPath}
           onMove={(e) => {
             setMapBearing(e.viewState.bearing)
-            updateSvgPath()
           }}
           onRotate={(e) => {
             setMapBearing(e.viewState.bearing)
-            updateSvgPath()
           }}
-          onZoom={updateSvgPath}
           onLoad={(e) => {
-            updateSvgPath()
             const map = e?.target || (mapRef.current?.getMap ? mapRef.current.getMap() : mapRef.current)
             if (map && routeGeoJson) {
               try {
@@ -888,19 +855,6 @@ export default function NavigationPage() {
           {/* 3D User Navigation Puck with Ultra-Smooth Rotating Directional Arrow & Heading Beam */}
           <Marker longitude={currentLng} latitude={currentLat} anchor="center">
             <div className="relative flex items-center justify-center pointer-events-none" style={{ width: 84, height: 84 }}>
-              {/* Dynamic Forward Heading Light Cone */}
-              <div
-                className="absolute -top-10 w-28 h-32 pointer-events-none"
-                style={{
-                  transform: `rotate(${continuousArrowAngle}deg)`,
-                  transformOrigin: 'bottom center',
-                  background: 'radial-gradient(ellipse at bottom, rgba(56, 189, 248, 0.75) 0%, rgba(56, 189, 248, 0.12) 50%, transparent 75%)',
-                  transition: 'transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
-                }}
-              />
-
-              {/* Pulsing GPS Accuracy Ring */}
-              <div className="absolute inset-2.5 rounded-full border-2 border-sky-400/50 animate-ping opacity-60 pointer-events-none" />
 
               {/* Ultra-Smooth Rotating 3D Navigation Arrowhead (Points towards movement/facing direction) */}
               <div
@@ -969,54 +923,7 @@ export default function NavigationPage() {
           })}
         </Map>
 
-        {/* ════════ HIGH-PRECISION DYNAMIC PROGRESS SVG ROUTE LINE OVERLAY ════════ */}
-        {/* Directly projected above map canvas, completing in lockstep with simulation */}
-        {(svgRemainingPath || svgTraversedPath) && (
-          <svg
-            className="absolute inset-0 pointer-events-none w-full h-full z-10 overflow-hidden"
-            style={{ filter: 'drop-shadow(0 2px 8px rgba(13,71,161,0.5))' }}
-          >
-            {/* Subtle Completed / Traversed Route Trail Behind Vehicle */}
-            {svgTraversedPath && (
-              <path
-                d={svgTraversedPath}
-                fill="none"
-                stroke="#64748b"
-                strokeWidth={5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeDasharray="6 6"
-                opacity={0.35}
-              />
-            )}
 
-            {/* Active Remaining Route Line (Navy Blue Casing) Ahead of Vehicle */}
-            {svgRemainingPath && (
-              <path
-                d={svgRemainingPath}
-                fill="none"
-                stroke="#0d47a1"
-                strokeWidth={13}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity={0.88}
-              />
-            )}
-
-            {/* Active Remaining Route Line (Google Maps Signature Vibrant Blue Core) Ahead of Vehicle */}
-            {svgRemainingPath && (
-              <path
-                d={svgRemainingPath}
-                fill="none"
-                stroke="#1a73e8"
-                strokeWidth={7.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity={1.0}
-              />
-            )}
-          </svg>
-        )}
       </div>
 
       {/* ════════ TOP MANEUVER HUD (Google Maps Obsidian/Emerald Style) ════════ */}
