@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Existing collections ────────────────────────────────────────────
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /reports/{reportId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    match /contacts/{userId}/emergency/{contactId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /journeyReviews/{reviewId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // ── SOS Events ─────────────────────────────────────────────────────
+    // Authenticated users can CREATE their own SOS events.
+    // Only the Cloud Function (via Admin SDK) can UPDATE status.
+    // Users can READ their own events (for live status display).
+    match /sos_events/{sosId} {
+      allow create: if request.auth != null;
+      allow read:   if request.auth != null &&
+                       resource.data.userId == request.auth.uid;
+      // Updates only allowed from server (Cloud Function uses Admin SDK)
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}
