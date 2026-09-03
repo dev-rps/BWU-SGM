@@ -330,58 +330,6 @@ export default function NavigationPage() {
     })
   }, [])
 
-  // Guarantee GeoJSON route line is active and rendered on MapLibre directly
-  const syncRouteToMap = useCallback(() => {
-    if (!mapRef.current || !routeGeoJson) return
-    const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
-    if (!map || !map.isStyleLoaded || !map.isStyleLoaded()) return
-
-    try {
-      if (map.getSource('route-source')) {
-        map.getSource('route-source').setData(routeGeoJson)
-      } else {
-        map.addSource('route-source', {
-          type: 'geojson',
-          data: routeGeoJson,
-        })
-      }
-
-      if (!map.getLayer('route-casing')) {
-        map.addLayer({
-          id: 'route-casing',
-          type: 'line',
-          source: 'route-source',
-          layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: {
-            'line-color': '#0d47a1',
-            'line-width': 14,
-            'line-opacity': 0.85,
-          },
-        })
-      }
-
-      if (!map.getLayer('route-core')) {
-        map.addLayer({
-          id: 'route-core',
-          type: 'line',
-          source: 'route-source',
-          layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: {
-            'line-color': '#1a73e8',
-            'line-width': 8.5,
-            'line-opacity': 1.0,
-          },
-        })
-      }
-    } catch (err) {
-      console.debug('[NavigationMap] syncRouteToMap:', err.message)
-    }
-  }, [routeGeoJson])
-
-  useEffect(() => {
-    syncRouteToMap()
-  }, [syncRouteToMap])
-
   const handleMapError = useCallback((e) => {
     if (e?.error?.status === 404 || e?.error?.status === 403) {
       console.warn('[NavigationMap] Google tile HTTP error:', e.error?.status)
@@ -787,8 +735,6 @@ export default function NavigationPage() {
           onZoomStart={() => setIsFollowing(false)}
           onRotate={(e) => setMapBearing(e.viewState.bearing)}
           onMove={(e) => setMapBearing(e.viewState.bearing)}
-          onLoad={syncRouteToMap}
-          onStyleData={syncRouteToMap}
         >
           {/* Active Navigation Route Line with Uber/Google Maps vibrant styling */}
           {routeGeoJson && (
