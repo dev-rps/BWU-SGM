@@ -415,17 +415,27 @@ export default function NavigationPage() {
     }
   }, [])
 
-  // ── High-Precision Direct Screen Projection SVG Route Line Engine ───────────
-  const [svgPath, setSvgPath] = useState('')
+  // ── High-Precision Dynamic Progress SVG Route Line Engine ──────────────────
+  const [svgRemainingPath, setSvgRemainingPath] = useState('')
+  const [svgTraversedPath, setSvgTraversedPath] = useState('')
   const rafRef = useRef(null)
 
-  const updateSvgPath = useCallback(() => {
-    if (!mapRef.current || !routeGeoJson) return
+  // Full normalized route coordinates: [[lng, lat], ...]
+  const fullRouteCoords = useMemo(() => {
+    return routeGeoJson?.features?.[0]?.geometry?.coordinates || []
+  }, [routeGeoJson])
+
+  const updateSvgPath = useCallback((overrideLng = null, overrideLat = null, overrideDist = null) => {
+    if (!mapRef.current || !fullRouteCoords.length) return
     const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
     if (!map) return
 
-    const coords = routeGeoJson?.features?.[0]?.geometry?.coordinates
-    if (!coords || coords.length < 2) return
+    const coords = fullRouteCoords
+    if (coords.length < 2) return
+
+    const vLng = overrideLng !== null ? overrideLng : currentLng
+    const vLat = overrideLat !== null ? overrideLat : currentLat
+    const vDist = overrideDist !== null ? overrideDist : simDistanceRef.current
 
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
@@ -436,24 +446,50 @@ export default function NavigationPage() {
         const width = container.clientWidth || window.innerWidth
         const height = container.clientHeight || window.innerHeight
 
-        const points = []
-        for (let i = 0; i < coords.length; i++) {
-          const pt = map.project(coords[i])
-          if (
-            isFinite(pt.x) && isFinite(pt.y) &&
-            pt.x >= -width * 0.6 && pt.x <= width * 1.6 &&
-            pt.y >= -height * 0.6 && pt.y <= height * 1.6
-          ) {
-            points.push(`${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
+        const cumDists = polylineData?.cumDists || []
+        
+        // Find segment index where current vehicle progress is located
+        let activeIdx = 0
+        for (let i = 0; i < cumDists.length - 1; i++) {
+          if (vDist >= cumDists[i]) {
+            activeIdx = i
+          } else {
+            break
           }
         }
 
-        if (points.length >= 2) {
-          setSvgPath(`M ${points.join(' L ')}`)
+        // Active remaining path ahead of vehicle to destination
+        const aheadCoords = [
+          [vLng, vLat],
+          ...coords.slice(activeIdx + 1)
+        ]
+
+        // Traversed completed path behind vehicle
+        const behindCoords = [
+          ...coords.slice(0, activeIdx + 1),
+          [vLng, vLat]
+        ]
+
+        const projectToPath = (pts) => {
+          const points = []
+          for (let i = 0; i < pts.length; i++) {
+            const pt = map.project(pts[i])
+            if (
+              isFinite(pt.x) && isFinite(pt.y) &&
+              pt.x >= -width * 0.6 && pt.x <= width * 1.6 &&
+              pt.y >= -height * 0.6 && pt.y <= height * 1.6
+            ) {
+              points.push(`${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
+            }
+          }
+          return points.length >= 2 ? `M ${points.join(' L ')}` : ''
         }
+
+        setSvgRemainingPath(projectToPath(aheadCoords))
+        setSvgTraversedPath(projectToPath(behindCoords))
       } catch (_) {}
     })
-  }, [routeGeoJson])
+  }, [fullRouteCoords, currentLng, currentLat, polylineData])
 
   useEffect(() => {
     updateSvgPath()
@@ -667,6 +703,9 @@ export default function NavigationPage() {
       setBearing(cameraBearingRef.current)
       setArrowHeading(state.bearing)
       setMapBearing(cameraBearingRef.current)
+
+      // Dynamically consume and complete route line in lockstep with simulation at 60 FPS
+      updateSvgPath(state.lng, state.lat, simDistanceRef.current)
 
       // Throttled UI State updates (at ~4Hz) to keep React thread super light
       if (timestamp - lastUiThrottleRef.current > 220) {
@@ -933,33 +972,52 @@ export default function NavigationPage() {
           })}
         </Map>
 
-        {/* ════════ HIGH-PRECISION SVG ROUTE LINE OVERLAY ════════ */}
-        {/* Rendered directly on top of the map canvas for 100% guaranteed visibility */}
-        {svgPath && (
+        {/* ════════ HIGH-PRECISION DYNAMIC PROGRESS SVG ROUTE LINE OVERLAY ════════ */}
+        {/* Directly projected above map canvas, completing in lockstep with simulation */}
+        {(svgRemainingPath || svgTraversedPath) && (
           <svg
             className="absolute inset-0 pointer-events-none w-full h-full z-10 overflow-hidden"
             style={{ filter: 'drop-shadow(0 2px 8px rgba(13,71,161,0.5))' }}
           >
-            {/* Navy Blue Outer Route Casing */}
-            <path
-              d={svgPath}
-              fill="none"
-              stroke="#0d47a1"
-              strokeWidth={13}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity={0.88}
-            />
-            {/* Google Maps Signature Vibrant Blue Active Route Line */}
-            <path
-              d={svgPath}
-              fill="none"
-              stroke="#1a73e8"
-              strokeWidth={7.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity={1.0}
-            />
+            {/* Subtle Completed / Traversed Route Trail Behind Vehicle */}
+            {svgTraversedPath && (
+              <path
+                d={svgTraversedPath}
+                fill="none"
+                stroke="#64748b"
+                strokeWidth={5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="6 6"
+                opacity={0.35}
+              />
+            )}
+
+            {/* Active Remaining Route Line (Navy Blue Casing) Ahead of Vehicle */}
+            {svgRemainingPath && (
+              <path
+                d={svgRemainingPath}
+                fill="none"
+                stroke="#0d47a1"
+                strokeWidth={13}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={0.88}
+              />
+            )}
+
+            {/* Active Remaining Route Line (Google Maps Signature Vibrant Blue Core) Ahead of Vehicle */}
+            {svgRemainingPath && (
+              <path
+                d={svgRemainingPath}
+                fill="none"
+                stroke="#1a73e8"
+                strokeWidth={7.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={1.0}
+              />
+            )}
           </svg>
         )}
       </div>
@@ -1356,8 +1414,9 @@ export default function NavigationPage() {
 
             {isSimulating && (
               <button
-                onClick={() => setSimSpeedMultiplier(s => s === 1 ? 2 : s === 2 ? 4 : 1)}
-                className="px-2 py-1 rounded-lg bg-slate-800 text-sky-400 font-extrabold text-[11px] border border-slate-700"
+                onClick={() => setSimSpeedMultiplier(s => s === 1 ? 2 : s === 2 ? 4 : s === 4 ? 8 : 1)}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 font-extrabold text-[11px] border border-slate-700 active:scale-95 transition-all cursor-pointer"
+                title="Toggle simulation speed (1x, 2x, 4x, 8x)"
               >
                 {simSpeedMultiplier}x Speed
               </button>
@@ -1369,13 +1428,18 @@ export default function NavigationPage() {
               const nextIdx = Math.min(stepIdx + 1, steps.length - 1)
               setStepIdx(nextIdx)
               if (stepTargetDistances[nextIdx]) {
-                simDistanceRef.current = Math.max(0, stepTargetDistances[nextIdx] - 100)
-                setRouteDistanceProgress(simDistanceRef.current)
+                const targetDist = Math.max(0, stepTargetDistances[nextIdx] - 50)
+                simDistanceRef.current = targetDist
+                setRouteDistanceProgress(targetDist)
+                const state = getInterpolatedRouteState(targetDist)
+                setCurrentLat(state.lat)
+                setCurrentLng(state.lng)
+                updateSvgPath(state.lng, state.lat, targetDist)
               }
               const st = steps[nextIdx]
               if (st && isVoiceEnabled) speakText(st.instruction)
             }}
-            className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1"
+            className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
             title="Advance step manually"
           >
             <span>Next Step</span>
