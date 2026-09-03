@@ -291,15 +291,6 @@ export default function NavigationPage() {
   const [activeProvider, setActiveProvider] = useState(() => mapProvider.getStatus().activeProvider)
   const mapStyle = useMemo(() => mapProvider.getMapLibreStyle(), [activeProvider])
 
-  // Declarative route line state — immune to mapStyle / provider changes
-  const [routeAheadData, setRouteAheadData] = useState(null)
-  const [routeTraversedData, setRouteTraversedData] = useState(null)
-
-  // Sync initial route data into declarative state
-  useEffect(() => {
-    if (routeGeoJson) setRouteAheadData(routeGeoJson)
-  }, [routeGeoJson])
-
   // Continuously interpolate screen rotation angle for smooth animation without 360° flip
   useEffect(() => {
     const relativeAngle = is3DMode && isFollowing
@@ -403,9 +394,35 @@ export default function NavigationPage() {
     }
   }, [])
 
+  // ── Robust Imperative Route Sync (survives setStyle) ───────────────────────
+  // Whenever the map style changes (or finishes loading), we must re-inject the route
+  // data because MapLibre's setStyle() wipes out the current source data.
+  useEffect(() => {
+    if (!mapRef.current) return
+    const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
+    if (!map) return
 
+    const syncRouteData = () => {
+      try {
+        if (!map.isStyleLoaded()) return
+        if (routeGeoJson) {
+          const src = map.getSource('route-source')
+          if (src && src.setData) src.setData(routeGeoJson)
+        }
+      } catch (err) {
+        console.debug('[NavigationMap] sync route source:', err)
+      }
+    }
 
-  // ── Dynamic Route Progress: split route at vehicle position ────────────────
+    // Attempt immediately if style is already loaded
+    syncRouteData()
+
+    // And listen to style data events (fires when setStyle completes)
+    map.on('styledata', syncRouteData)
+    return () => {
+      map.off('styledata', syncRouteData)
+    }
+  }, [routeGeoJson])  // ── Dynamic Route Progress: split route at vehicle position ────────────────
   const updateRouteProgress = useCallback((vehicleLng, vehicleLat, distanceAlongRoute) => {
     if (!validCoords || validCoords.length < 2 || !polylineData) return
 
@@ -439,9 +456,19 @@ export default function NavigationPage() {
         }] : [],
       })
 
-      // Update declarative <Source> data via React state
-      setRouteAheadData(makeGeoJson(aheadCoords))
-      setRouteTraversedData(makeGeoJson(behindCoords))
+      // Update imperative sources directly
+      const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
+      if (!map || !map.isStyleLoaded()) return
+
+      const routeSrc = map.getSource('route-source')
+      if (routeSrc && routeSrc.setData) {
+        routeSrc.setData(makeGeoJson(aheadCoords))
+      }
+
+      const traversedSrc = map.getSource('route-traversed')
+      if (traversedSrc && traversedSrc.setData) {
+        traversedSrc.setData(makeGeoJson(behindCoords))
+      }
     } catch (err) {
       console.debug('[NavigationMap] route progress update:', err)
     }
@@ -892,47 +919,6 @@ export default function NavigationPage() {
               </Marker>
             )
           })}
-
-          {/* ── Declarative Route Line Layers (immune to mapStyle / provider changes) ── */}
-          {routeTraversedData && (
-            <Source id="route-traversed" type="geojson" data={routeTraversedData}>
-              <Layer
-                id="route-traversed-line"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': '#64748b',
-                  'line-width': 5,
-                  'line-opacity': 0.3,
-                  'line-dasharray': [2, 3],
-                }}
-              />
-            </Source>
-          )}
-          {(routeAheadData || routeGeoJson) && (
-            <Source id="route-source" type="geojson" data={routeAheadData || routeGeoJson}>
-              <Layer
-                id="route-casing"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': '#0d47a1',
-                  'line-width': 13,
-                  'line-opacity': 0.9,
-                }}
-              />
-              <Layer
-                id="route-core"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': '#1a73e8',
-                  'line-width': 7.5,
-                  'line-opacity': 1.0,
-                }}
-              />
-            </Source>
-          )}
         </Map>
 
 

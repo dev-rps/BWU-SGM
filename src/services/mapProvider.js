@@ -93,15 +93,15 @@ class MapProviderState {
     }
   }
 
-  // Generate MapLibre raster source style definition (base tiles only).
-  // Route line layers are managed declaratively via react-map-gl <Source>/<Layer>
-  // components in NavigationPage.jsx — this makes them immune to setStyle() resets
-  // triggered by provider switches or data timing differences on Vercel.
+  // Generate MapLibre raster source style definition
+  // Route layers are built-in, but their data is updated imperatively to avoid setStyle() wipes
   getMapLibreStyle() {
     const tiles = this.isGoogleFailed ? FALLBACK_OSM_TILES : GOOGLE_MAPS_TILES
     const attribution = this.isGoogleFailed
       ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       : '&copy; Google Maps'
+
+    const emptyFc = { type: 'FeatureCollection', features: [] }
 
     return {
       version: 8,
@@ -112,6 +112,14 @@ class MapProviderState {
           tileSize: 256,
           attribution: attribution,
           maxzoom: 20,
+        },
+        'route-source': {
+          type: 'geojson',
+          data: emptyFc,
+        },
+        'route-traversed': {
+          type: 'geojson',
+          data: emptyFc,
         },
       },
       layers: [
@@ -128,6 +136,43 @@ class MapProviderState {
           source: 'base-tiles',
           minzoom: 0,
           maxzoom: 20,
+        },
+        // Faded dashed trail behind the vehicle
+        {
+          id: 'route-traversed-line',
+          type: 'line',
+          source: 'route-traversed',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: {
+            'line-color': '#64748b',
+            'line-width': 5,
+            'line-opacity': 0.3,
+            'line-dasharray': [2, 3],
+          },
+        },
+        // Active remaining route casing (dark blue border)
+        {
+          id: 'route-casing',
+          type: 'line',
+          source: 'route-source',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: {
+            'line-color': '#0d47a1',
+            'line-width': 13,
+            'line-opacity': 0.9,
+          },
+        },
+        // Active remaining route core (bright blue)
+        {
+          id: 'route-core',
+          type: 'line',
+          source: 'route-source',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: {
+            'line-color': '#1a73e8',
+            'line-width': 7.5,
+            'line-opacity': 1.0,
+          },
         },
       ],
     }
