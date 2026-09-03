@@ -93,12 +93,17 @@ class MapProviderState {
     }
   }
 
-  // Generate MapLibre raster source style definition
-  getMapLibreStyle() {
+  // Generate MapLibre raster source style definition with guaranteed route line layering
+  getMapLibreStyle(initialRouteGeoJson = null) {
     const tiles = this.isGoogleFailed ? FALLBACK_OSM_TILES : GOOGLE_MAPS_TILES
     const attribution = this.isGoogleFailed
       ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       : '&copy; Google Maps'
+
+    const emptyFeatureCollection = {
+      type: 'FeatureCollection',
+      features: [],
+    }
 
     return {
       version: 8,
@@ -109,6 +114,10 @@ class MapProviderState {
           tileSize: 256,
           attribution: attribution,
           maxzoom: 20,
+        },
+        'route-source': {
+          type: 'geojson',
+          data: initialRouteGeoJson || emptyFeatureCollection,
         },
       },
       layers: [
@@ -125,6 +134,34 @@ class MapProviderState {
           source: 'base-tiles',
           minzoom: 0,
           maxzoom: 20,
+        },
+        {
+          id: 'route-casing',
+          type: 'line',
+          source: 'route-source',
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+          paint: {
+            'line-color': '#0d47a1',
+            'line-width': 13,
+            'line-opacity': 0.9,
+          },
+        },
+        {
+          id: 'route-core',
+          type: 'line',
+          source: 'route-source',
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+          paint: {
+            'line-color': '#1a73e8', // Google Maps active route blue
+            'line-width': 7.5,
+            'line-opacity': 1.0,
+          },
         },
       ],
     }

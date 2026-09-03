@@ -96,6 +96,61 @@ export default function NavigationPage() {
     return []
   }, [rawGeometry, startLocation, userLocation, destination])
 
+  // Coordinate normalizer that guarantees [lng, lat] GeoJSON format without lat/lng flipping
+  const normalizeToLngLat = useCallback((p) => {
+    if (!p) return null
+    let lat = null
+    let lng = null
+
+    if (Array.isArray(p) && p.length >= 2) {
+      const v0 = Number(p[0])
+      const v1 = Number(p[1])
+      if (!isFinite(v0) || !isFinite(v1)) return null
+
+      // In West Bengal / India, lng is ~88, lat is ~22
+      if (Math.abs(v0) > Math.abs(v1) && Math.abs(v0) > 45) {
+        lng = v0
+        lat = v1
+      } else {
+        lat = v0
+        lng = v1
+      }
+    } else if (typeof p === 'object') {
+      lat = Number(p.lat ?? p.latitude)
+      lng = Number(p.lng ?? p.lon ?? p.longitude)
+    }
+
+    if (isFinite(lat) && isFinite(lng)) {
+      return [lng, lat]
+    }
+    return null
+  }, [])
+
+  // ── Route Polyline GeoJSON (Standard FeatureCollection for MapLibre) ─────────
+  const routeGeoJson = useMemo(() => {
+    if (!geometry || geometry.length < 2) return null
+
+    const validCoords = geometry
+      .map(normalizeToLngLat)
+      .filter(Boolean)
+
+    if (validCoords.length < 2) return null
+
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: validCoords,
+          },
+        },
+      ],
+    }
+  }, [geometry, normalizeToLngLat])
+
   // ── Polyline Parameterization for 60 FPS Smooth Interpolation ───────────────
   const polylineData = useMemo(() => {
     if (!geometry || geometry.length < 2) return null
@@ -232,8 +287,8 @@ export default function NavigationPage() {
   const [momoToast, setMomoToast] = useState(null)
   const [showHazardModal, setShowHazardModal] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
-  const [mapStyle, setMapStyle] = useState(mapProvider.getMapLibreStyle())
-  const [activeProvider, setActiveProvider] = useState(mapProvider.getStatus().activeProvider)
+  const [activeProvider, setActiveProvider] = useState(() => mapProvider.getStatus().activeProvider)
+  const mapStyle = useMemo(() => mapProvider.getMapLibreStyle(routeGeoJson), [routeGeoJson, activeProvider])
 
   // Continuously interpolate screen rotation angle for smooth animation without 360° flip
   useEffect(() => {
@@ -326,9 +381,32 @@ export default function NavigationPage() {
   useEffect(() => {
     return mapProvider.subscribe(status => {
       setActiveProvider(status.activeProvider)
-      setMapStyle(mapProvider.getMapLibreStyle())
     })
   }, [])
+
+  // ── Keep built-in route-source data updated on map instance ────────────────
+  useEffect(() => {
+    if (!mapRef.current || !routeGeoJson) return
+    const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
+    if (!map) return
+
+    const updateSource = () => {
+      try {
+        const src = map.getSource('route-source')
+        if (src && src.setData) {
+          src.setData(routeGeoJson)
+        }
+      } catch (err) {
+        console.debug('[NavigationMap] update route source:', err)
+      }
+    }
+
+    if (map.isStyleLoaded && map.isStyleLoaded()) {
+      updateSource()
+    } else {
+      map.once('load', updateSource)
+    }
+  }, [routeGeoJson])
 
   const handleMapError = useCallback((e) => {
     if (e?.error?.status === 404 || e?.error?.status === 403) {
@@ -679,37 +757,6 @@ export default function NavigationPage() {
     speakText(`Hazard reported: ${type}. Thank you for keeping roads safe.`, true)
   }
 
-  // ── Route Polyline GeoJSON ──────────────────────────────────────────────────
-  const routeGeoJson = useMemo(() => {
-    if (!geometry || geometry.length < 2) return null
-
-    const validCoords = geometry
-      .map(p => {
-        if (Array.isArray(p) && p.length >= 2) {
-          const lat = parseFloat(p[0])
-          const lng = parseFloat(p[1])
-          if (isFinite(lat) && isFinite(lng)) return [lng, lat]
-        } else if (p && typeof p === 'object') {
-          const lat = parseFloat(p.lat || p.latitude)
-          const lng = parseFloat(p.lng || p.lon || p.longitude)
-          if (isFinite(lat) && isFinite(lng)) return [lng, lat]
-        }
-        return null
-      })
-      .filter(Boolean)
-
-    if (validCoords.length < 2) return null
-
-    return {
-      type: 'Feature',
-      properties: {},
-      geometry: {
-        type: 'LineString',
-        coordinates: validCoords,
-      },
-    }
-  }, [geometry])
-
   return (
     <div className="relative w-full h-full overflow-hidden bg-slate-950 select-none">
 
@@ -735,42 +782,16 @@ export default function NavigationPage() {
           onZoomStart={() => setIsFollowing(false)}
           onRotate={(e) => setMapBearing(e.viewState.bearing)}
           onMove={(e) => setMapBearing(e.viewState.bearing)}
+          onLoad={(e) => {
+            const map = e?.target || (mapRef.current?.getMap ? mapRef.current.getMap() : mapRef.current)
+            if (map && routeGeoJson) {
+              try {
+                const src = map.getSource('route-source')
+                if (src && src.setData) src.setData(routeGeoJson)
+              } catch (_) {}
+            }
+          }}
         >
-          {/* Active Navigation Route Line with Uber/Google Maps vibrant styling */}
-          {routeGeoJson && (
-            <Source
-              id="route-source"
-              type="geojson"
-              data={routeGeoJson}
-            >
-              <Layer
-                id="route-casing"
-                type="line"
-                layout={{
-                  'line-cap': 'round',
-                  'line-join': 'round',
-                }}
-                paint={{
-                  'line-color': '#0d47a1',
-                  'line-width': 14,
-                  'line-opacity': 0.85,
-                }}
-              />
-              <Layer
-                id="route-core"
-                type="line"
-                layout={{
-                  'line-cap': 'round',
-                  'line-join': 'round',
-                }}
-                paint={{
-                  'line-color': '#1a73e8', // Classic Google Maps active route blue
-                  'line-width': 8.5,
-                  'line-opacity': 1.0,
-                }}
-              />
-            </Source>
-          )}
 
           {/* 3D User Navigation Puck with Ultra-Smooth Rotating Directional Arrow & Heading Beam */}
           <Marker longitude={currentLng} latitude={currentLat} anchor="center">
