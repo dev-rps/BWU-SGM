@@ -217,6 +217,11 @@ export default function NavigationPage() {
   const [currentLat, setCurrentLat] = useState(parseFloat(initLoc?.lat || 22.57))
   const [currentLng, setCurrentLng] = useState(parseFloat(initLoc?.lng || initLoc?.lon || 88.36))
   const [bearing, setBearing] = useState(initialBearing)
+  const [mapBearing, setMapBearing] = useState(initialBearing)
+  const [arrowHeading, setArrowHeading] = useState(initialBearing)
+  const [deviceHeading, setDeviceHeading] = useState(null)
+  const [continuousArrowAngle, setContinuousArrowAngle] = useState(0)
+  const prevContinuousAngleRef = useRef(0)
   const [stepIdx, setStepIdx] = useState(0)
   const [gpsMode, setGpsMode] = useState('live') // 'live' | 'simulated'
   const [speed, setSpeed] = useState(38) // km/h
@@ -229,6 +234,45 @@ export default function NavigationPage() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [mapStyle, setMapStyle] = useState(mapProvider.getMapLibreStyle())
   const [activeProvider, setActiveProvider] = useState(mapProvider.getStatus().activeProvider)
+
+  // Continuously interpolate screen rotation angle for smooth animation without 360° flip
+  useEffect(() => {
+    const relativeAngle = is3DMode && isFollowing
+      ? (arrowHeading - cameraBearingRef.current)
+      : (arrowHeading - mapBearing)
+    const diff = ((relativeAngle - (prevContinuousAngleRef.current % 360) + 540) % 360) - 180
+    const nextAngle = prevContinuousAngleRef.current + diff
+    prevContinuousAngleRef.current = nextAngle
+    setContinuousArrowAngle(nextAngle)
+  }, [arrowHeading, mapBearing, is3DMode, isFollowing])
+
+  // Real Device Compass Heading Sensor (for smooth physical orientation)
+  useEffect(() => {
+    const handleOrientation = (e) => {
+      let h = null
+      if (typeof e.webkitCompassHeading === 'number') {
+        h = e.webkitCompassHeading
+      } else if (typeof e.alpha === 'number') {
+        h = (360 - e.alpha) % 360
+      }
+      if (h !== null && !isNaN(h)) {
+        setDeviceHeading(h)
+        if (!isSimulatingRef.current && speed < 5) {
+          setArrowHeading(h)
+        }
+      }
+    }
+
+    if (window.DeviceOrientationEvent) {
+      window.addEventListener('deviceorientationabsolute', handleOrientation, true)
+      window.addEventListener('deviceorientation', handleOrientation, true)
+    }
+
+    return () => {
+      window.removeEventListener('deviceorientationabsolute', handleOrientation, true)
+      window.removeEventListener('deviceorientation', handleOrientation, true)
+    }
+  }, [speed])
 
   // Simulation State
   const [isSimulating, setIsSimulating] = useState(false)
@@ -496,10 +540,12 @@ export default function NavigationPage() {
         }
       }
 
-      // Update vehicle marker coordinate
+      // Update vehicle marker coordinate and live direction
       setCurrentLat(state.lat)
       setCurrentLng(state.lng)
       setBearing(cameraBearingRef.current)
+      setArrowHeading(state.bearing)
+      setMapBearing(cameraBearingRef.current)
 
       // Throttled UI State updates (at ~4Hz) to keep React thread super light
       if (timestamp - lastUiThrottleRef.current > 220) {
@@ -568,14 +614,17 @@ export default function NavigationPage() {
       setSpeed(Math.round(spd * 3.6))
     }
 
-    if (prevGpsPos.current) {
+    if (pos.coords.heading !== null && !isNaN(pos.coords.heading)) {
+      setArrowHeading(pos.coords.heading)
+    } else if (prevGpsPos.current) {
       const moved = haversineMeters(lat, lng, prevGpsPos.current.lat, prevGpsPos.current.lng)
       if (moved > 2) {
-        setElapsed(e => e + 1)
         const newBearing = calculateBearing(prevGpsPos.current.lat, prevGpsPos.current.lng, lat, lng)
+        setArrowHeading(newBearing)
         const diff = getShortestAngleDiff(newBearing, cameraBearingRef.current)
         cameraBearingRef.current = (cameraBearingRef.current + diff * 0.4 + 360) % 360
         setBearing(cameraBearingRef.current)
+        setMapBearing(cameraBearingRef.current)
       }
     }
     prevGpsPos.current = { lat, lng }
@@ -688,6 +737,8 @@ export default function NavigationPage() {
           onPitchStart={() => setIsFollowing(false)}
           onRotateStart={() => setIsFollowing(false)}
           onZoomStart={() => setIsFollowing(false)}
+          onRotate={(e) => setMapBearing(e.viewState.bearing)}
+          onMove={(e) => setMapBearing(e.viewState.bearing)}
         >
           {/* Active Navigation Route Line with Uber/Google Maps vibrant styling */}
           {routeGeoJson && (
@@ -726,34 +777,46 @@ export default function NavigationPage() {
             </Source>
           )}
 
-          {/* 3D User Navigation Puck with Directional Chevron & Heading Cone */}
+          {/* 3D User Navigation Puck with Ultra-Smooth Rotating Directional Arrow & Heading Beam */}
           <Marker longitude={currentLng} latitude={currentLat} anchor="center">
-            <div className="relative flex items-center justify-center pointer-events-none" style={{ width: 72, height: 72 }}>
-              {/* Heading Direction Beam / Cone */}
-              {is3DMode && (
-                <div
-                  className="absolute -top-7 w-20 h-24 opacity-40"
-                  style={{
-                    transform: `rotate(${is3DMode ? 0 : bearing}deg)`,
-                    transformOrigin: 'bottom center',
-                    background: 'radial-gradient(ellipse at bottom, rgba(56, 189, 248, 0.85) 0%, rgba(56, 189, 248, 0) 70%)',
-                  }}
-                />
-              )}
+            <div className="relative flex items-center justify-center pointer-events-none" style={{ width: 84, height: 84 }}>
+              {/* Dynamic Forward Heading Light Cone */}
+              <div
+                className="absolute -top-10 w-28 h-32 pointer-events-none"
+                style={{
+                  transform: `rotate(${continuousArrowAngle}deg)`,
+                  transformOrigin: 'bottom center',
+                  background: 'radial-gradient(ellipse at bottom, rgba(56, 189, 248, 0.75) 0%, rgba(56, 189, 248, 0.12) 50%, transparent 75%)',
+                  transition: 'transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
+                }}
+              />
 
               {/* Pulsing GPS Accuracy Ring */}
-              <div className="absolute inset-1.5 rounded-full border-2 border-sky-400/40 animate-ping opacity-60" />
+              <div className="absolute inset-2.5 rounded-full border-2 border-sky-400/50 animate-ping opacity-60 pointer-events-none" />
 
-              {/* 3D Directional Chevron (Points forward towards the horizon in 3D track-up mode) */}
+              {/* Ultra-Smooth Rotating 3D Navigation Arrowhead (Points towards movement/facing direction) */}
               <div
-                className="relative z-10 w-10 h-10 rounded-full bg-white shadow-[0_6px_20px_rgba(0,0,0,0.45)] border-[2.5px] border-blue-600 flex items-center justify-center transition-transform duration-75"
+                className="relative z-10 w-11 h-11 rounded-full bg-white shadow-[0_8px_24px_rgba(0,0,0,0.5)] border-[2.5px] border-blue-600 flex items-center justify-center"
                 style={{
-                  transform: `rotate(${is3DMode ? 0 : bearing}deg)`,
+                  transform: `rotate(${continuousArrowAngle}deg)`,
+                  transition: 'transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
                 }}
               >
-                <span className="material-symbols-outlined text-blue-600 icon-filled text-[26px] transform -rotate-45">
-                  navigation
-                </span>
+                {/* Precision 3D Directional Chevron (Tip naturally points UP / North at 0°) */}
+                <svg viewBox="0 0 24 24" className="w-6 h-6 drop-shadow-sm">
+                  <path
+                    d="M12 2.5 L20 20.5 L12 16.5 L4 20.5 Z"
+                    fill="#1d4ed8"
+                    stroke="#2563eb"
+                    strokeWidth="1.2"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M12 3 L19 19.5 L12 16 Z"
+                    fill="rgba(255,255,255,0.35)"
+                  />
+                  <circle cx="12" cy="14" r="1.8" fill="#ffffff" />
+                </svg>
               </div>
             </div>
           </Marker>
@@ -924,8 +987,65 @@ export default function NavigationPage() {
       </div>
 
       {/* ════════ FLOATING CONTROLS (Right Edge) ════════ */}
-      <div className="absolute right-3.5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2.5">
+      <div className="absolute right-3.5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2.5 items-center">
         
+        {/* Floating Interactive Mini Compass Widget (Rotates dynamically to True North, tap to reset North-Up) */}
+        <button
+          type="button"
+          onClick={() => {
+            if (!mapRef.current) return
+            const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
+            if (!map) return
+
+            const isNorthUp = Math.abs(mapBearing % 360) < 3
+            const targetBearing = isNorthUp ? (arrowHeading || 0) : 0
+
+            map.easeTo({
+              bearing: targetBearing,
+              duration: 450,
+            })
+            setMapBearing(targetBearing)
+          }}
+          className="relative w-12 h-12 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-slate-700/80 shadow-[0_8px_24px_rgba(0,0,0,0.5)] flex items-center justify-center active:scale-90 transition-transform cursor-pointer group hover:border-slate-500"
+          title={`Compass: ${Math.round((360 - (mapBearing % 360)) % 360)}° — Tap to orient True North`}
+        >
+          {/* Compass Dial Cardinal Markers */}
+          <div className="absolute inset-0 rounded-2xl flex items-center justify-center pointer-events-none">
+            <div className="absolute top-1 w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
+            <div className="absolute bottom-1 w-1 h-1 rounded-full bg-slate-500" />
+            <div className="absolute left-1 w-1 h-1 rounded-full bg-slate-600" />
+            <div className="absolute right-1 w-1 h-1 rounded-full bg-slate-600" />
+          </div>
+
+          {/* Rotating Compass Needle (Red needle points to True North) */}
+          <div
+            className="relative w-8 h-8 flex items-center justify-center pointer-events-none"
+            style={{
+              transform: `rotate(${-mapBearing}deg)`,
+              transition: 'transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
+            }}
+          >
+            {/* North Red Pointer */}
+            <div className="absolute top-0.5 flex flex-col items-center">
+              <div
+                className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[10px] border-b-rose-500 drop-shadow-[0_0_4px_rgba(244,63,94,0.8)]"
+              />
+              <span className="text-[7.5px] font-black text-rose-400 leading-none mt-0.5 select-none tracking-tighter">N</span>
+            </div>
+
+            {/* Pivot Center Pin */}
+            <div className="w-2 h-2 rounded-full bg-white shadow-md z-10 border border-slate-400" />
+
+            {/* South Silver Pointer */}
+            <div className="absolute bottom-0.5 flex flex-col items-center">
+              <span className="text-[7px] font-black text-slate-400 leading-none mb-0.5 select-none tracking-tighter">S</span>
+              <div
+                className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[9px] border-t-slate-300"
+              />
+            </div>
+          </div>
+        </button>
+
         {/* Dedicated Re-center Button (Permanently Available & Non-Bouncing) */}
         <button
           onClick={recenterCamera}
