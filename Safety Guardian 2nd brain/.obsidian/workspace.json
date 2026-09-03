@@ -1,0 +1,223 @@
+{
+  "main": {
+    "id": "241657fc967f908f",
+    "type": "split",
+    "children": [
+      {
+        "id": "e51ad78e63722595",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "729c1fa98344ad1f",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "cc43afbfe78d916d",
+    "type": "split",
+    "children": [
+      {
+        "id": "dab53d78be3e942c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "4957f2789efc903d",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "5dd35f702d1804dd",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "ba4d3ac2339a6bc3",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "5bd0d1c66845e9a7",
+    "type": "split",
+    "children": [
+      {
+        "id": "5651fe5455416a43",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "55267ce6d729deff",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "8890c5e673231be5",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "b2901a92889f872c",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "70f3f2d67d628cb0",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "d83e8004622eb098",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "729c1fa98344ad1f",
+  "lastOpenFiles": [
+    "Dashboard.md",
+    "APIs-and-Integrations/TomTom-APIs.md",
+    "Architecture/Overview.md",
+    "Architecture/State-Management.md",
+    "Architecture/Data-Flow.md",
+    "Architecture/Component-Tree.md",
+    "Architecture/Application-Lifecycle.md",
+    "Architecture",
+    "⚡-AI-and-Developer-Quick-Fix-Index.md",
+    "Workflows/Turn-by-Turn-Navigation-Flow.md",
+    "Workflows/Medical-Survey-and-Sync-Flow.md",
+    "Workflows/SOS-Emergency-Trigger-Flow.md",
+    "Workflows/Route-Search-and-Selection-Flow.md",
+    "Workflows/Incident-Reporting-Flow.md",
+    "Workflows/App-Startup-Flow.md",
+    "Workflows",
+    "Project-Management/Technical-Debt.md",
+    "Project-Management/Roadmap.md",
+    "Project-Management/Known-Issues.md",
+    "Project-Management/Glossary.md",
+    "Project-Management",
+    "Developer-Guide/Environment-Variables.md",
+    "Developer-Guide/Troubleshooting.md",
+    "Developer-Guide/Project-Structure.md",
+    "Developer-Guide/Getting-Started.md",
+    "Developer-Guide/Coding-Conventions.md",
+    "Developer-Guide/Cloud-Functions-Deployment.md",
+    "Developer-Guide",
+    "Services/tomtomTraffic-Service.md",
+    "Services/weather-Service.md",
+    "Services",
+    "Pages",
+    "Components",
+    "APIs-and-Integrations",
+    "Security",
+    "AI-Assistant"
+  ]
+}

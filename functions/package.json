@@ -1,0 +1,23 @@
+{
+  "name": "safety-guardian-functions",
+  "description": "Firebase Cloud Functions — Emergency Gateway (SMS + Calls)",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^11.11.1",
+    "firebase-functions": "^4.7.0",
+    "twilio": "^4.23.0",
+    "axios": "^1.7.2"
+  },
+  "devDependencies": {},
+  "private": true
+}
