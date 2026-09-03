@@ -415,6 +415,53 @@ export default function NavigationPage() {
     }
   }, [])
 
+  // ── High-Precision Direct Screen Projection SVG Route Line Engine ───────────
+  const [svgPath, setSvgPath] = useState('')
+  const rafRef = useRef(null)
+
+  const updateSvgPath = useCallback(() => {
+    if (!mapRef.current || !routeGeoJson) return
+    const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
+    if (!map) return
+
+    const coords = routeGeoJson?.features?.[0]?.geometry?.coordinates
+    if (!coords || coords.length < 2) return
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+
+    rafRef.current = requestAnimationFrame(() => {
+      try {
+        const container = map.getContainer()
+        if (!container) return
+        const width = container.clientWidth || window.innerWidth
+        const height = container.clientHeight || window.innerHeight
+
+        const points = []
+        for (let i = 0; i < coords.length; i++) {
+          const pt = map.project(coords[i])
+          if (
+            isFinite(pt.x) && isFinite(pt.y) &&
+            pt.x >= -width * 0.6 && pt.x <= width * 1.6 &&
+            pt.y >= -height * 0.6 && pt.y <= height * 1.6
+          ) {
+            points.push(`${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
+          }
+        }
+
+        if (points.length >= 2) {
+          setSvgPath(`M ${points.join(' L ')}`)
+        }
+      } catch (_) {}
+    })
+  }, [routeGeoJson])
+
+  useEffect(() => {
+    updateSvgPath()
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [updateSvgPath])
+
   // ── Speech Synthesis Engine (Clean, Non-overlapping) ────────────────────────
   const speakText = useCallback((text, force = false) => {
     if (!('speechSynthesis' in window)) return
@@ -780,9 +827,18 @@ export default function NavigationPage() {
           onPitchStart={() => setIsFollowing(false)}
           onRotateStart={() => setIsFollowing(false)}
           onZoomStart={() => setIsFollowing(false)}
-          onRotate={(e) => setMapBearing(e.viewState.bearing)}
-          onMove={(e) => setMapBearing(e.viewState.bearing)}
+          onRender={updateSvgPath}
+          onMove={(e) => {
+            setMapBearing(e.viewState.bearing)
+            updateSvgPath()
+          }}
+          onRotate={(e) => {
+            setMapBearing(e.viewState.bearing)
+            updateSvgPath()
+          }}
+          onZoom={updateSvgPath}
           onLoad={(e) => {
+            updateSvgPath()
             const map = e?.target || (mapRef.current?.getMap ? mapRef.current.getMap() : mapRef.current)
             if (map && routeGeoJson) {
               try {
@@ -876,6 +932,36 @@ export default function NavigationPage() {
             )
           })}
         </Map>
+
+        {/* ════════ HIGH-PRECISION SVG ROUTE LINE OVERLAY ════════ */}
+        {/* Rendered directly on top of the map canvas for 100% guaranteed visibility */}
+        {svgPath && (
+          <svg
+            className="absolute inset-0 pointer-events-none w-full h-full z-10 overflow-hidden"
+            style={{ filter: 'drop-shadow(0 2px 8px rgba(13,71,161,0.5))' }}
+          >
+            {/* Navy Blue Outer Route Casing */}
+            <path
+              d={svgPath}
+              fill="none"
+              stroke="#0d47a1"
+              strokeWidth={13}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.88}
+            />
+            {/* Google Maps Signature Vibrant Blue Active Route Line */}
+            <path
+              d={svgPath}
+              fill="none"
+              stroke="#1a73e8"
+              strokeWidth={7.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={1.0}
+            />
+          </svg>
+        )}
       </div>
 
       {/* ════════ TOP MANEUVER HUD (Google Maps Obsidian/Emerald Style) ════════ */}
@@ -892,7 +978,6 @@ export default function NavigationPage() {
                   const next = activeProvider === 'google' ? 'osm' : 'google'
                   mapProvider.forceFallback(next === 'osm')
                   setActiveProvider(next)
-                  setMapStyle(mapProvider.getMapLibreStyle())
                 }}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/40 border border-white/10 text-[10px] font-black uppercase tracking-wider hover:bg-black/60 active:scale-95 transition-all cursor-pointer"
                 title={`Active: ${activeProvider === 'google' ? 'Google Maps 3D' : 'OpenStreetMap Fallback'}. Click to toggle provider.`}
