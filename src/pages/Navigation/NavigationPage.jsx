@@ -397,30 +397,42 @@ export default function NavigationPage() {
   // ── Robust Imperative Route Sync (survives setStyle) ───────────────────────
   // Whenever the map style changes (or finishes loading), we must re-inject the route
   // data because MapLibre's setStyle() wipes out the current source data.
+  // We use a retry mechanism because Vercel prod builds can cause React state 
+  // (routeGeoJson) to compute slightly out of sync with MapLibre's internal style load.
   useEffect(() => {
-    if (!mapRef.current) return
+    if (!mapRef.current || !routeGeoJson) return
     const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
     if (!map) return
 
+    let retryCount = 0
+    let timeoutId = null
+
     const syncRouteData = () => {
       try {
-        if (!map.isStyleLoaded()) return
-        if (routeGeoJson) {
-          const src = map.getSource('route-source')
-          if (src && src.setData) src.setData(routeGeoJson)
+        const src = map.getSource('route-source')
+        if (src && src.setData) {
+          src.setData(routeGeoJson)
+        } else if (retryCount < 20) {
+          // Source not ready yet (style still parsing). Retry in 50ms.
+          retryCount++
+          timeoutId = setTimeout(syncRouteData, 50)
         }
       } catch (err) {
         console.debug('[NavigationMap] sync route source:', err)
       }
     }
 
-    // Attempt immediately if style is already loaded
     syncRouteData()
 
-    // And listen to style data events (fires when setStyle completes)
-    map.on('styledata', syncRouteData)
+    const onStyleData = () => {
+      retryCount = 0 // Reset retry on style change
+      syncRouteData()
+    }
+
+    map.on('styledata', onStyleData)
     return () => {
-      map.off('styledata', syncRouteData)
+      if (timeoutId) clearTimeout(timeoutId)
+      map.off('styledata', onStyleData)
     }
   }, [routeGeoJson])  // ── Dynamic Route Progress: split route at vehicle position ────────────────
   const updateRouteProgress = useCallback((vehicleLng, vehicleLat, distanceAlongRoute) => {
