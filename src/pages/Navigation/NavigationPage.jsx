@@ -127,14 +127,14 @@ export default function NavigationPage() {
   }, [])
 
   // ── Route Polyline GeoJSON (Standard FeatureCollection for MapLibre) ─────────
+  // ── Normalized Route Coordinates: guaranteed [ [lng, lat], ... ] ────────────
+  const validCoords = useMemo(() => {
+    if (!geometry || geometry.length < 2) return []
+    return geometry.map(normalizeToLngLat).filter(Boolean)
+  }, [geometry, normalizeToLngLat])
+
   const routeGeoJson = useMemo(() => {
-    if (!geometry || geometry.length < 2) return null
-
-    const validCoords = geometry
-      .map(normalizeToLngLat)
-      .filter(Boolean)
-
-    if (validCoords.length < 2) return null
+    if (!validCoords.length) return null
 
     return {
       type: 'FeatureCollection',
@@ -149,24 +149,25 @@ export default function NavigationPage() {
         },
       ],
     }
-  }, [geometry, normalizeToLngLat])
+  }, [validCoords])
 
   // ── Polyline Parameterization for 60 FPS Smooth Interpolation ───────────────
   const polylineData = useMemo(() => {
-    if (!geometry || geometry.length < 2) return null
+    if (!validCoords || validCoords.length < 2) return null
     const cumDists = [0]
     let total = 0
-    for (let i = 0; i < geometry.length - 1; i++) {
-      const d = haversineMeters(geometry[i][0], geometry[i][1], geometry[i + 1][0], geometry[i + 1][1])
+    for (let i = 0; i < validCoords.length - 1; i++) {
+      // validCoords[i][1] is latitude, validCoords[i][0] is longitude
+      const d = haversineMeters(validCoords[i][1], validCoords[i][0], validCoords[i + 1][1], validCoords[i + 1][0])
       total += d
       cumDists.push(total)
     }
     return { cumDists, totalDistance: Math.max(total, 1) }
-  }, [geometry])
+  }, [validCoords])
 
   // Continuous position & forward tangent bearing at distance s along route
   const getInterpolatedRouteState = useCallback((s) => {
-    if (!polylineData || !geometry || geometry.length < 2) {
+    if (!polylineData || !validCoords || validCoords.length < 2) {
       const init = startLocation || userLocation
       return {
         lat: parseFloat(init?.lat || 22.57),
@@ -188,18 +189,18 @@ export default function NavigationPage() {
       if (cumDists[mid] <= clampedS) low = mid + 1
       else high = mid - 1
     }
-    const segIdx = Math.max(0, Math.min(high, geometry.length - 2))
+    const segIdx = Math.max(0, Math.min(high, validCoords.length - 2))
     const segStartDist = cumDists[segIdx]
     const segEndDist = cumDists[segIdx + 1]
     const segLen = Math.max(0.001, segEndDist - segStartDist)
     const ratio = Math.max(0, Math.min(1, (clampedS - segStartDist) / segLen))
 
-    const p0 = geometry[segIdx]
-    const p1 = geometry[segIdx + 1]
+    const p0 = validCoords[segIdx]      // [lng, lat]
+    const p1 = validCoords[segIdx + 1]  // [lng, lat]
 
-    const lat = p0[0] + (p1[0] - p0[0]) * ratio
-    const lng = p0[1] + (p1[1] - p0[1]) * ratio
-    const segmentBearing = calculateBearing(p0[0], p0[1], p1[0], p1[1])
+    const lng = p0[0] + (p1[0] - p0[0]) * ratio
+    const lat = p0[1] + (p1[1] - p0[1]) * ratio
+    const segmentBearing = calculateBearing(p0[1], p0[0], p1[1], p1[0])
 
     // Sample 25m ahead for smooth cornering anticipation
     const lookaheadDist = Math.min(totalDistance, clampedS + 25)
@@ -210,15 +211,15 @@ export default function NavigationPage() {
       if (cumDists[mid] <= lookaheadDist) aLow = mid + 1
       else aHigh = mid - 1
     }
-    const aIdx = Math.max(0, Math.min(aHigh, geometry.length - 2))
+    const aIdx = Math.max(0, Math.min(aHigh, validCoords.length - 2))
     const aRatio = Math.max(0, Math.min(1, (lookaheadDist - cumDists[aIdx]) / Math.max(0.001, cumDists[aIdx + 1] - cumDists[aIdx])))
-    const aLat = geometry[aIdx][0] + (geometry[aIdx + 1][0] - geometry[aIdx][0]) * aRatio
-    const aLng = geometry[aIdx][1] + (geometry[aIdx + 1][1] - geometry[aIdx][1]) * aRatio
+    const aLng = validCoords[aIdx][0] + (validCoords[aIdx + 1][0] - validCoords[aIdx][0]) * aRatio
+    const aLat = validCoords[aIdx][1] + (validCoords[aIdx + 1][1] - validCoords[aIdx][1]) * aRatio
 
     const lookaheadBearing = calculateBearing(lat, lng, aLat, aLng)
 
     return { lat, lng, bearing: segmentBearing, lookaheadBearing, distance: clampedS }
-  }, [polylineData, geometry, startLocation, userLocation])
+  }, [polylineData, validCoords, startLocation, userLocation])
 
   // ── Steps & Maneuver Waypoints ──────────────────────────────────────────────
   const steps = useMemo(() => {
@@ -474,11 +475,7 @@ export default function NavigationPage() {
           const points = []
           for (let i = 0; i < pts.length; i++) {
             const pt = map.project(pts[i])
-            if (
-              isFinite(pt.x) && isFinite(pt.y) &&
-              pt.x >= -width * 0.6 && pt.x <= width * 1.6 &&
-              pt.y >= -height * 0.6 && pt.y <= height * 1.6
-            ) {
+            if (isFinite(pt.x) && isFinite(pt.y)) {
               points.push(`${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
             }
           }
@@ -637,7 +634,7 @@ export default function NavigationPage() {
       pitch: is3DMode ? 62 : 0,
       zoom: is3DMode ? 18.2 : 16.5,
       padding: is3DMode
-        ? { top: 260, bottom: 40, left: 0, right: 0 }
+        ? { top: 60, bottom: 180, left: 0, right: 0 }
         : { top: 40, bottom: 180, left: 0, right: 0 },
       duration: 650,
     })
@@ -691,7 +688,7 @@ export default function NavigationPage() {
             pitch: is3DModeRef.current ? 62 : 0,
             zoom: is3DModeRef.current ? 18.2 : 16.5,
             padding: is3DModeRef.current
-              ? { top: 260, bottom: 40, left: 0, right: 0 }
+              ? { top: 60, bottom: 180, left: 0, right: 0 }
               : { top: 40, bottom: 180, left: 0, right: 0 },
           })
         }
