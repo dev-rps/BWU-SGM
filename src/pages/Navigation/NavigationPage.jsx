@@ -847,7 +847,15 @@ export default function NavigationPage() {
           onRotate={(e) => {
             setMapBearing(e.viewState.bearing)
           }}
-
+          onLoad={(e) => {
+            const map = e?.target || (mapRef.current?.getMap ? mapRef.current.getMap() : mapRef.current)
+            if (map && routeGeoJson) {
+              try {
+                const src = map.getSource('route-source')
+                if (src && src.setData) src.setData(routeGeoJson)
+              } catch (_) {}
+            }
+          }}
         >
 
           {/* 3D User Navigation Puck with Ultra-Smooth Rotating Directional Arrow & Heading Beam */}
