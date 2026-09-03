@@ -81,7 +81,20 @@ export default function NavigationPage() {
 
   const selectedRoute = routes[selectedRouteIdx] || routes[0]
   const onRouteReports = useMemo(() => selectedRoute?.onRouteReports || [], [selectedRoute?.onRouteReports])
-  const geometry = useMemo(() => selectedRoute?.geometry || [], [selectedRoute?.geometry])
+  
+  const rawGeometry = useMemo(() => selectedRoute?.geometry || [], [selectedRoute?.geometry])
+
+  const geometry = useMemo(() => {
+    if (rawGeometry && rawGeometry.length >= 2) return rawGeometry
+    const sLat = parseFloat(startLocation?.lat || userLocation?.lat || 22.5726)
+    const sLng = parseFloat(startLocation?.lng || startLocation?.lon || userLocation?.lng || userLocation?.lon || 88.3639)
+    const dLat = parseFloat(destination?.lat || 22.5800)
+    const dLng = parseFloat(destination?.lng || destination?.lon || 88.3700)
+    if (sLat && sLng && dLat && dLng) {
+      return [[sLat, sLng], [dLat, dLng]]
+    }
+    return []
+  }, [rawGeometry, startLocation, userLocation, destination])
 
   // ── Polyline Parameterization for 60 FPS Smooth Interpolation ───────────────
   const polylineData = useMemo(() => {
@@ -623,13 +636,31 @@ export default function NavigationPage() {
 
   // ── Route Polyline GeoJSON ──────────────────────────────────────────────────
   const routeGeoJson = useMemo(() => {
-    if (!geometry || geometry.length === 0) return null
+    if (!geometry || geometry.length < 2) return null
+
+    const validCoords = geometry
+      .map(p => {
+        if (Array.isArray(p) && p.length >= 2) {
+          const lat = parseFloat(p[0])
+          const lng = parseFloat(p[1])
+          if (isFinite(lat) && isFinite(lng)) return [lng, lat]
+        } else if (p && typeof p === 'object') {
+          const lat = parseFloat(p.lat || p.latitude)
+          const lng = parseFloat(p.lng || p.lon || p.longitude)
+          if (isFinite(lat) && isFinite(lng)) return [lng, lat]
+        }
+        return null
+      })
+      .filter(Boolean)
+
+    if (validCoords.length < 2) return null
+
     return {
       type: 'Feature',
       properties: {},
       geometry: {
         type: 'LineString',
-        coordinates: geometry.map(p => [p[1], p[0]]),
+        coordinates: validCoords,
       },
     }
   }, [geometry])
@@ -660,10 +691,19 @@ export default function NavigationPage() {
         >
           {/* Active Navigation Route Line with Uber/Google Maps vibrant styling */}
           {routeGeoJson && (
-            <Source id="route-source" type="geojson" data={routeGeoJson}>
+            <Source
+              key={`route-src-${selectedRouteIdx}-${geometry?.length || 0}`}
+              id="route-source"
+              type="geojson"
+              data={routeGeoJson}
+            >
               <Layer
                 id="route-casing"
                 type="line"
+                layout={{
+                  'line-cap': 'round',
+                  'line-join': 'round',
+                }}
                 paint={{
                   'line-color': '#0d47a1',
                   'line-width': 14,
@@ -673,6 +713,10 @@ export default function NavigationPage() {
               <Layer
                 id="route-core"
                 type="line"
+                layout={{
+                  'line-cap': 'round',
+                  'line-join': 'round',
+                }}
                 paint={{
                   'line-color': '#1a73e8', // Classic Google Maps active route blue
                   'line-width': 8.5,

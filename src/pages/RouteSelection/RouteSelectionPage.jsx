@@ -380,6 +380,9 @@ export default function RouteSelectionPage() {
   }
 
   const proceedToNavigation = () => {
+    if (displayedRoutes && displayedRoutes.length > 0) {
+      setRoutes(displayedRoutes)
+    }
     setIsNavigating(true)
     navigate('/navigate')
   }
