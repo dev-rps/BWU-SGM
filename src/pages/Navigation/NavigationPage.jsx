@@ -289,7 +289,16 @@ export default function NavigationPage() {
   const [showHazardModal, setShowHazardModal] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [activeProvider, setActiveProvider] = useState(() => mapProvider.getStatus().activeProvider)
-  const mapStyle = useMemo(() => mapProvider.getMapLibreStyle(routeGeoJson), [routeGeoJson, activeProvider])
+  const mapStyle = useMemo(() => mapProvider.getMapLibreStyle(), [activeProvider])
+
+  // Declarative route line state — immune to mapStyle / provider changes
+  const [routeAheadData, setRouteAheadData] = useState(null)
+  const [routeTraversedData, setRouteTraversedData] = useState(null)
+
+  // Sync initial route data into declarative state
+  useEffect(() => {
+    if (routeGeoJson) setRouteAheadData(routeGeoJson)
+  }, [routeGeoJson])
 
   // Continuously interpolate screen rotation angle for smooth animation without 360° flip
   useEffect(() => {
@@ -394,35 +403,11 @@ export default function NavigationPage() {
     }
   }, [])
 
-  // ── Keep built-in route-source data updated on map instance ────────────────
-  useEffect(() => {
-    if (!mapRef.current || !routeGeoJson) return
-    const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
-    if (!map) return
 
-    const updateSource = () => {
-      try {
-        const src = map.getSource('route-source')
-        if (src && src.setData) {
-          src.setData(routeGeoJson)
-        }
-      } catch (err) {
-        console.debug('[NavigationMap] update route source:', err)
-      }
-    }
-
-    if (map.isStyleLoaded && map.isStyleLoaded()) {
-      updateSource()
-    } else {
-      map.once('load', updateSource)
-    }
-  }, [routeGeoJson])
 
   // ── Dynamic Route Progress: split route at vehicle position ────────────────
   const updateRouteProgress = useCallback((vehicleLng, vehicleLat, distanceAlongRoute) => {
-    if (!mapRef.current || !validCoords || validCoords.length < 2 || !polylineData) return
-    const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
-    if (!map) return
+    if (!validCoords || validCoords.length < 2 || !polylineData) return
 
     try {
       const { cumDists } = polylineData
@@ -454,15 +439,9 @@ export default function NavigationPage() {
         }] : [],
       })
 
-      const routeSrc = map.getSource('route-source')
-      if (routeSrc && routeSrc.setData) {
-        routeSrc.setData(makeGeoJson(aheadCoords))
-      }
-
-      const traversedSrc = map.getSource('route-traversed')
-      if (traversedSrc && traversedSrc.setData) {
-        traversedSrc.setData(makeGeoJson(behindCoords))
-      }
+      // Update declarative <Source> data via React state
+      setRouteAheadData(makeGeoJson(aheadCoords))
+      setRouteTraversedData(makeGeoJson(behindCoords))
     } catch (err) {
       console.debug('[NavigationMap] route progress update:', err)
     }
@@ -674,11 +653,11 @@ export default function NavigationPage() {
       setArrowHeading(state.bearing)
       setMapBearing(cameraBearingRef.current)
 
-      // Dynamically update route line: shrink ahead, grow trail behind
-      updateRouteProgress(state.lng, state.lat, simDistanceRef.current)
       // Throttled UI State updates (at ~4Hz) to keep React thread super light
       if (timestamp - lastUiThrottleRef.current > 220) {
         lastUiThrottleRef.current = timestamp
+        // Dynamically update route line: shrink ahead, grow trail behind
+        updateRouteProgress(state.lng, state.lat, simDistanceRef.current)
         setRouteDistanceProgress(simDistanceRef.current)
         setSpeed(Math.round(currentSpeed))
         setLiveUserLocation({ lat: state.lat, lng: state.lng })
@@ -841,15 +820,7 @@ export default function NavigationPage() {
           onRotate={(e) => {
             setMapBearing(e.viewState.bearing)
           }}
-          onLoad={(e) => {
-            const map = e?.target || (mapRef.current?.getMap ? mapRef.current.getMap() : mapRef.current)
-            if (map && routeGeoJson) {
-              try {
-                const src = map.getSource('route-source')
-                if (src && src.setData) src.setData(routeGeoJson)
-              } catch (_) {}
-            }
-          }}
+
         >
 
           {/* 3D User Navigation Puck with Ultra-Smooth Rotating Directional Arrow & Heading Beam */}
@@ -921,6 +892,47 @@ export default function NavigationPage() {
               </Marker>
             )
           })}
+
+          {/* ── Declarative Route Line Layers (immune to mapStyle / provider changes) ── */}
+          {routeTraversedData && (
+            <Source id="route-traversed" type="geojson" data={routeTraversedData}>
+              <Layer
+                id="route-traversed-line"
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': '#64748b',
+                  'line-width': 5,
+                  'line-opacity': 0.3,
+                  'line-dasharray': [2, 3],
+                }}
+              />
+            </Source>
+          )}
+          {(routeAheadData || routeGeoJson) && (
+            <Source id="route-source" type="geojson" data={routeAheadData || routeGeoJson}>
+              <Layer
+                id="route-casing"
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': '#0d47a1',
+                  'line-width': 13,
+                  'line-opacity': 0.9,
+                }}
+              />
+              <Layer
+                id="route-core"
+                type="line"
+                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+                paint={{
+                  'line-color': '#1a73e8',
+                  'line-width': 7.5,
+                  'line-opacity': 1.0,
+                }}
+              />
+            </Source>
+          )}
         </Map>
 
 
@@ -1338,7 +1350,7 @@ export default function NavigationPage() {
                 const state = getInterpolatedRouteState(targetDist)
                 setCurrentLat(state.lat)
                 setCurrentLng(state.lng)
-                updateSvgPath(state.lng, state.lat, targetDist)
+                updateRouteProgress(state.lng, state.lat, targetDist)
               }
               const st = steps[nextIdx]
               if (st && isVoiceEnabled) speakText(st.instruction)
