@@ -1,25 +1,27 @@
 // src/services/nominatim.js
 // Switched to TomTom Search API for vastly superior POI & Street Data compared to OSM
 
-const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY
-if (!TOMTOM_KEY) {
-  console.error('[Safety Guardian] VITE_TOMTOM_API_KEY is not configured.')
-}
 const TOMTOM_BASE = 'https://api.tomtom.com/search/2'
 
 export async function searchPlaces(query) {
   if (!query || query.trim().length < 2) return []
 
   try {
+    const key = import.meta.env.VITE_TOMTOM_API_KEY
+    if (!key || key === 'your_tomtom_api_key_here') {
+      console.error('[Safety Guardian] VITE_TOMTOM_API_KEY is not set')
+      throw new Error('VITE_TOMTOM_API_KEY is not set')
+    }
+
     const params = new URLSearchParams({
-      key: TOMTOM_KEY,
+      key,
       limit: 10,
       countrySet: 'IN', // bias to India
       language: 'en-IN'
     })
 
     const res = await fetch(`${TOMTOM_BASE}/search/${encodeURIComponent(query)}.json?${params}`)
-    if (!res.ok) throw new Error('TomTom search error')
+    if (!res.ok) throw new Error(`TomTom search error: ${res.status}`)
     
     const data = await res.json()
     if (!data.results) return []
@@ -62,12 +64,19 @@ export async function searchPlaces(query) {
 
 export async function reverseGeocode(lat, lng) {
   try {
-    const params = new URLSearchParams({ key: TOMTOM_KEY })
+    const key = import.meta.env.VITE_TOMTOM_API_KEY
+    if (!key || key === 'your_tomtom_api_key_here') {
+      throw new Error('VITE_TOMTOM_API_KEY is not set')
+    }
+    const params = new URLSearchParams({ key })
     const res = await fetch(`${TOMTOM_BASE}/reverseGeocode/${lat},${lng}.json?${params}`)
-    if (!res.ok) throw new Error('TomTom reverse error')
+    if (!res.ok) throw new Error(`TomTom reverse error: ${res.status}`)
     const data = await res.json()
     return data
-  } catch {
+  } catch (err) {
+    if (err.message === 'VITE_TOMTOM_API_KEY is not set') {
+      console.warn('[Safety Guardian] VITE_TOMTOM_API_KEY is not set, falling back to Nominatim.')
+    }
     const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org'
     const params = new URLSearchParams({ lat, lon: lng, format: 'json' })
     const res = await fetch(`${NOMINATIM_BASE}/reverse?${params}`)

@@ -14,7 +14,6 @@ import { getRouteFromGoogle } from './googleRouting'
  */
 
 import { getTomTomKey } from './apiKeys'
-const API_KEY  = getTomTomKey()
 const BASE_URL = 'https://api.tomtom.com/routing/1'
 
 // ─── Transport mode map ────────────────────────────────────────────────────────
@@ -39,10 +38,11 @@ export const TRAFFIC_COLORS = {
 
 // ─── Build URL ────────────────────────────────────────────────────────────────
 function buildUrl(fromLat, fromLng, toLat, toLng, travelMode, routeType, maxAlternatives = 0) {
+  const apiKey = getTomTomKey()
   return (
     `${BASE_URL}/calculateRoute/` +
     `${fromLat},${fromLng}:${toLat},${toLng}/json` +
-    `?key=${API_KEY}` +
+    `?key=${apiKey}` +
     `&travelMode=${travelMode}` +
     `&routeType=${routeType}` +
     `&traffic=true` +
@@ -434,9 +434,11 @@ export function formatDuration(seconds) {
 
 // ─── Traffic tile URL builders (kept for possible future use, NOT used on home) ─
 export function getTrafficTileUrl(style = 'relative') {
-  return `https://api.tomtom.com/traffic/map/4/tile/flow/${style}/{z}/{x}/{y}.png?key=${API_KEY}`
+  const key = getTomTomKey()
+  return `https://api.tomtom.com/traffic/map/4/tile/flow/${style}/{z}/{x}/{y}.png?key=${key}`
 }
 
 export function getIncidentTileUrl() {
-  return `https://api.tomtom.com/traffic/map/4/tile/incidents/s3/{z}/{x}/{y}.png?key=${API_KEY}`
+  const key = getTomTomKey()
+  return `https://api.tomtom.com/traffic/map/4/tile/incidents/s3/{z}/{x}/{y}.png?key=${key}`
 }

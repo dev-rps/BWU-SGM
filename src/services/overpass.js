@@ -1,5 +1,5 @@
 // Overpass API & TomTom API — Real-Time POI Fetching
-const OVERPASS_BASE = 'https://overpass-api.de/api/interpreter'
+const OVERPASS_PROXY = '/api/overpass'
 
 export async function fetchNearbyPlaces(lat, lng, radiusMeters = 2000, categories = []) {
   const categoryFilters = categories.length
@@ -21,13 +21,13 @@ export async function fetchNearbyPlaces(lat, lng, radiusMeters = 2000, categorie
 );
 out body;`
 
-  const res = await fetch(OVERPASS_BASE, {
+  const res = await fetch(OVERPASS_PROXY, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `data=${encodeURIComponent(query)}`,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
   })
   
-  if (!res.ok) throw new Error('Overpass API error')
+  if (!res.ok) throw new Error(`Overpass proxy error: ${res.status}`)
   const data = await res.json()
   
   return (data.elements || [])
@@ -47,8 +47,8 @@ out body;`
 export async function fetchRealtimeNearbyPOIs(lat, lng, radiusMeters = 2500) {
   const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY
 
-  // 1. Try TomTom Nearby Search API
-  if (TOMTOM_KEY) {
+  // 1. Try TomTom Nearby Search API if key is valid
+  if (TOMTOM_KEY && TOMTOM_KEY !== 'your_tomtom_api_key_here') {
     try {
       const params = new URLSearchParams({
         key: TOMTOM_KEY,

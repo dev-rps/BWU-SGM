@@ -1,9 +1,9 @@
 import { getTomTomKey } from './apiKeys';
-const API_KEY = getTomTomKey();
 
 const BASE_URL = "https://api.tomtom.com/traffic/services/4";
 
 export async function getTrafficFlow(minLat, minLon, maxLat, maxLon) {
+  const API_KEY = getTomTomKey();
   const bbox = `${minLon},${minLat},${maxLon},${maxLat}`;
 
   const url =
@@ -21,6 +21,7 @@ export async function getTrafficFlow(minLat, minLon, maxLat, maxLon) {
 }
 
 export async function getTrafficIncidents(minLat, minLon, maxLat, maxLon) {
+  const API_KEY = getTomTomKey();
   const bbox = `${minLon},${minLat},${maxLon},${maxLat}`;
 
   const url =

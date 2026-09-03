@@ -11,8 +11,9 @@ const MODE_MAP = {
 }
 
 export async function getRouteFromGoogle(fromLat, fromLng, toLat, toLng, mode = 'driving') {
-  if (!GOOGLE_API_KEY) {
-    throw new Error('Google Routes API key is not configured, falling back to TomTom/OSRM.')
+  if (!GOOGLE_API_KEY || GOOGLE_API_KEY === 'your_google_maps_api_key_here') {
+    console.error('[Safety Guardian] VITE_GOOGLE_MAPS_API_KEY is not set')
+    throw new Error('VITE_GOOGLE_MAPS_API_KEY is not set')
   }
   const travelMode = MODE_MAP[mode] || 'DRIVE'
 
