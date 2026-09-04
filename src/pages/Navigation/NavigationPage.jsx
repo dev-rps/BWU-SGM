@@ -2,21 +2,28 @@
  * NavigationPage.jsx — Live Turn-by-Turn 3D Driving Navigation (Uber & Google Maps Grade)
  *
  * Highlights:
- *   1. True 3D Driving Perspective: 62° pitch horizontal horizon view, 18.2x zoom, road-aligned forward bearing.
- *   2. Ultra-Smooth 60 FPS Simulation & Tracking: Parametric polyline interpolation running on requestAnimationFrame.
- *   3. Rock-Solid Static Voice Button: Completely stationary with audio wave bars when speaking (no bouncy animations).
- *   4. Dedicated Re-center Button: Clearly highlights when user pans away, with smooth snap-back to 3D forward follow.
- *   5. Linked Voice Assistant & Turn Directions: Dynamic countdown synchronized with milestone announcements & Momo voice briefing.
- *   6. Resilient Tile Architecture: Google Maps raster tiles primary with safe OpenStreetMap fallback.
+ *   1. True 3D Driving Perspective: Native WebGL 62° pitch horizontal horizon view with ZERO corner clipping.
+ *   2. Forward Heading-Up Road Follow: Camera smoothly rotates and aligns with road tangent towards destination.
+ *   3. Dynamic Compass Widget: Real-time compass needle pointing to True North, tap to toggle North-Up.
+ *   4. Responsive Recenter: Clearly highlights when user pans away; snaps back to forward follow and aligns heading.
+ *   5. Ultra-Smooth 60 FPS Simulation: Parametric polyline interpolation on requestAnimationFrame.
+ *   6. Resilient Tile Architecture: Google Maps raster tiles primary with safe OSM fallback.
+ *   7. Full Voice Guidance & Maneuver HUD: Dynamic countdowns, Momo voice briefing, turn instructions.
  */
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import Map, { Source, Layer, Marker } from 'react-map-gl/maplibre'
+import { setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
 import { HAZARD_TYPES, SEVERITY_COLORS } from '../../constants'
 import { mapProvider } from '../../services/mapProvider'
+
+// Point MapLibre directly to our production-bundled worker asset
+if (typeof window !== 'undefined') {
+  setWorkerUrl('/assets/maplibre-gl-worker.mjs')
+}
 
 // ─── Math & Geometry Helpers ──────────────────────────────────────────────────
 function haversineMeters(lat1, lng1, lat2, lng2) {
@@ -43,7 +50,7 @@ function calculateBearing(lat1, lng1, lat2, lng2) {
 }
 
 function getShortestAngleDiff(target, current) {
-  return ((((target - current + 540) % 360) - 180))
+  return (((target - current + 540) % 360) - 180)
 }
 
 const HAZARD_MAP = Object.fromEntries(HAZARD_TYPES.map(h => [h.id, h]))
@@ -81,22 +88,9 @@ export default function NavigationPage() {
 
   const selectedRoute = routes[selectedRouteIdx] || routes[0]
   const onRouteReports = useMemo(() => selectedRoute?.onRouteReports || [], [selectedRoute?.onRouteReports])
-  
   const rawGeometry = useMemo(() => selectedRoute?.geometry || [], [selectedRoute?.geometry])
 
-  const geometry = useMemo(() => {
-    if (rawGeometry && rawGeometry.length >= 2) return rawGeometry
-    const sLat = parseFloat(startLocation?.lat || userLocation?.lat || 22.5726)
-    const sLng = parseFloat(startLocation?.lng || startLocation?.lon || userLocation?.lng || userLocation?.lon || 88.3639)
-    const dLat = parseFloat(destination?.lat || 22.5800)
-    const dLng = parseFloat(destination?.lng || destination?.lon || 88.3700)
-    if (sLat && sLng && dLat && dLng) {
-      return [[sLat, sLng], [dLat, dLng]]
-    }
-    return []
-  }, [rawGeometry, startLocation, userLocation, destination])
-
-  // Coordinate normalizer that guarantees [lng, lat] GeoJSON format without lat/lng flipping
+  // Coordinate normalizer that guarantees [lng, lat] for MapLibre GeoJSON
   const normalizeToLngLat = useCallback((p) => {
     if (!p) return null
     let lat = null
@@ -126,8 +120,18 @@ export default function NavigationPage() {
     return null
   }, [])
 
-  // ── Route Polyline GeoJSON (Standard FeatureCollection for MapLibre) ─────────
-  // ── Normalized Route Coordinates: guaranteed [ [lng, lat], ... ] ────────────
+  const geometry = useMemo(() => {
+    if (rawGeometry && rawGeometry.length >= 2) return rawGeometry
+    const sLat = parseFloat(startLocation?.lat || userLocation?.lat || 22.5726)
+    const sLng = parseFloat(startLocation?.lng || startLocation?.lon || userLocation?.lng || userLocation?.lon || 88.3639)
+    const dLat = parseFloat(destination?.lat || 22.5800)
+    const dLng = parseFloat(destination?.lng || destination?.lon || 88.3700)
+    if (sLat && sLng && dLat && dLng) {
+      return [[sLat, sLng], [dLat, dLng]]
+    }
+    return []
+  }, [rawGeometry, startLocation, userLocation, destination])
+
   const validCoords = useMemo(() => {
     if (!geometry || geometry.length < 2) return []
     return geometry.map(normalizeToLngLat).filter(Boolean)
@@ -135,7 +139,6 @@ export default function NavigationPage() {
 
   const routeGeoJson = useMemo(() => {
     if (!validCoords.length) return null
-
     return {
       type: 'FeatureCollection',
       features: [
@@ -151,7 +154,18 @@ export default function NavigationPage() {
     }
   }, [validCoords])
 
-  // ── Polyline Parameterization for 60 FPS Smooth Interpolation ───────────────
+  const EMPTY_FC = useMemo(() => ({ type: 'FeatureCollection', features: [] }), [])
+  const [routeAheadData, setRouteAheadData] = useState(null)
+  const [routeTraversedData, setRouteTraversedData] = useState(null)
+
+  useEffect(() => {
+    if (routeGeoJson) {
+      setRouteAheadData(routeGeoJson)
+      setRouteTraversedData(EMPTY_FC)
+    }
+  }, [routeGeoJson, EMPTY_FC])
+
+  // Polyline Parameterization for 60 FPS Smooth Interpolation
   const polylineData = useMemo(() => {
     if (!validCoords || validCoords.length < 2) return null
     const cumDists = [0]
@@ -165,13 +179,95 @@ export default function NavigationPage() {
     return { cumDists, totalDistance: Math.max(total, 1) }
   }, [validCoords])
 
+  // Initial road segment bearing
+  const initialBearing = useMemo(() => {
+    if (validCoords && validCoords.length > 1) {
+      return calculateBearing(validCoords[0][1], validCoords[0][0], validCoords[1][1], validCoords[1][0])
+    }
+    return 0
+  }, [validCoords])
+
+  // Coordinates & State
+  const initLoc = startLocation || userLocation
+  const [currentLat, setCurrentLat] = useState(parseFloat(initLoc?.lat || 22.57))
+  const [currentLng, setCurrentLng] = useState(parseFloat(initLoc?.lng || initLoc?.lon || 88.36))
+  const [bearing, setBearing] = useState(initialBearing)
+  const [mapBearing, setMapBearing] = useState(initialBearing)
+  const [arrowHeading, setArrowHeading] = useState(initialBearing)
+  const [continuousArrowAngle, setContinuousArrowAngle] = useState(0)
+  const prevContinuousAngleRef = useRef(0)
+
+  const [stepIdx, setStepIdx] = useState(0)
+  const [gpsMode, setGpsMode] = useState('live')
+  const [speed, setSpeed] = useState(38)
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(true)
+  const [is3DMode, setIs3DMode] = useState(true)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isFollowing, setIsFollowing] = useState(true)
+  const [momoToast, setMomoToast] = useState(null)
+  const [showHazardModal, setShowHazardModal] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [activeProvider, setActiveProvider] = useState(() => mapProvider.getStatus().activeProvider)
+  const mapStyle = useMemo(() => mapProvider.getMapLibreStyle(), [activeProvider])
+
+  // Simulation State
+  const [isSimulating, setIsSimulating] = useState(false)
+  const [simSpeedMultiplier, setSimSpeedMultiplier] = useState(2)
+  const [routeDistanceProgress, setRouteDistanceProgress] = useState(0)
+
+  const simDistanceRef = useRef(0)
+  const cameraBearingRef = useRef(initialBearing)
+  const rafIdRef = useRef(null)
+  const lastRafTimeRef = useRef(null)
+  const isFollowingRef = useRef(true)
+  const is3DModeRef = useRef(true)
+  const isSimulatingRef = useRef(false)
+  const simMultiplierRef = useRef(2)
+  const lastUiThrottleRef = useRef(0)
+  const announcedMilestonesRef = useRef(new Set())
+  const watchRef = useRef(null)
+  const prevGpsPos = useRef(null)
+  const lastSpokenHazardRef = useRef(false)
+
+  // Arrowhead rotation angle:
+  // In 3D follow mode, camera aligns with road, so arrow points straight UP (0° relative).
+  // In 2D mode, map is North-up, so arrow points in world travel direction (relative to mapBearing).
+  useEffect(() => {
+    const currentMapHeading = is3DMode && isFollowing ? cameraBearingRef.current : mapBearing
+    const relativeAngle = arrowHeading - currentMapHeading
+    const diff = ((relativeAngle - (prevContinuousAngleRef.current % 360) + 540) % 360) - 180
+    const nextAngle = prevContinuousAngleRef.current + diff
+    prevContinuousAngleRef.current = nextAngle
+    setContinuousArrowAngle(nextAngle)
+  }, [arrowHeading, mapBearing, is3DMode, isFollowing])
+
+  useEffect(() => {
+    if (validCoords && validCoords.length > 1) {
+      const b = calculateBearing(validCoords[0][1], validCoords[0][0], validCoords[1][1], validCoords[1][0])
+      cameraBearingRef.current = b
+      setBearing(b)
+      setMapBearing(is3DMode ? b : 0)
+      setArrowHeading(b)
+    }
+  }, [validCoords, is3DMode])
+
+  useEffect(() => { isFollowingRef.current = isFollowing }, [isFollowing])
+  useEffect(() => { is3DModeRef.current = is3DMode }, [is3DMode])
+  useEffect(() => { isSimulatingRef.current = isSimulating }, [isSimulating])
+  useEffect(() => { simMultiplierRef.current = simSpeedMultiplier }, [simSpeedMultiplier])
+
+  useEffect(() => {
+    return mapProvider.subscribe(status => {
+      setActiveProvider(status.activeProvider)
+    })
+  }, [])
+
   // Continuous position & forward tangent bearing at distance s along route
   const getInterpolatedRouteState = useCallback((s) => {
     if (!polylineData || !validCoords || validCoords.length < 2) {
-      const init = startLocation || userLocation
       return {
-        lat: parseFloat(init?.lat || 22.57),
-        lng: parseFloat(init?.lng || init?.lon || 88.36),
+        lat: currentLat,
+        lng: currentLng,
         bearing: 0,
         lookaheadBearing: 0,
         distance: 0,
@@ -181,7 +277,6 @@ export default function NavigationPage() {
     const { cumDists, totalDistance } = polylineData
     const clampedS = Math.max(0, Math.min(s, totalDistance))
 
-    // Binary search for segment
     let low = 0
     let high = cumDists.length - 1
     while (low <= high) {
@@ -202,8 +297,7 @@ export default function NavigationPage() {
     const lat = p0[1] + (p1[1] - p0[1]) * ratio
     const segmentBearing = calculateBearing(p0[1], p0[0], p1[1], p1[0])
 
-    // Sample 25m ahead for smooth cornering anticipation
-    const lookaheadDist = Math.min(totalDistance, clampedS + 25)
+    const lookaheadDist = Math.min(totalDistance, clampedS + 30)
     let aLow = 0
     let aHigh = cumDists.length - 1
     while (aLow <= aHigh) {
@@ -219,9 +313,45 @@ export default function NavigationPage() {
     const lookaheadBearing = calculateBearing(lat, lng, aLat, aLng)
 
     return { lat, lng, bearing: segmentBearing, lookaheadBearing, distance: clampedS }
-  }, [polylineData, validCoords, startLocation, userLocation])
+  }, [polylineData, validCoords, currentLat, currentLng])
 
-  // ── Steps & Maneuver Waypoints ──────────────────────────────────────────────
+  // Dynamic Route Progress
+  const updateRouteProgress = useCallback((vehicleLng, vehicleLat, distanceAlongRoute) => {
+    if (!validCoords || validCoords.length < 2 || !polylineData) return
+
+    try {
+      const { cumDists } = polylineData
+
+      let segIdx = 0
+      for (let i = 0; i < cumDists.length - 1; i++) {
+        if (distanceAlongRoute >= cumDists[i]) {
+          segIdx = i
+        } else {
+          break
+        }
+      }
+
+      const vehiclePoint = [vehicleLng, vehicleLat]
+      const aheadCoords = [vehiclePoint, ...validCoords.slice(segIdx + 1)]
+      const behindCoords = [...validCoords.slice(0, segIdx + 1), vehiclePoint]
+
+      const makeGeoJson = (coords) => ({
+        type: 'FeatureCollection',
+        features: coords.length >= 2 ? [{
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: coords },
+        }] : [],
+      })
+
+      setRouteAheadData(makeGeoJson(aheadCoords))
+      setRouteTraversedData(makeGeoJson(behindCoords))
+    } catch (err) {
+      console.debug('[NavigationMap] route progress update:', err)
+    }
+  }, [validCoords, polylineData])
+
+  // Steps & Maneuver Waypoints
   const steps = useMemo(() => {
     if (selectedRoute?.steps?.length > 0) {
       return selectedRoute.steps.map(s => ({
@@ -239,7 +369,6 @@ export default function NavigationPage() {
     ]
   }, [selectedRoute])
 
-  // Map each step to its target distance along the route
   const stepTargetDistances = useMemo(() => {
     if (!polylineData) return []
     const { totalDistance, cumDists } = polylineData
@@ -260,233 +389,7 @@ export default function NavigationPage() {
     })
   }, [polylineData, steps, geometry])
 
-  // Initial road segment bearing
-  const initialBearing = useMemo(() => {
-    if (geometry && geometry.length > 1) {
-      return calculateBearing(geometry[0][0], geometry[0][1], geometry[1][0], geometry[1][1])
-    }
-    return 0
-  }, [geometry])
-
-  // ── Coordinates & State ─────────────────────────────────────────────────────
-  const initLoc = startLocation || userLocation
-  const [currentLat, setCurrentLat] = useState(parseFloat(initLoc?.lat || 22.57))
-  const [currentLng, setCurrentLng] = useState(parseFloat(initLoc?.lng || initLoc?.lon || 88.36))
-  const [bearing, setBearing] = useState(initialBearing)
-  const [mapBearing, setMapBearing] = useState(initialBearing)
-  const [arrowHeading, setArrowHeading] = useState(initialBearing)
-  const [deviceHeading, setDeviceHeading] = useState(null)
-  const [continuousArrowAngle, setContinuousArrowAngle] = useState(0)
-  const prevContinuousAngleRef = useRef(0)
-  const [stepIdx, setStepIdx] = useState(0)
-  const [gpsMode, setGpsMode] = useState('live') // 'live' | 'simulated'
-  const [speed, setSpeed] = useState(38) // km/h
-  const [isVoiceEnabled, setIsVoiceEnabled] = useState(true)
-  const [is3DMode, setIs3DMode] = useState(true)
-  const [isSpeaking, setIsSpeaking] = useState(false)
-  const [isFollowing, setIsFollowing] = useState(true)
-  const [momoToast, setMomoToast] = useState(null)
-  const [showHazardModal, setShowHazardModal] = useState(false)
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [activeProvider, setActiveProvider] = useState(() => mapProvider.getStatus().activeProvider)
-  const mapStyle = useMemo(() => mapProvider.getMapLibreStyle(), [activeProvider])
-
-  // Continuously interpolate screen rotation angle for smooth animation without 360° flip
-  useEffect(() => {
-    const relativeAngle = is3DMode && isFollowing
-      ? (arrowHeading - cameraBearingRef.current)
-      : (arrowHeading - mapBearing)
-    const diff = ((relativeAngle - (prevContinuousAngleRef.current % 360) + 540) % 360) - 180
-    const nextAngle = prevContinuousAngleRef.current + diff
-    prevContinuousAngleRef.current = nextAngle
-    setContinuousArrowAngle(nextAngle)
-  }, [arrowHeading, mapBearing, is3DMode, isFollowing])
-
-  // Real Device Compass Heading Sensor (for smooth physical orientation)
-  useEffect(() => {
-    const handleOrientation = (e) => {
-      let h = null
-      if (typeof e.webkitCompassHeading === 'number') {
-        h = e.webkitCompassHeading
-      } else if (typeof e.alpha === 'number') {
-        h = (360 - e.alpha) % 360
-      }
-      if (h !== null && !isNaN(h)) {
-        setDeviceHeading(h)
-        if (!isSimulatingRef.current && speed < 5) {
-          setArrowHeading(h)
-        }
-      }
-    }
-
-    if (window.DeviceOrientationEvent) {
-      window.addEventListener('deviceorientationabsolute', handleOrientation, true)
-      window.addEventListener('deviceorientation', handleOrientation, true)
-    }
-
-    return () => {
-      window.removeEventListener('deviceorientationabsolute', handleOrientation, true)
-      window.removeEventListener('deviceorientation', handleOrientation, true)
-    }
-  }, [speed])
-
-  // Simulation State
-  const [isSimulating, setIsSimulating] = useState(false)
-  const [simSpeedMultiplier, setSimSpeedMultiplier] = useState(2) // 1x, 2x, 4x
-
-  // Distance progressed along route (meters)
-  const [routeDistanceProgress, setRouteDistanceProgress] = useState(0)
-
-  // Refs for 60 FPS animation loop
-  const simDistanceRef = useRef(0)
-  const cameraBearingRef = useRef(initialBearing)
-  const rafIdRef = useRef(null)
-  const lastRafTimeRef = useRef(null)
-  const isFollowingRef = useRef(true)
-  const is3DModeRef = useRef(true)
-  const isSimulatingRef = useRef(false)
-  const simMultiplierRef = useRef(2)
-  const lastUiThrottleRef = useRef(0)
-  const announcedMilestonesRef = useRef(new Set())
-  const watchRef = useRef(null)
-  const prevGpsPos = useRef(null)
-  const lastSpokenHazardRef = useRef(false)
-
-  // Ensure camera bearing updates when route geometry changes
-  useEffect(() => {
-    if (geometry && geometry.length > 1) {
-      const b = calculateBearing(geometry[0][0], geometry[0][1], geometry[1][0], geometry[1][1])
-      cameraBearingRef.current = b
-      setBearing(b)
-    }
-  }, [geometry])
-
-  // Sync refs with state
-  useEffect(() => {
-    isFollowingRef.current = isFollowing
-  }, [isFollowing])
-
-  useEffect(() => {
-    is3DModeRef.current = is3DMode
-  }, [is3DMode])
-
-  useEffect(() => {
-    isSimulatingRef.current = isSimulating
-  }, [isSimulating])
-
-  useEffect(() => {
-    simMultiplierRef.current = simSpeedMultiplier
-  }, [simSpeedMultiplier])
-
-  // ── Synchronize with MapProvider fallback ──────────────────────────────────
-  useEffect(() => {
-    return mapProvider.subscribe(status => {
-      setActiveProvider(status.activeProvider)
-    })
-  }, [])
-
-
-
-  const handleMapError = useCallback((e) => {
-    if (e?.error?.status === 404 || e?.error?.status === 403) {
-      console.warn('[NavigationMap] Google tile HTTP error:', e.error?.status)
-      mapProvider.recordTileError('google')
-    }
-  }, [])
-
-  // ── Robust Imperative Route Sync (survives setStyle) ───────────────────────
-  // Whenever the map style changes (or finishes loading), we must re-inject the route
-  // data because MapLibre's setStyle() wipes out the current source data.
-  // We use a retry mechanism because Vercel prod builds can cause React state 
-  // (routeGeoJson) to compute slightly out of sync with MapLibre's internal style load.
-  useEffect(() => {
-    if (!mapRef.current || !routeGeoJson) return
-    const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
-    if (!map) return
-
-    let retryCount = 0
-    let timeoutId = null
-
-    const syncRouteData = () => {
-      try {
-        const src = map.getSource('route-source')
-        if (src && src.setData) {
-          src.setData(routeGeoJson)
-        } else if (retryCount < 20) {
-          // Source not ready yet (style still parsing). Retry in 50ms.
-          retryCount++
-          timeoutId = setTimeout(syncRouteData, 50)
-        }
-      } catch (err) {
-        console.debug('[NavigationMap] sync route source:', err)
-      }
-    }
-
-    syncRouteData()
-
-    const onStyleData = () => {
-      retryCount = 0 // Reset retry on style change
-      syncRouteData()
-    }
-
-    map.on('styledata', onStyleData)
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId)
-      map.off('styledata', onStyleData)
-    }
-  }, [routeGeoJson])  // ── Dynamic Route Progress: split route at vehicle position ────────────────
-  const updateRouteProgress = useCallback((vehicleLng, vehicleLat, distanceAlongRoute) => {
-    if (!validCoords || validCoords.length < 2 || !polylineData) return
-
-    try {
-      const { cumDists } = polylineData
-
-      // Find the segment index where the vehicle currently is
-      let segIdx = 0
-      for (let i = 0; i < cumDists.length - 1; i++) {
-        if (distanceAlongRoute >= cumDists[i]) {
-          segIdx = i
-        } else {
-          break
-        }
-      }
-
-      const vehiclePoint = [vehicleLng, vehicleLat]
-
-      // Remaining route: from vehicle position to destination
-      const aheadCoords = [vehiclePoint, ...validCoords.slice(segIdx + 1)]
-
-      // Traversed route: from start to vehicle position
-      const behindCoords = [...validCoords.slice(0, segIdx + 1), vehiclePoint]
-
-      const makeGeoJson = (coords) => ({
-        type: 'FeatureCollection',
-        features: coords.length >= 2 ? [{
-          type: 'Feature',
-          properties: {},
-          geometry: { type: 'LineString', coordinates: coords },
-        }] : [],
-      })
-
-      // Update imperative sources directly
-      const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
-      if (!map || !map.isStyleLoaded()) return
-
-      const routeSrc = map.getSource('route-source')
-      if (routeSrc && routeSrc.setData) {
-        routeSrc.setData(makeGeoJson(aheadCoords))
-      }
-
-      const traversedSrc = map.getSource('route-traversed')
-      if (traversedSrc && traversedSrc.setData) {
-        traversedSrc.setData(makeGeoJson(behindCoords))
-      }
-    } catch (err) {
-      console.debug('[NavigationMap] route progress update:', err)
-    }
-  }, [validCoords, polylineData])
-
-  // ── Speech Synthesis Engine (Clean, Non-overlapping) ────────────────────────
+  // Speech Synthesis
   const speakText = useCallback((text, force = false) => {
     if (!('speechSynthesis' in window)) return
     if (!isVoiceEnabled && !force) return
@@ -513,7 +416,6 @@ export default function NavigationPage() {
     }
   }, [isVoiceEnabled])
 
-  // Toggle Voice Guidance
   const toggleVoice = () => {
     if (isVoiceEnabled) {
       setIsVoiceEnabled(false)
@@ -526,7 +428,6 @@ export default function NavigationPage() {
     }
   }
 
-  // ── Current Step & Live Distance Countdown ──────────────────────────────────
   const currentStep = steps[stepIdx] || steps[steps.length - 1]
   const nextStep = steps[stepIdx + 1] || null
 
@@ -534,7 +435,6 @@ export default function NavigationPage() {
   const liveMetersToStep = Math.max(0, targetStepDist - routeDistanceProgress)
   const liveStepDistanceText = fmtDist(liveMetersToStep)
 
-  // Distance & Duration remaining to final destination
   const totalRouteDist = polylineData?.totalDistance || (selectedRoute?.distanceKm ? selectedRoute.distanceKm * 1000 : 5000)
   const distRemainingMeters = Math.max(0, totalRouteDist - routeDistanceProgress)
   const remainingMin = Math.max(1, Math.round(distRemainingMeters / (Math.max(speed, 20) * 1000 / 60)))
@@ -546,7 +446,6 @@ export default function NavigationPage() {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }, [remainingMin])
 
-  // ── Momo Voice Assistant Briefing ───────────────────────────────────────────
   const handleMomoBriefing = () => {
     const safetyScore = selectedRoute?.safetyScore || 88
     const hazardMsg = onRouteReports.length > 0
@@ -554,13 +453,11 @@ export default function NavigationPage() {
       : 'All road corridors ahead are safe and clear.'
 
     const msg = `Momo here! In ${liveStepDistanceText}, ${currentStep.instruction}. ${fmtDist(distRemainingMeters)} remaining, ETA ${arrivalTime}. Safety score is ${safetyScore}. ${hazardMsg}`
-    
     setMomoToast(`In ${liveStepDistanceText}, ${currentStep.instruction} • ${fmtDist(distRemainingMeters)} to destination`)
     setTimeout(() => setMomoToast(null), 5500)
     speakText(msg, true)
   }
 
-  // ── Arrival Handler ─────────────────────────────────────────────────────────
   const handleArrived = useCallback(() => {
     if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
     if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current)
@@ -573,7 +470,6 @@ export default function NavigationPage() {
     navigate('/review')
   }, [navigate, setLiveUserLocation, setIsNavigating, setJourneyComplete, isVoiceEnabled, speakText])
 
-  // ── Synchronized Voice Guidance Milestones ──────────────────────────────────
   useEffect(() => {
     if (!isVoiceEnabled) return
 
@@ -589,7 +485,6 @@ export default function NavigationPage() {
     }
   }, [stepIdx, liveMetersToStep, currentStep, isVoiceEnabled, speakText])
 
-  // ── Hazard Warning Detection (<300m) ────────────────────────────────────────
   const hazardNearby = useMemo(() => {
     return onRouteReports.some(r => {
       const hLat = r._snapLat ?? r.lat
@@ -611,6 +506,7 @@ export default function NavigationPage() {
   }, [hazardNearby, isVoiceEnabled, speakText])
 
   // ── Camera Recenter Handler (Uber / Google Maps 3D View) ───────────────────
+  // Locks forward direction along route towards destination
   const recenterCamera = useCallback(() => {
     setIsFollowing(true)
     isFollowingRef.current = true
@@ -619,19 +515,22 @@ export default function NavigationPage() {
     const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
     if (!map) return
 
+    const targetBearing = cameraBearingRef.current || 0
+
     map.easeTo({
       center: [currentLng, currentLat],
-      bearing: is3DMode ? cameraBearingRef.current : 0,
+      bearing: is3DMode ? targetBearing : 0,
       pitch: is3DMode ? 62 : 0,
       zoom: is3DMode ? 18.2 : 16.5,
       padding: is3DMode
-        ? { top: 60, bottom: 180, left: 0, right: 0 }
+        ? { top: 60, bottom: 200, left: 0, right: 0 }
         : { top: 40, bottom: 180, left: 0, right: 0 },
       duration: 650,
     })
+    setMapBearing(is3DMode ? targetBearing : 0)
   }, [currentLat, currentLng, is3DMode])
 
-  // ── 60 FPS Smooth Parametric Simulation Loop (requestAnimationFrame) ─────────
+  // ── 60 FPS Smooth Parametric Simulation Loop ─────────────────────────────
   useEffect(() => {
     if (!isSimulating) {
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
@@ -646,12 +545,10 @@ export default function NavigationPage() {
       const dt = Math.min((timestamp - lastRafTimeRef.current) / 1000, 0.08)
       lastRafTimeRef.current = timestamp
 
-      // Speed in meters per second
       const baseSpeedKmh = 42
       const currentSpeed = baseSpeedKmh * simMultiplierRef.current
       const speedMps = (currentSpeed * 1000) / 3600
 
-      // Advance distance along route
       simDistanceRef.current += speedMps * dt
       const totalDist = polylineData?.totalDistance || 1000
 
@@ -662,14 +559,13 @@ export default function NavigationPage() {
         return
       }
 
-      // Exact interpolated coordinate & tangent
       const state = getInterpolatedRouteState(simDistanceRef.current)
 
       // Smooth camera bearing interpolation towards forward lookahead road tangent
       const angleDiff = getShortestAngleDiff(state.lookaheadBearing, cameraBearingRef.current)
       cameraBearingRef.current = (cameraBearingRef.current + angleDiff * Math.min(1, dt * 5.5) + 360) % 360
 
-      // Update Native Map Camera at 60 FPS without React re-render overhead
+      // Update Native Map Camera at 60 FPS in Uber-style 3D forward orientation
       if (isFollowingRef.current && mapRef.current) {
         const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
         if (map) {
@@ -679,29 +575,26 @@ export default function NavigationPage() {
             pitch: is3DModeRef.current ? 62 : 0,
             zoom: is3DModeRef.current ? 18.2 : 16.5,
             padding: is3DModeRef.current
-              ? { top: 60, bottom: 180, left: 0, right: 0 }
+              ? { top: 60, bottom: 200, left: 0, right: 0 }
               : { top: 40, bottom: 180, left: 0, right: 0 },
           })
         }
       }
 
-      // Update vehicle marker coordinate and live direction
       setCurrentLat(state.lat)
       setCurrentLng(state.lng)
       setBearing(cameraBearingRef.current)
       setArrowHeading(state.bearing)
-      setMapBearing(cameraBearingRef.current)
+      setMapBearing(is3DModeRef.current ? cameraBearingRef.current : 0)
 
-      // Throttled UI State updates (at ~4Hz) to keep React thread super light
+      // Throttled UI State updates (~4Hz)
       if (timestamp - lastUiThrottleRef.current > 220) {
         lastUiThrottleRef.current = timestamp
-        // Dynamically update route line: shrink ahead, grow trail behind
         updateRouteProgress(state.lng, state.lat, simDistanceRef.current)
         setRouteDistanceProgress(simDistanceRef.current)
         setSpeed(Math.round(currentSpeed))
         setLiveUserLocation({ lat: state.lat, lng: state.lng })
 
-        // Check if passed step waypoint to advance to next instruction
         let activeIdx = 0
         for (let i = 0; i < stepTargetDistances.length; i++) {
           if (simDistanceRef.current < stepTargetDistances[i]) {
@@ -731,7 +624,6 @@ export default function NavigationPage() {
     }
   }, [isSimulating, polylineData, getInterpolatedRouteState, updateRouteProgress, stepTargetDistances, steps, isVoiceEnabled, speakText, handleArrived, setLiveUserLocation])
 
-  // Toggle Simulation Play/Pause
   const toggleSimulation = () => {
     if (isSimulating) {
       setIsSimulating(false)
@@ -745,7 +637,7 @@ export default function NavigationPage() {
     }
   }
 
-  // ── Live Real GPS Watcher (When not simulating) ─────────────────────────────
+  // Live GPS Watcher (When not simulating)
   const handlePosition = useCallback((pos) => {
     if (isSimulating) return
     const lat = pos.coords.latitude
@@ -776,7 +668,6 @@ export default function NavigationPage() {
     }
     prevGpsPos.current = { lat, lng }
 
-    // Follow camera if user hasn't manually panned
     if (isFollowingRef.current && mapRef.current) {
       const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
       if (map) {
@@ -786,7 +677,7 @@ export default function NavigationPage() {
           pitch: is3DModeRef.current ? 62 : 0,
           zoom: is3DModeRef.current ? 18.2 : 16.5,
           padding: is3DModeRef.current
-            ? { top: 260, bottom: 40, left: 0, right: 0 }
+            ? { top: 60, bottom: 200, left: 0, right: 0 }
             : { top: 40, bottom: 180, left: 0, right: 0 },
           duration: 500,
         })
@@ -814,7 +705,6 @@ export default function NavigationPage() {
     }
   }, [handlePosition, setLiveUserLocation])
 
-  // ── Quick Hazard Reporter ───────────────────────────────────────────────────
   const handleQuickReport = (type) => {
     const reportData = {
       id: `report-${Date.now()}`,
@@ -830,10 +720,17 @@ export default function NavigationPage() {
     speakText(`Hazard reported: ${type}. Thank you for keeping roads safe.`, true)
   }
 
+  const handleMapError = useCallback((e) => {
+    if (e?.error?.status === 404 || e?.error?.status === 403) {
+      console.warn('[NavigationMap] Google tile HTTP error:', e.error?.status)
+      mapProvider.recordTileError('google')
+    }
+  }, [])
+
   return (
     <div className="relative w-full h-full overflow-hidden bg-slate-950 select-none">
 
-      {/* ════════ MAP CANVAS (3D GOOGLE MAPS WITH LEAFLET/OSM FALLBACK) ════════ */}
+      {/* ════════ MAP CANVAS (3D WEBGL GOOGLE MAPS WITH HORIZONTAL PERSPECTIVE) ════════ */}
       <div className="absolute inset-0 z-0">
         <Map
           ref={mapRef}
@@ -843,6 +740,9 @@ export default function NavigationPage() {
             zoom: 18.2,
             pitch: is3DMode ? 62 : 0,
             bearing: cameraBearingRef.current,
+            padding: is3DMode
+              ? { top: 60, bottom: 200, left: 0, right: 0 }
+              : { top: 40, bottom: 180, left: 0, right: 0 },
           }}
           maxPitch={85}
           mapStyle={mapStyle}
@@ -859,30 +759,62 @@ export default function NavigationPage() {
           onRotate={(e) => {
             setMapBearing(e.viewState.bearing)
           }}
-          onLoad={(e) => {
-            const map = e?.target || (mapRef.current?.getMap ? mapRef.current.getMap() : mapRef.current)
-            if (map && routeGeoJson) {
-              try {
-                const src = map.getSource('route-source')
-                if (src && src.setData) src.setData(routeGeoJson)
-              } catch (_) {}
-            }
-          }}
         >
 
-          {/* 3D User Navigation Puck with Ultra-Smooth Rotating Directional Arrow & Heading Beam */}
+          {/* ═══ ROUTE POLYLINE LAYERS ═══ */}
+          {/* Traversed trail (faded dashed line behind vehicle) */}
+          <Source id="route-traversed" type="geojson" data={routeTraversedData || EMPTY_FC}>
+            <Layer
+              id="route-traversed-line"
+              type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{
+                'line-color': '#64748b',
+                'line-width': 5,
+                'line-opacity': 0.35,
+                'line-dasharray': [2, 3],
+              }}
+            />
+          </Source>
+
+          {/* Active remaining route (bright blue with dark casing) */}
+          <Source id="route-source" type="geojson" data={routeAheadData || EMPTY_FC}>
+            <Layer
+              id="route-casing"
+              type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{
+                'line-color': '#0d47a1',
+                'line-width': 13,
+                'line-opacity': 0.95,
+              }}
+            />
+            <Layer
+              id="route-core"
+              type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{
+                'line-color': '#1a73e8',
+                'line-width': 7.5,
+                'line-opacity': 1.0,
+              }}
+            />
+          </Source>
+
+          {/* 3D User Navigation Puck with Rotating Directional Arrow & Heading Beam */}
           <Marker longitude={currentLng} latitude={currentLat} anchor="center">
             <div className="relative flex items-center justify-center pointer-events-none" style={{ width: 84, height: 84 }}>
+              {/* Pulsing radar glow */}
+              <div className="absolute w-16 h-16 rounded-full bg-blue-500/25 animate-ping opacity-70" />
 
-              {/* Ultra-Smooth Rotating 3D Navigation Arrowhead (Points towards movement/facing direction) */}
+              {/* Rotating 3D Navigation Arrowhead (Points towards forward movement direction) */}
               <div
-                className="relative z-10 w-11 h-11 rounded-full bg-white shadow-[0_8px_24px_rgba(0,0,0,0.5)] border-[2.5px] border-blue-600 flex items-center justify-center"
+                className="relative z-10 w-11 h-11 rounded-full bg-white shadow-[0_8px_24px_rgba(0,0,0,0.55)] border-[2.5px] border-blue-600 flex items-center justify-center"
                 style={{
                   transform: `rotate(${continuousArrowAngle}deg)`,
-                  transition: 'transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
+                  transition: 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
                 }}
               >
-                {/* Precision 3D Directional Chevron (Tip naturally points UP / North at 0°) */}
                 <svg viewBox="0 0 24 24" className="w-6 h-6 drop-shadow-sm">
                   <path
                     d="M12 2.5 L20 20.5 L12 16.5 L4 20.5 Z"
@@ -901,7 +833,7 @@ export default function NavigationPage() {
             </div>
           </Marker>
 
-          {/* Destination Pin (Clean, non-bouncing drop pin) */}
+          {/* Destination Pin */}
           {destination && (
             <Marker
               longitude={parseFloat(destination.lng || destination.lon)}
@@ -940,8 +872,6 @@ export default function NavigationPage() {
             )
           })}
         </Map>
-
-
       </div>
 
       {/* ════════ TOP MANEUVER HUD (Google Maps Obsidian/Emerald Style) ════════ */}
@@ -951,7 +881,6 @@ export default function NavigationPage() {
           {/* Top Status Indicators (Map Provider + GPS Mode + Momo Assistant + Voice) */}
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              {/* Interactive Map Provider Switcher & Status Badge */}
               <button 
                 type="button"
                 onClick={() => {
@@ -967,7 +896,6 @@ export default function NavigationPage() {
                 <span className="text-[9px] text-slate-400 ml-0.5">⇄</span>
               </button>
 
-              {/* GPS status */}
               <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/40 border border-white/10 text-[10px] font-bold">
                 <span className="material-symbols-outlined text-[12px] text-sky-400">
                   {gpsMode === 'simulated' ? 'sports_esports' : 'gps_fixed'}
@@ -977,7 +905,6 @@ export default function NavigationPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Momo Voice Assistant Quick Briefing Button */}
               <button
                 onClick={handleMomoBriefing}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-900/60 hover:bg-emerald-800/80 border border-emerald-500/40 text-emerald-200 text-[11px] font-bold active:scale-95 transition-all cursor-pointer shadow-sm"
@@ -987,7 +914,6 @@ export default function NavigationPage() {
                 <span>Momo</span>
               </button>
 
-              {/* Rock-Solid Static Voice Guidance Speaker (NO Bouncing!) */}
               <button
                 onClick={toggleVoice}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black transition-all active:scale-95 ${
@@ -997,7 +923,6 @@ export default function NavigationPage() {
                 }`}
                 title={isVoiceEnabled ? 'Voice Guidance Active (Tap to mute)' : 'Voice Muted (Tap to enable)'}
               >
-                {/* Audio Wave Visualizer when speaking (Clean & Static) */}
                 {isSpeaking ? (
                   <div className="flex items-end gap-0.5 h-3.5 w-3.5 justify-center">
                     <span className="w-0.5 bg-emerald-300 rounded-full animate-pulse h-3" />
@@ -1016,14 +941,12 @@ export default function NavigationPage() {
 
           {/* Maneuver Icon & Distance Countdown */}
           <div className="flex items-center gap-3.5">
-            {/* Big Direction Icon */}
             <div className="w-14 h-14 rounded-2xl bg-black/30 border border-white/15 flex items-center justify-center flex-shrink-0 shadow-inner">
               <span className="material-symbols-outlined text-white text-[38px] font-black">
                 {currentStep.icon || 'straight'}
               </span>
             </div>
 
-            {/* Distance & Street Instruction */}
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-1.5">
                 <span className="text-3xl font-black tracking-tight text-white drop-shadow-sm">
@@ -1049,7 +972,7 @@ export default function NavigationPage() {
             </div>
           )}
 
-          {/* Progress Bar at bottom edge of card */}
+          {/* Progress Bar */}
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/40">
             <div
               className="h-full bg-sky-400 transition-all duration-300 rounded-r-full shadow-[0_0_8px_#38bdf8]"
@@ -1070,7 +993,7 @@ export default function NavigationPage() {
       {/* ════════ FLOATING CONTROLS (Right Edge) ════════ */}
       <div className="absolute right-3.5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2.5 items-center">
         
-        {/* Floating Interactive Mini Compass Widget (Rotates dynamically to True North, tap to reset North-Up) */}
+        {/* Floating Interactive Mini Compass Widget (Active needle rotates to True North, tap to orient North / Heading) */}
         <button
           type="button"
           onClick={() => {
@@ -1078,8 +1001,8 @@ export default function NavigationPage() {
             const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
             if (!map) return
 
-            const isNorthUp = Math.abs(mapBearing % 360) < 3
-            const targetBearing = isNorthUp ? (arrowHeading || 0) : 0
+            const isNorthUp = Math.abs(mapBearing % 360) < 5
+            const targetBearing = isNorthUp ? (cameraBearingRef.current || 0) : 0
 
             map.easeTo({
               bearing: targetBearing,
@@ -1088,9 +1011,8 @@ export default function NavigationPage() {
             setMapBearing(targetBearing)
           }}
           className="relative w-12 h-12 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-slate-700/80 shadow-[0_8px_24px_rgba(0,0,0,0.5)] flex items-center justify-center active:scale-90 transition-transform cursor-pointer group hover:border-slate-500"
-          title={`Compass: ${Math.round((360 - (mapBearing % 360)) % 360)}° — Tap to orient True North`}
+          title={`Compass: ${Math.round((360 - (mapBearing % 360)) % 360)}° — Tap to orient North`}
         >
-          {/* Compass Dial Cardinal Markers */}
           <div className="absolute inset-0 rounded-2xl flex items-center justify-center pointer-events-none">
             <div className="absolute top-1 w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
             <div className="absolute bottom-1 w-1 h-1 rounded-full bg-slate-500" />
@@ -1098,36 +1020,26 @@ export default function NavigationPage() {
             <div className="absolute right-1 w-1 h-1 rounded-full bg-slate-600" />
           </div>
 
-          {/* Rotating Compass Needle (Red needle points to True North) */}
           <div
             className="relative w-8 h-8 flex items-center justify-center pointer-events-none"
             style={{
               transform: `rotate(${-mapBearing}deg)`,
-              transition: 'transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
+              transition: 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
             }}
           >
-            {/* North Red Pointer */}
             <div className="absolute top-0.5 flex flex-col items-center">
-              <div
-                className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[10px] border-b-rose-500 drop-shadow-[0_0_4px_rgba(244,63,94,0.8)]"
-              />
+              <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[10px] border-b-rose-500 drop-shadow-[0_0_4px_rgba(244,63,94,0.8)]" />
               <span className="text-[7.5px] font-black text-rose-400 leading-none mt-0.5 select-none tracking-tighter">N</span>
             </div>
-
-            {/* Pivot Center Pin */}
             <div className="w-2 h-2 rounded-full bg-white shadow-md z-10 border border-slate-400" />
-
-            {/* South Silver Pointer */}
             <div className="absolute bottom-0.5 flex flex-col items-center">
               <span className="text-[7px] font-black text-slate-400 leading-none mb-0.5 select-none tracking-tighter">S</span>
-              <div
-                className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[9px] border-t-slate-300"
-              />
+              <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[9px] border-t-slate-300" />
             </div>
           </div>
         </button>
 
-        {/* Dedicated Re-center Button (Permanently Available & Non-Bouncing) */}
+        {/* Dedicated Re-center Button (Snaps back to 3D forward follow) */}
         <button
           onClick={recenterCamera}
           className={`relative w-12 h-12 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 shadow-xl border-2 active:scale-90 ${
@@ -1135,7 +1047,7 @@ export default function NavigationPage() {
               ? 'bg-blue-600 text-white border-white ring-4 ring-blue-500/40 shadow-blue-500/40'
               : 'bg-slate-900/90 text-slate-300 border-slate-700/80 hover:text-white'
           }`}
-          title={!isFollowing ? 'Re-center camera on vehicle (Tracking paused)' : 'Camera locked on vehicle'}
+          title={!isFollowing ? 'Re-center camera on vehicle (Tracking paused)' : 'Camera locked on forward route'}
         >
           <span className={`material-symbols-outlined text-[22px] ${!isFollowing ? 'text-white' : 'text-slate-300'}`}>
             {!isFollowing ? 'near_me' : 'my_location'}
@@ -1153,27 +1065,29 @@ export default function NavigationPage() {
           )}
         </button>
 
-        {/* 3D vs 2D Tilt & Compass Toggle */}
+        {/* 3D vs 2D Perspective Toggle */}
         <button
           onClick={() => {
             const next3D = !is3DMode
             setIs3DMode(next3D)
+            const targetB = next3D ? cameraBearingRef.current : 0
+            setMapBearing(targetB)
             if (mapRef.current) {
               const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
               if (map) {
                 map.easeTo({
                   pitch: next3D ? 62 : 0,
-                  bearing: next3D ? cameraBearingRef.current : 0,
+                  bearing: targetB,
                   zoom: next3D ? 18.2 : 16.5,
                   padding: next3D
-                    ? { top: 260, bottom: 40, left: 0, right: 0 }
+                    ? { top: 60, bottom: 200, left: 0, right: 0 }
                     : { top: 40, bottom: 180, left: 0, right: 0 },
                   duration: 500,
                 })
               }
             }
           }}
-          className="w-11 h-11 rounded-2xl bg-slate-900/90 backdrop-blur-md text-white border border-slate-700/70 shadow-lg flex items-center justify-center active:scale-90 transition-all"
+          className="w-11 h-11 rounded-2xl bg-slate-900/90 backdrop-blur-md text-white border border-slate-700/70 shadow-lg flex items-center justify-center active:scale-90 transition-all cursor-pointer"
           title={is3DMode ? 'Switch to 2D North-Up' : 'Switch to 3D Driving Perspective'}
         >
           <span 
@@ -1190,7 +1104,7 @@ export default function NavigationPage() {
         {/* Quick Report Road Hazard */}
         <button
           onClick={() => setShowHazardModal(true)}
-          className="w-11 h-11 rounded-2xl bg-amber-500 text-slate-950 shadow-lg flex items-center justify-center active:scale-90 transition-transform font-bold"
+          className="w-11 h-11 rounded-2xl bg-amber-500 text-slate-950 shadow-lg flex items-center justify-center active:scale-90 transition-transform font-bold cursor-pointer"
           title="Report road hazard at current location"
         >
           <span className="material-symbols-outlined icon-filled text-[22px]">warning</span>
@@ -1199,7 +1113,7 @@ export default function NavigationPage() {
         {/* Route Suggestions / Safety Insights Toggle */}
         <button
           onClick={() => setShowSuggestions(s => !s)}
-          className={`w-11 h-11 rounded-2xl border shadow-lg flex items-center justify-center active:scale-90 transition-all ${
+          className={`w-11 h-11 rounded-2xl border shadow-lg flex items-center justify-center active:scale-90 transition-all cursor-pointer ${
             showSuggestions ? 'bg-sky-500 text-slate-950 border-sky-400' : 'bg-slate-900/90 text-slate-200 border-slate-700/70'
           }`}
           title="Safety route advisory"
@@ -1301,7 +1215,7 @@ export default function NavigationPage() {
               setIsNavigating(false)
               navigate(-1)
             }}
-            className="w-12 h-12 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center active:scale-95 transition-all border border-slate-700"
+            className="w-12 h-12 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center active:scale-95 transition-all border border-slate-700 cursor-pointer"
             title="Exit Navigation"
           >
             <span className="material-symbols-outlined text-[24px]">close</span>
@@ -1310,19 +1224,19 @@ export default function NavigationPage() {
           {/* Finish Journey */}
           <button
             onClick={handleArrived}
-            className="flex-1 h-12 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 active:scale-98 transition-all"
+            className="flex-1 h-12 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer"
           >
             <span className="material-symbols-outlined icon-filled text-[20px]">flag</span>
             <span>Finish Journey</span>
           </button>
         </div>
 
-        {/* ── Interactive Drive Simulator Control Bar (Desktop / Testing) ── */}
+        {/* Interactive Drive Simulator Control Bar */}
         <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center gap-2">
             <button
               onClick={toggleSimulation}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold transition-all cursor-pointer ${
                 isSimulating
                   ? 'bg-amber-500 text-slate-950'
                   : 'bg-slate-800 hover:bg-slate-700 text-slate-200'

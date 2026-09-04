@@ -9,6 +9,10 @@ function maplibreWorkerPlugin() {
     const workerFile = path.resolve('node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs')
     return fs.existsSync(workerFile) ? fs.readFileSync(workerFile) : null
   }
+  const getSharedContent = () => {
+    const sharedFile = path.resolve('node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs')
+    return fs.existsSync(sharedFile) ? fs.readFileSync(sharedFile) : null
+  }
 
   return {
     name: 'maplibre-worker-plugin',
@@ -16,6 +20,15 @@ function maplibreWorkerPlugin() {
       server.middlewares.use(async (req, res, next) => {
         if (req.url?.startsWith('/assets/maplibre-gl-worker.mjs')) {
           const content = getWorkerContent()
+          if (content) {
+            res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+            res.end(content)
+            return
+          }
+        }
+
+        if (req.url?.startsWith('/assets/maplibre-gl-shared.mjs')) {
+          const content = getSharedContent()
           if (content) {
             res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
             res.end(content)
@@ -69,12 +82,20 @@ function maplibreWorkerPlugin() {
       })
     },
     generateBundle() {
-      const content = getWorkerContent()
-      if (content) {
+      const workerContent = getWorkerContent()
+      if (workerContent) {
         this.emitFile({
           type: 'asset',
           fileName: 'assets/maplibre-gl-worker.mjs',
-          source: content,
+          source: workerContent,
+        })
+      }
+      const sharedContent = getSharedContent()
+      if (sharedContent) {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'assets/maplibre-gl-shared.mjs',
+          source: sharedContent,
         })
       }
     },
