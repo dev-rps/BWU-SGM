@@ -20,9 +20,11 @@ import { useAppStore } from '../../context/store'
 import { HAZARD_TYPES, SEVERITY_COLORS } from '../../constants'
 import { mapProvider } from '../../services/mapProvider'
 
-// Point MapLibre directly to our production-bundled worker asset
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
+
+// Route worker through Vite's native worker bundling pipeline
 if (typeof window !== 'undefined') {
-  setWorkerUrl('/assets/maplibre-gl-worker.mjs')
+  setWorkerUrl(workerUrl)
 }
 
 // ─── Math & Geometry Helpers ──────────────────────────────────────────────────
@@ -155,8 +157,8 @@ export default function NavigationPage() {
   }, [validCoords])
 
   const EMPTY_FC = useMemo(() => ({ type: 'FeatureCollection', features: [] }), [])
-  const [routeAheadData, setRouteAheadData] = useState(null)
-  const [routeTraversedData, setRouteTraversedData] = useState(null)
+  const [routeAheadData, setRouteAheadData] = useState(() => routeGeoJson || null)
+  const [routeTraversedData, setRouteTraversedData] = useState(() => EMPTY_FC)
 
   useEffect(() => {
     if (routeGeoJson) {
@@ -164,6 +166,15 @@ export default function NavigationPage() {
       setRouteTraversedData(EMPTY_FC)
     }
   }, [routeGeoJson, EMPTY_FC])
+
+  // Sync initial user position with the true starting waypoint of the route
+  useEffect(() => {
+    if (validCoords && validCoords.length >= 2) {
+      const [startLng, startLat] = validCoords[0]
+      setCurrentLat(startLat)
+      setCurrentLng(startLng)
+    }
+  }, [validCoords])
 
   // Polyline Parameterization for 60 FPS Smooth Interpolation
   const polylineData = useMemo(() => {
@@ -749,6 +760,18 @@ export default function NavigationPage() {
           style={{ width: '100%', height: '100%' }}
           attributionControl={false}
           onError={handleMapError}
+          onLoad={(e) => {
+            const map = e.target
+            if (validCoords && validCoords.length >= 2) {
+              const [startLng, startLat] = validCoords[0]
+              map.jumpTo({
+                center: [startLng, startLat],
+                zoom: is3DMode ? 18.2 : 16.5,
+                bearing: cameraBearingRef.current || initialBearing,
+                pitch: is3DMode ? 62 : 0,
+              })
+            }
+          }}
           onDragStart={() => setIsFollowing(false)}
           onPitchStart={() => setIsFollowing(false)}
           onRotateStart={() => setIsFollowing(false)}
@@ -778,7 +801,7 @@ export default function NavigationPage() {
           </Source>
 
           {/* Active remaining route (bright blue with dark casing) */}
-          <Source id="route-source" type="geojson" data={routeAheadData || EMPTY_FC}>
+          <Source id="route-source" type="geojson" data={routeAheadData || routeGeoJson || EMPTY_FC}>
             <Layer
               id="route-casing"
               type="line"

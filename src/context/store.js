@@ -1,6 +1,24 @@
 import { create } from 'zustand'
 import { DEFAULT_CENTER } from '../constants'
 
+const loadSession = (key, fallback) => {
+  try {
+    if (typeof window === 'undefined') return fallback
+    const item = sessionStorage.getItem(key)
+    return item ? JSON.parse(item) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const saveSession = (key, val) => {
+  try {
+    if (typeof window === 'undefined') return
+    if (val === null || val === undefined) sessionStorage.removeItem(key)
+    else sessionStorage.setItem(key, JSON.stringify(val))
+  } catch {}
+}
+
 export const useAppStore = create((set, get) => ({
   // Auth / flow
   hasOnboarded: false,
@@ -25,8 +43,11 @@ export const useAppStore = create((set, get) => ({
   },
   setUserLocation: (loc) => set({ userLocation: loc }),
 
-  startLocation: null,
-  setStartLocation: (loc) => set({ startLocation: loc }),
+  startLocation: loadSession('sg_start_location', null),
+  setStartLocation: (loc) => {
+    saveSession('sg_start_location', loc)
+    set({ startLocation: loc })
+  },
 
   // Map
   mapCenter: DEFAULT_CENTER,
@@ -34,14 +55,23 @@ export const useAppStore = create((set, get) => ({
   setMapCenter: (center) => set({ mapCenter: center }),
 
   // Search / Route
-  destination: null,
-  setDestination: (dest) => set({ destination: dest }),
+  destination: loadSession('sg_destination', null),
+  setDestination: (dest) => {
+    saveSession('sg_destination', dest)
+    set({ destination: dest })
+  },
 
-  routes: [],
-  setRoutes: (routes) => set({ routes }),
+  routes: loadSession('sg_routes', []),
+  setRoutes: (routes) => {
+    saveSession('sg_routes', routes)
+    set({ routes })
+  },
 
-  selectedRouteIdx: 1,
-  setSelectedRouteIdx: (idx) => set({ selectedRouteIdx: idx }),
+  selectedRouteIdx: loadSession('sg_selected_route_idx', 0),
+  setSelectedRouteIdx: (idx) => {
+    saveSession('sg_selected_route_idx', idx)
+    set({ selectedRouteIdx: idx })
+  },
 
   // Nearby places
   nearbyPlaces: [],

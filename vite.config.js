@@ -105,7 +105,7 @@ function maplibreWorkerPlugin() {
 export default defineConfig({
   plugins: [react(), tailwindcss(), maplibreWorkerPlugin()],
   server: {
-    port: 5173,
+    port: 3000,
     open: true,
     headers: {
       'X-Content-Type-Options': 'nosniff',
