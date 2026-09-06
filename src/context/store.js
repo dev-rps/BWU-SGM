@@ -143,6 +143,7 @@ export const useAppStore = create((set, get) => ({
   setHasOnboarded: (v) => set({ hasOnboarded: v }),
   setIsLoggedIn: (v) => set({ isLoggedIn: v }),
   setHasPermissions: (v) => set({ hasPermissions: v }),
+  setIsDemoMode: (v) => set({ isDemoMode: v }),
   setPermission: (perm, val) => set((state) => {
     const updated = { ...state.permissions, [perm]: val }
     saveLocal('sg_permissions', updated)
