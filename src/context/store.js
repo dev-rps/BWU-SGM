@@ -24,6 +24,12 @@ export const useAppStore = create((set, get) => ({
   hasOnboarded: false,
   isLoggedIn: false,
   hasPermissions: false,
+  isDemoMode: false,
+  permissions: {
+    location: false,
+    camera: false,
+    notifications: false,
+  },
   user: {
     name: '',
     email: '',
@@ -114,6 +120,8 @@ export const useAppStore = create((set, get) => ({
   setHasOnboarded: (v) => set({ hasOnboarded: v }),
   setIsLoggedIn: (v) => set({ isLoggedIn: v }),
   setHasPermissions: (v) => set({ hasPermissions: v }),
+  setIsDemoMode: (v) => set({ isDemoMode: v }),
+  setPermission: (perm, val) => set((state) => ({ permissions: { ...state.permissions, [perm]: val } })),
   // Accepts either a full user object OR a partial patch — always merges
   setUser: (patch) => set((state) => ({ user: { ...state.user, ...(typeof patch === 'function' ? patch(state.user) : patch) } })),
 }))

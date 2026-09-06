@@ -97,6 +97,8 @@ export default function HomePage() {
     setHasPermissions,
     setEmergencyContacts,
     prefs,
+    permissions,
+    isDemoMode,
   } = useAppStore()
 
   const [searchQuery, setSearchQuery]       = useState('')
@@ -199,7 +201,24 @@ export default function HomePage() {
 
   // ── High-accuracy continuous GPS ─────────────────────────────────────────
   useEffect(() => {
-    if (!navigator.geolocation) { setLocating(false); return }
+    // If in demo mode and user hasn't explicitly granted location, do NOT force browser prompt on mount
+    const shouldTrackGps = permissions?.location || !userLocation?.simulated
+
+    if (!shouldTrackGps) {
+      setLocating(false)
+      // Load nearby places for simulated coordinates immediately
+      if (userLocation?.lat && userLocation?.lng) {
+        loadNearby(userLocation.lat, userLocation.lng)
+      }
+      return
+    }
+
+    if (!navigator.geolocation) {
+      setLocating(false)
+      if (userLocation?.lat && userLocation?.lng) loadNearby(userLocation.lat, userLocation.lng)
+      return
+    }
+
     setLocating(true)
     let nearbyLoaded = false
 
@@ -212,13 +231,19 @@ export default function HomePage() {
       setMapCenter([lat, lng])
     }
 
-    const onError = () => setLocating(false)
+    const onError = () => {
+      setLocating(false)
+      if (!nearbyLoaded && userLocation?.lat && userLocation?.lng) {
+        nearbyLoaded = true
+        loadNearby(userLocation.lat, userLocation.lng)
+      }
+    }
     const opts = { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
 
     navigator.geolocation.getCurrentPosition(onSuccess, onError, opts)
     const watchId = navigator.geolocation.watchPosition(onSuccess, onError, opts)
     return () => navigator.geolocation.clearWatch(watchId)
-  }, [setUserLocation, loadNearby])
+  }, [setUserLocation, loadNearby, permissions?.location, userLocation?.simulated])
 
   // ── Weather once GPS resolves ─────────────────────────────────────────────
   useEffect(() => {
@@ -573,11 +598,34 @@ export default function HomePage() {
         <button
           onClick={() => {
             const m = mapRef.current
+            if (userLocation?.simulated && !permissions?.location) {
+              // User explicitly requested their location — trigger device geolocation
+              if (navigator.geolocation) {
+                setLocating(true)
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => {
+                    const { latitude: lat, longitude: lng, accuracy } = pos.coords
+                    setUserLocation({ lat, lng, accuracy, simulated: false })
+                    setLocating(false)
+                    if (m) m.flyTo([lat, lng], 16, { animate: true, duration: 0.8 })
+                    else setMapCenter([lat, lng])
+                    loadNearby(lat, lng)
+                  },
+                  (err) => {
+                    console.warn('[GPS request failed]', err)
+                    setLocating(false)
+                    if (m) m.flyTo([userLocation.lat, userLocation.lng], 16, { animate: true, duration: 0.8 })
+                  },
+                  { enableHighAccuracy: true, timeout: 10000 }
+                )
+                return
+              }
+            }
             if (m) m.flyTo([userLocation.lat, userLocation.lng], 16, { animate: true, duration: 0.8 })
             else setMapCenter([userLocation.lat, userLocation.lng])
           }}
           className="glass-panel w-10 h-10 rounded-xl flex items-center justify-center shadow-md border border-white/30 active:scale-90 transition-transform"
-          title="My location"
+          title={userLocation?.simulated ? "Click to enable Live GPS" : "My location"}
         >
           <span className="material-symbols-outlined text-[#004ac6] icon-filled text-[20px]">my_location</span>
         </button>

@@ -104,19 +104,20 @@ const BG_IMG = '/login-bg.jpg'
 
 export default function LoginPage() {
   const navigate       = useNavigate()
-  const { setIsLoggedIn, setUser, setHasPermissions } = useAppStore()
+  const { setIsLoggedIn, setUser, setHasPermissions, setIsDemoMode } = useAppStore()
 
   const handleGuestLogin = () => {
     setUser({
-      name: 'Guest Guardian',
+      name: 'Guest Guardian (Demo)',
       email: 'guardian@safety.app',
       avatar: null,
       phone: '+91 98765 43210',
       memberSince: '2026',
     })
     setIsLoggedIn(true)
-    setHasPermissions(true)
-    navigate('/')
+    setIsDemoMode(true)
+    setHasPermissions(false)
+    navigate('/permissions')
   }
 
   // ── Form state ──────────────────────────────────────────────────────────
