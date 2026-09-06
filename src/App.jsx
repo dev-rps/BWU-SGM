@@ -30,6 +30,9 @@ import ChatPage           from './pages/Chat/ChatPage';
 // ── Medical & Badge Additions ──
 import AchievementsPage   from './pages/Profile/AchievementsPage';
 
+// ── Developer ML Playground ──
+import MLPlaygroundPage   from './pages/MLPlayground/MLPlaygroundPage';
+
 function PrivateRoute({ children }) {
   const { isLoggedIn, hasPermissions } = useAppStore();
   if (!isLoggedIn)    return <Navigate to="/login"       replace />;
@@ -87,6 +90,7 @@ export default function App() {
         <Route path="/signup"      element={<SignupPage />} />
         <Route path="/permissions" element={<PermissionsPage />} />
         <Route path="/emergency"   element={<EmergencyPage />} />
+        <Route path="/dev/model-test" element={<MLPlaygroundPage />} />
 
         <Route
           path="/"

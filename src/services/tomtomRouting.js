@@ -14,6 +14,11 @@ import { getRouteFromGoogle } from './googleRouting'
  */
 
 import { getTomTomKey } from './apiKeys'
+// Read key lazily at call-time so a missing/placeholder key doesn't crash the
+// entire module on import (getTomTomKey throws if key equals placeholder).
+const getApiKey = () => {
+  try { return getTomTomKey() } catch { return import.meta.env.VITE_TOMTOM_API_KEY || '' }
+}
 const BASE_URL = 'https://api.tomtom.com/routing/1'
 
 // ─── Transport mode map ────────────────────────────────────────────────────────
@@ -38,11 +43,10 @@ export const TRAFFIC_COLORS = {
 
 // ─── Build URL ────────────────────────────────────────────────────────────────
 function buildUrl(fromLat, fromLng, toLat, toLng, travelMode, routeType, maxAlternatives = 0) {
-  const apiKey = getTomTomKey()
   return (
     `${BASE_URL}/calculateRoute/` +
     `${fromLat},${fromLng}:${toLat},${toLng}/json` +
-    `?key=${apiKey}` +
+    `?key=${getApiKey()}` +
     `&travelMode=${travelMode}` +
     `&routeType=${routeType}` +
     `&traffic=true` +
@@ -59,12 +63,6 @@ const OSRM_ENDPOINTS = [
   'https://routing.openstreetmap.de/routed-bike/route/v1',
   'https://routing.openstreetmap.de/routed-foot/route/v1'
 ]
-
-const MODE_MULTIPLIERS = {
-  driving: 1,
-  walking: 4.2,
-  cycling: 2.1,
-}
 
 async function getRouteFromOSRM(fromLat, fromLng, toLat, toLng, mode = 'driving') {
   const coords  = `${fromLng},${fromLat};${toLng},${toLat}`
@@ -84,12 +82,7 @@ async function getRouteFromOSRM(fromLat, fromLng, toLat, toLng, mode = 'driving'
       const currentBase = attempt === 0 ? base : OSRM_ENDPOINTS[0]
       const profile = (attempt === 0 && endpointIdx > 0) ? mode : 'driving'
       
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
-
-      const res = await fetch(`${currentBase}/${profile}/${coords}?${params}`, { signal: controller.signal })
-      clearTimeout(timeoutId)
-
+      const res = await fetch(`${currentBase}/${profile}/${coords}?${params}`)
       if (!res.ok) throw new Error(`OSRM error ${res.status}`)
       const data = await res.json()
       if (data.code !== 'Ok' || !data.routes?.length) throw new Error('OSRM no routes')
@@ -167,21 +160,16 @@ export async function getRoute(fromLat, fromLng, toLat, toLng, mode = 'driving')
   // 2. TRY TOMTOM API
   const travelMode = TOMTOM_MODE[mode] || 'car'
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000)
-
     const [resultA, resultB] = await Promise.allSettled([
-      fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'fastest', 1), { signal: controller.signal }).then(r => {
+      fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'fastest', 1)).then(r => {
         if (!r.ok) throw new Error(`TomTom ${r.status}`)
         return r.json()
       }),
-      fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'shortest', 0), { signal: controller.signal }).then(r => {
+      fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'shortest', 0)).then(r => {
         if (!r.ok) throw new Error(`TomTom ${r.status}`)
         return r.json()
       }),
     ])
-
-    clearTimeout(timeoutId)
 
     const routes = []
     if (resultA.status === 'fulfilled' && resultA.value.routes?.length) {
@@ -209,13 +197,7 @@ export async function getReroutedRoute(fromLat, fromLng, toLat, toLng, mode = 'd
   const travelMode = TOMTOM_MODE[mode] || 'car'
   try {
     const url  = buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'fastest', 0)
-    
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000)
-
-    const res  = await fetch(url, { signal: controller.signal })
-    clearTimeout(timeoutId)
-
+    const res  = await fetch(url)
     if (!res.ok) throw new Error(`TomTom Reroute ${res.status}`)
     const data = await res.json()
     if (!data.routes?.length || data.detailedError) throw new Error('No reroute from TomTom')
@@ -434,11 +416,9 @@ export function formatDuration(seconds) {
 
 // ─── Traffic tile URL builders (kept for possible future use, NOT used on home) ─
 export function getTrafficTileUrl(style = 'relative') {
-  const key = getTomTomKey()
-  return `https://api.tomtom.com/traffic/map/4/tile/flow/${style}/{z}/{x}/{y}.png?key=${key}`
+  return `https://api.tomtom.com/traffic/map/4/tile/flow/${style}/{z}/{x}/{y}.png?key=${getApiKey()}`
 }
 
 export function getIncidentTileUrl() {
-  const key = getTomTomKey()
-  return `https://api.tomtom.com/traffic/map/4/tile/incidents/s3/{z}/{x}/{y}.png?key=${key}`
+  return `https://api.tomtom.com/traffic/map/4/tile/incidents/s3/{z}/{x}/{y}.png?key=${getApiKey()}`
 }

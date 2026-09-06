@@ -11,9 +11,8 @@ const MODE_MAP = {
 }
 
 export async function getRouteFromGoogle(fromLat, fromLng, toLat, toLng, mode = 'driving') {
-  if (!GOOGLE_API_KEY || GOOGLE_API_KEY === 'your_google_maps_api_key_here') {
-    console.error('[Safety Guardian] VITE_GOOGLE_MAPS_API_KEY is not set')
-    throw new Error('VITE_GOOGLE_MAPS_API_KEY is not set')
+  if (!GOOGLE_API_KEY) {
+    throw new Error('Google Routes API key is not configured, falling back to TomTom/OSRM.')
   }
   const travelMode = MODE_MAP[mode] || 'DRIVE'
 
@@ -25,9 +24,6 @@ export async function getRouteFromGoogle(fromLat, fromLng, toLat, toLng, mode = 
     computeAlternativeRoutes: true,
   }
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 10000)
-
   const res = await fetch(GOOGLE_ROUTES_API, {
     method: 'POST',
     headers: {
@@ -36,10 +32,7 @@ export async function getRouteFromGoogle(fromLat, fromLng, toLat, toLng, mode = 
       'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPath,routes.description,routes.legs',
     },
     body: JSON.stringify(body),
-    signal: controller.signal,
   })
-
-  clearTimeout(timeoutId)
 
   if (!res.ok) {
     const err = await res.json()

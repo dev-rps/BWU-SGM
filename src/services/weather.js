@@ -1,9 +1,12 @@
 import { getOpenWeatherKey } from './apiKeys';
-const API_KEY = getOpenWeatherKey();
 
 export async function getWeather(lat, lng) {
+  const apiKey = getOpenWeatherKey();
+  if (!apiKey) {
+    throw new Error("OpenWeather API key is not configured.");
+  }
   const response = await fetch(
-    `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${API_KEY}&units=metric`
+    `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${apiKey}&units=metric`
   );
 
   if (!response.ok) {

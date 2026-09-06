@@ -7,12 +7,12 @@ import { getStorage } from "firebase/storage";
 // They simply identify the project and do not grant administrative access.
 // The actual security is enforced via Firestore Security Rules.
 const firebaseConfig = {
-  apiKey: "AIzaSyA3nYYy-7BXferfR-ZVpDn5fkYr3PfM4dw",
-  authDomain: "safety-guardian-ab1f1.firebaseapp.com",
-  projectId: "safety-guardian-ab1f1",
-  storageBucket: "safety-guardian-ab1f1.firebasestorage.app",
-  messagingSenderId: "74070820570",
-  appId: "1:74070820570:web:078f351d3b19af540147e3",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);

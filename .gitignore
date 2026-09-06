@@ -36,3 +36,12 @@ dist-ssr
 *.pfx
 serviceAccountKey.json
 *-service-account.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/

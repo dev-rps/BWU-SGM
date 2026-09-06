@@ -1,0 +1,4874 @@
+{
+  "crime_hotspots": [
+    {
+      "id": "kol_001",
+      "lat": 22.5765,
+      "lng": 88.3638,
+      "area": "Burrabazar, Kolkata",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 400,
+      "description": "Major wholesale market. Pickpocketing, chain snatching, cash-bag theft documented.",
+      "source": "NCRB 2023 + Kolkata Police",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket",
+        "mobile_theft"
+      ]
+    },
+    {
+      "id": "kol_002",
+      "lat": 22.5128,
+      "lng": 88.389,
+      "area": "Tiljala / Topsia, Kolkata",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Documented high-crime neighbourhood. Robbery, assault, night-time street crime.",
+      "source": "NCRB 2022-2023 + The Telegraph",
+      "crimeTypes": [
+        "robbery",
+        "assault",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "kol_003",
+      "lat": 22.526,
+      "lng": 88.29,
+      "area": "Metiabruz & Port Fringe, Kolkata",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Industrial dock perimeter. Armed robbery and violent street crime documented.",
+      "source": "NCRB 2023 + India Today",
+      "crimeTypes": [
+        "armed_robbery",
+        "vehicle_theft",
+        "assault"
+      ]
+    },
+    {
+      "id": "kol_004",
+      "lat": 22.517,
+      "lng": 88.31,
+      "area": "Garden Reach & Paharpur, Kolkata",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 400,
+      "description": "Dock area with history of theft, cargo crime, and night robbery.",
+      "source": "Kolkata Police data",
+      "crimeTypes": [
+        "robbery",
+        "theft",
+        "cargo_crime"
+      ]
+    },
+    {
+      "id": "kol_005",
+      "lat": 22.575,
+      "lng": 88.373,
+      "area": "Rajabazar / Narkeldanga, Kolkata",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 350,
+      "description": "Dense urban pocket. Reported street snatching, knife mugging after dark.",
+      "source": "The Telegraph + Times of India",
+      "crimeTypes": [
+        "chain_snatching",
+        "robbery",
+        "night_crime"
+      ]
+    },
+    {
+      "id": "kol_006",
+      "lat": 22.539,
+      "lng": 88.3128,
+      "area": "Khidirpur (Kidderpore) Dock Road, Kolkata",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 400,
+      "description": "Port and dock area. Vehicle theft, cargo theft, and street robbery documented.",
+      "source": "Kolkata Police advisories",
+      "crimeTypes": [
+        "vehicle_theft",
+        "robbery",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "kol_006b",
+      "lat": 22.595,
+      "lng": 88.362,
+      "area": "Sonagachi / Central North, Kolkata",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 350,
+      "description": "Dense historic corridor. Extortion, pickpocketing, and night-time street crime.",
+      "source": "Kolkata Police data",
+      "crimeTypes": [
+        "extortion",
+        "pickpocket",
+        "assault"
+      ]
+    },
+    {
+      "id": "kol_006c",
+      "lat": 22.536,
+      "lng": 88.391,
+      "area": "Tangra Industrial Belt / Gobinda Khatick Rd",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Dark alleys and industrial belt. Night muggings and vehicle theft documented.",
+      "source": "The Telegraph + NCRB 2023",
+      "crimeTypes": [
+        "mugging",
+        "vehicle_theft",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "kol_009",
+      "lat": 22.5839,
+      "lng": 88.3423,
+      "area": "Howrah Railway Station & Bridge Approach",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Major transit hub. High volume of pickpocketing, luggage theft, and tout fraud.",
+      "source": "NCRB 2023 + RPF Reports",
+      "crimeTypes": [
+        "pickpocket",
+        "luggage_theft",
+        "fraud"
+      ]
+    },
+    {
+      "id": "kol_010",
+      "lat": 22.5652,
+      "lng": 88.37,
+      "area": "Sealdah Station & Baithakkhana, Kolkata",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 400,
+      "description": "Heavy suburban transit terminal. Persistent mobile grabbing and platform theft.",
+      "source": "RPF Eastern Railway + Kolkata Police",
+      "crimeTypes": [
+        "pickpocket",
+        "mobile_theft"
+      ]
+    },
+    {
+      "id": "kol_007",
+      "lat": 22.5557,
+      "lng": 88.3506,
+      "area": "New Market / Esplanade Bus Terminus, Kolkata",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 300,
+      "description": "High pedestrian footfall. Pickpocketing, tout harassment, and snatching.",
+      "source": "Times of India + NCRB 2023",
+      "crimeTypes": [
+        "pickpocket",
+        "chain_snatching",
+        "tourist_targeting"
+      ]
+    },
+    {
+      "id": "kol_008",
+      "lat": 22.5198,
+      "lng": 88.3638,
+      "area": "Gariahat Market & Golpark, Kolkata",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 280,
+      "description": "Busy market zone. Two-wheeler chain snatching incidents reported.",
+      "source": "The Telegraph + India Today",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "kol_011",
+      "lat": 22.5942,
+      "lng": 88.3712,
+      "area": "Shyambazar Five-Point Crossing, Kolkata",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 280,
+      "description": "Transit junction. Two-wheeler mobile snatching and bag theft.",
+      "source": "Times of India Kolkata",
+      "crimeTypes": [
+        "chain_snatching",
+        "bike_crime"
+      ]
+    },
+    {
+      "id": "kol_012",
+      "lat": 22.5912,
+      "lng": 88.3902,
+      "area": "Ultadanga Hudco Crossing & Rail Overbridge",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 300,
+      "description": "Highway entry point. Night-time bike snatching and auto extortion.",
+      "source": "The Telegraph Kolkata",
+      "crimeTypes": [
+        "chain_snatching",
+        "bike_crime"
+      ]
+    },
+    {
+      "id": "kol_013",
+      "lat": 22.5645,
+      "lng": 88.3551,
+      "area": "Bowbazar & BB Ganguly St, Kolkata",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 300,
+      "description": "Jewelry and commercial market. Shop theft and crowded snatching.",
+      "source": "Times of India",
+      "crimeTypes": [
+        "theft",
+        "burglary"
+      ]
+    },
+    {
+      "id": "kol_014",
+      "lat": 22.5882,
+      "lng": 88.3623,
+      "area": "Jorasanko & Girish Park Outer, Kolkata",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 280,
+      "description": "Narrow lanes. Night burglary and vehicle theft reported.",
+      "source": "Kolkata Police data",
+      "crimeTypes": [
+        "burglary",
+        "theft"
+      ]
+    },
+    {
+      "id": "kol_015",
+      "lat": 22.5762,
+      "lng": 88.3762,
+      "area": "Manicktala Market & Amherst St, Kolkata",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 300,
+      "description": "High footfall market. Chain snatching and phone grabbing.",
+      "source": "The Telegraph",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "kol_016",
+      "lat": 22.5682,
+      "lng": 88.3848,
+      "area": "Phoolbagan & Beliaghata Main Rd, Kolkata",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 300,
+      "description": "Residential theft and night motorcycle snatching reported.",
+      "source": "Kolkata Police station records",
+      "crimeTypes": [
+        "burglary",
+        "snatching"
+      ]
+    },
+    {
+      "id": "kol_018",
+      "lat": 22.5512,
+      "lng": 88.3512,
+      "area": "Park Street Nightlife Strip, Kolkata",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 250,
+      "description": "Late-night bar strip. Intoxicated altercations and pickpocketing outside venues.",
+      "source": "Times of India",
+      "crimeTypes": [
+        "night_crime",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "kol_019",
+      "lat": 22.5638,
+      "lng": 88.349,
+      "area": "BBD Bag / Dalhousie Office Core, Kolkata",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 250,
+      "description": "Business district. Rush hour pickpocketing and vehicle part theft.",
+      "source": "Kolkata Police",
+      "crimeTypes": [
+        "pickpocket",
+        "office_theft"
+      ]
+    },
+    {
+      "id": "kol_020",
+      "lat": 22.495,
+      "lng": 88.372,
+      "area": "Jadavpur 8B / Sulekha Crossing, Kolkata",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 300,
+      "description": "Student and market hub. Cycle/motorcycle theft and phone snatching.",
+      "source": "Kolkata Police South Division",
+      "crimeTypes": [
+        "vehicle_theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "kol_021",
+      "lat": 22.498,
+      "lng": 88.318,
+      "area": "Behala Chowrasta & Diamond Harbour Rd",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Dense traffic choke point. Two-wheeler mobile snatching during peak hours.",
+      "source": "Kolkata Police SW Division",
+      "crimeTypes": [
+        "snatching",
+        "mobile_theft"
+      ]
+    },
+    {
+      "id": "kol_022",
+      "lat": 22.518,
+      "lng": 88.312,
+      "area": "Taratala Industrial Crossings & Hide Rd",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Industrial freight roads. Unlit stretches with late night muggings of commuters.",
+      "source": "Kolkata Police Port Division",
+      "crimeTypes": [
+        "mugging",
+        "unlit_stretch",
+        "robbery"
+      ]
+    },
+    {
+      "id": "kol_023",
+      "lat": 22.6472,
+      "lng": 88.423,
+      "area": "Dum Dum Cantonment & Nalta Belt",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Suburban rail perimeter. Night robberies and bicycle/bike theft.",
+      "source": "Barrackpore Police",
+      "crimeTypes": [
+        "robbery",
+        "theft"
+      ]
+    },
+    {
+      "id": "kol_024",
+      "lat": 22.583,
+      "lng": 88.472,
+      "area": "New Town Action Area II & III Dark Stretches",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 600,
+      "description": "Isolated peripheral connector roads. Night mugging of tech workers on unlit service lanes.",
+      "source": "Bidhannagar Police Commissionerate",
+      "crimeTypes": [
+        "unlit_stretch",
+        "mugging",
+        "women_safety"
+      ]
+    },
+    {
+      "id": "kol_025",
+      "lat": 22.57,
+      "lng": 88.425,
+      "area": "Salt Lake Karunamoyee / Sector V Night Bus Hub",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 300,
+      "description": "Tech park transport hub. Late night mobile snatching and auto fare extortion.",
+      "source": "Bidhannagar Police",
+      "crimeTypes": [
+        "mobile_theft",
+        "extortion"
+      ]
+    },
+    {
+      "id": "kol_026",
+      "lat": 22.601,
+      "lng": 88.402,
+      "area": "Lake Town & Dakshindari Canal Road",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Canal side secluded corridor. Bike-borne mobile grabbing and unlit night mugging.",
+      "source": "Bidhannagar Police North Zone",
+      "crimeTypes": [
+        "unlit_stretch",
+        "snatching",
+        "robbery"
+      ]
+    },
+    {
+      "id": "kol_027",
+      "lat": 22.628,
+      "lng": 88.432,
+      "area": "Baguiati & Jyangra Rail Siding, Kolkata",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "VIP Road commercial fringe. Two-wheeler snatching targeting shoppers.",
+      "source": "Bidhannagar Police",
+      "crimeTypes": [
+        "snatching",
+        "theft"
+      ]
+    },
+    {
+      "id": "kol_028",
+      "lat": 22.65,
+      "lng": 88.445,
+      "area": "NSCB Airport 2.5 No Gate & Michael Nagar",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Jessore Road night freight transit belt. Vehicle battery theft and night extortion.",
+      "source": "Barasat Police District",
+      "crimeTypes": [
+        "theft",
+        "extortion"
+      ]
+    },
+    {
+      "id": "kol_029",
+      "lat": 22.485,
+      "lng": 88.358,
+      "area": "Tollygunge Karunamoyee / Kudghat Canal Fringe",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Canal bank narrow lanes. Late night smartphone snatching and burglary.",
+      "source": "Kolkata Police South Division",
+      "crimeTypes": [
+        "theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "kol_030",
+      "lat": 22.541,
+      "lng": 88.371,
+      "area": "Park Circus 4 No Bridge & Railway Track Belt",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Rail tracks and unlit alleys. Night knife mugging and commuter luggage snatching.",
+      "source": "Kolkata Police SE Division + GRP",
+      "crimeTypes": [
+        "robbery",
+        "knife_crime",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "wb_hwh_01",
+      "lat": 22.5958,
+      "lng": 88.2636,
+      "area": "Howrah City & Tikiapara Railway Colony",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Railway siding and scrap yard corridor. Gang clashes and night robberies documented.",
+      "source": "Howrah Police Commissionerate",
+      "crimeTypes": [
+        "robbery",
+        "gang_crime",
+        "scrap_theft"
+      ]
+    },
+    {
+      "id": "wb_hwh_02",
+      "lat": 22.62,
+      "lng": 88.34,
+      "area": "Salkia & Bandhaghat Port Area, Howrah",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 400,
+      "description": "Riverfront ghats and dense industrial lanes. Armed robbery and extortion.",
+      "source": "Howrah Police North",
+      "crimeTypes": [
+        "robbery",
+        "extortion"
+      ]
+    },
+    {
+      "id": "wb_hwh_03",
+      "lat": 22.605,
+      "lng": 88.31,
+      "area": "Liluah & Belur Industrial Belt, Howrah",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Factory worker transit belt. Payday snatching, bicycle theft, unlit rail crossings.",
+      "source": "Howrah Police records",
+      "crimeTypes": [
+        "theft",
+        "snatching",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "wb_hwh_04",
+      "lat": 22.65,
+      "lng": 88.34,
+      "area": "Bally Crossing & GT Road North, Howrah",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Major north-south arterial bottle-neck. Mobile snatching and shop burglary.",
+      "source": "Howrah Police Commissionerate",
+      "crimeTypes": [
+        "snatching",
+        "burglary"
+      ]
+    },
+    {
+      "id": "wb_hwh_05",
+      "lat": 22.56,
+      "lng": 88.27,
+      "area": "Santragachi Junction & Kona Expressway Entry",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Long-distance rail junction. Luggage theft, tout fraud, auto meter extortion.",
+      "source": "RPF South Eastern + Howrah City Police",
+      "crimeTypes": [
+        "luggage_theft",
+        "fraud"
+      ]
+    },
+    {
+      "id": "wb_hwh_06",
+      "lat": 22.54,
+      "lng": 88.08,
+      "area": "Amta Town & Bus Stand, Howrah",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 300,
+      "description": "Rural commercial center. Market theft and motorcycle lifting.",
+      "source": "Howrah Rural Police",
+      "crimeTypes": [
+        "theft",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "wb_hwh_07",
+      "lat": 22.47,
+      "lng": 88.13,
+      "area": "Uluberia Station & Industrial Estate, Howrah",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Highway town and rail siding. Night robbery on NH-16 service road.",
+      "source": "Howrah Rural Police",
+      "crimeTypes": [
+        "robbery",
+        "highway_theft"
+      ]
+    },
+    {
+      "id": "wb_hwh_08",
+      "lat": 22.46,
+      "lng": 87.97,
+      "area": "Bagnan Station & NH-16 Crossing, Howrah",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Highway junction. Vehicle parts theft and highway robbery targeting stranded motorists.",
+      "source": "Howrah Rural Police + NCRB",
+      "crimeTypes": [
+        "highway_robbery",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_hgl_01",
+      "lat": 22.75,
+      "lng": 88.34,
+      "area": "Serampore Station & Battala Market, Hooghly",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "High density suburban commuter hub. Snatching and cycle theft.",
+      "source": "Chandanagar Police Commissionerate",
+      "crimeTypes": [
+        "snatching",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_hgl_02",
+      "lat": 22.86,
+      "lng": 88.36,
+      "area": "Chandannagar Strand & Station Outer, Hooghly",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 300,
+      "description": "Riverfront promenade. Night purse snatching and bicycle theft.",
+      "source": "Chandanagar Police",
+      "crimeTypes": [
+        "snatching",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_hgl_03",
+      "lat": 22.9014,
+      "lng": 88.3948,
+      "area": "Chinsurah Court & Hooghly Ghats, Hooghly",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Administrative headquarters. Two-wheeler theft and commercial burglary.",
+      "source": "Hooghly District Police",
+      "crimeTypes": [
+        "vehicle_theft",
+        "burglary"
+      ]
+    },
+    {
+      "id": "wb_hgl_04",
+      "lat": 22.92,
+      "lng": 88.37,
+      "area": "Bandel Junction Railway Colony, Hooghly",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Major railway junction. Platform crime, luggage lifting, trackside snatching gangs.",
+      "source": "RPF Eastern Railway + Hooghly Police",
+      "crimeTypes": [
+        "pickpocket",
+        "luggage_theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_hgl_05",
+      "lat": 22.81,
+      "lng": 88.23,
+      "area": "Singur Durgapur Expressway (NH-19) Crossing",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Expressway access point. Night robbery on deserted service lanes.",
+      "source": "Hooghly Rural Police",
+      "crimeTypes": [
+        "highway_robbery",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "wb_hgl_06",
+      "lat": 22.88,
+      "lng": 87.78,
+      "area": "Arambagh Bus Stand & Market, Hooghly",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Sub-divisional market hub. Cattle trade cash snatching and motorcycle theft.",
+      "source": "Hooghly Rural Police",
+      "crimeTypes": [
+        "theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_n24_01",
+      "lat": 22.7586,
+      "lng": 88.3687,
+      "area": "Barrackpore Trunk Corridor, North 24 Pgs",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Suburban arterial corridor. Two-wheeler snatching and shop burglary.",
+      "source": "Barrackpore Police Commissionerate",
+      "crimeTypes": [
+        "snatching",
+        "burglary"
+      ]
+    },
+    {
+      "id": "wb_n24_02",
+      "lat": 22.7231,
+      "lng": 88.4792,
+      "area": "Barasat Champadali Crossing, North 24 Pgs",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "District town transit hub with documented chain snatching and bike theft.",
+      "source": "Barasat District Police",
+      "crimeTypes": [
+        "chain_snatching",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "wb_n24_03",
+      "lat": 22.74,
+      "lng": 88.37,
+      "area": "Titagarh / Bhatpara Jute Mill Belt, North 24 Pgs",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 600,
+      "description": "Dense industrial belt with documented armed gang clashes, extortion, crude bomb violence.",
+      "source": "NCRB 2023 + Barrackpore Police",
+      "crimeTypes": [
+        "assault",
+        "armed_violence",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "wb_n24_04",
+      "lat": 22.67,
+      "lng": 88.38,
+      "area": "Kamarhati / Belgharia Station Road, North 24 Pgs",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Dense urban belt. Street extortion, vehicle theft, and weapon clashes.",
+      "source": "Barrackpore Police Commissionerate",
+      "crimeTypes": [
+        "extortion",
+        "assault"
+      ]
+    },
+    {
+      "id": "wb_n24_05",
+      "lat": 22.88,
+      "lng": 88.42,
+      "area": "Naihati & Kanchrapara Railway Fringe, North 24 Pgs",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Railway workshop corridor. Scrap iron mafia, robbery, night street crime.",
+      "source": "Barrackpore Police + RPF",
+      "crimeTypes": [
+        "robbery",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "wb_n24_06",
+      "lat": 22.69,
+      "lng": 88.45,
+      "area": "Madhyamgram Chowrasta, North 24 Pgs",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Transit crossroads on Jessore Road. Mobile snatching from moving buses.",
+      "source": "Barasat Police",
+      "crimeTypes": [
+        "snatching",
+        "mobile_theft"
+      ]
+    },
+    {
+      "id": "wb_n24_07",
+      "lat": 22.84,
+      "lng": 88.63,
+      "area": "Habra Bus Stand & Market, North 24 Pgs",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Major transit and wholesale hub. Pickpocketing, cash snatching from traders.",
+      "source": "Barasat Police",
+      "crimeTypes": [
+        "pickpocket",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_n24_08",
+      "lat": 23.04,
+      "lng": 88.82,
+      "area": "Bangaon Town & Petrapole Border Corridor, North 24 Pgs",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 550,
+      "description": "International border trade terminus. Cross-border smuggling, illegal exchange touts, night truck theft.",
+      "source": "Bongaon Police District + BSF reports",
+      "crimeTypes": [
+        "smuggling",
+        "fraud",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_n24_09",
+      "lat": 22.66,
+      "lng": 88.87,
+      "area": "Basirhat & Hasnabad Transit Hub, North 24 Pgs",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "River border zone. Cross-border contraband smuggling, armed theft, extortion.",
+      "source": "Basirhat Police District",
+      "crimeTypes": [
+        "smuggling",
+        "robbery",
+        "assault"
+      ]
+    },
+    {
+      "id": "wb_s24_01",
+      "lat": 22.44,
+      "lng": 88.4,
+      "area": "Sonarpur Station & Rajpur Market, South 24 Pgs",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Suburban commuter terminal. Chain snatching on bikes and bicycle theft.",
+      "source": "Baruipur Police District",
+      "crimeTypes": [
+        "chain_snatching",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_s24_02",
+      "lat": 22.36,
+      "lng": 88.44,
+      "area": "Baruipur Kacharibazar & Station, South 24 Pgs",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "District town center. Pickpocketing and motorcycle theft near court complex.",
+      "source": "Baruipur Police District",
+      "crimeTypes": [
+        "pickpocket",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "wb_s24_03",
+      "lat": 22.31,
+      "lng": 88.66,
+      "area": "Canning Gateway to Sundarbans, South 24 Pgs",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Transit gateway. Tourist tout scams, night boat landing theft, fish trade extortion.",
+      "source": "Baruipur Police District",
+      "crimeTypes": [
+        "tourist_targeting",
+        "extortion"
+      ]
+    },
+    {
+      "id": "wb_s24_04",
+      "lat": 22.18,
+      "lng": 88.19,
+      "area": "Diamond Harbour Station & Jetty, South 24 Pgs",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Coastal river port town. Night mugging on sea-wall road and market theft.",
+      "source": "Sundarban Police District",
+      "crimeTypes": [
+        "theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_s24_05",
+      "lat": 21.87,
+      "lng": 88.19,
+      "area": "Kakdwip & Namkhana Bus Terminus, South 24 Pgs",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Fishing harbor and island ferry terminal. Fish catch cash robbery and boat parts theft.",
+      "source": "Sundarban Police District",
+      "crimeTypes": [
+        "theft",
+        "robbery"
+      ]
+    },
+    {
+      "id": "wb_s24_06",
+      "lat": 22.48,
+      "lng": 88.18,
+      "area": "Budge Budge & Pujali Jute Mill Area, South 24 Pgs",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Industrial river belt. Factory wage snatching, scrap mafia clashes, unlit roads.",
+      "source": "Diamond Harbour Police District",
+      "crimeTypes": [
+        "robbery",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "wb_bdn_01",
+      "lat": 23.24,
+      "lng": 87.86,
+      "area": "Burdwan Station & Curzon Gate, Purba Bardhaman",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Major transit and commercial core. Pickpocketing, luggage theft, jewelry shop burglary.",
+      "source": "Purba Bardhaman District Police",
+      "crimeTypes": [
+        "pickpocket",
+        "luggage_theft",
+        "burglary"
+      ]
+    },
+    {
+      "id": "wb_bdn_02",
+      "lat": 23.64,
+      "lng": 88.13,
+      "area": "Katwa Station & Ferry Ghat, Purba Bardhaman",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "River junction town. Cattle trade cash snatching and bicycle theft.",
+      "source": "Purba Bardhaman Police",
+      "crimeTypes": [
+        "theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_bdn_03",
+      "lat": 23.22,
+      "lng": 88.37,
+      "area": "Kalna Old Market & Ghats, Purba Bardhaman",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 300,
+      "description": "Temple town. Pilgrim purse snatching and market shoplifting.",
+      "source": "Purba Bardhaman Police",
+      "crimeTypes": [
+        "theft",
+        "tourist_targeting"
+      ]
+    },
+    {
+      "id": "wb_dgp_01",
+      "lat": 23.5204,
+      "lng": 87.3119,
+      "area": "Durgapur City Centre & Benachity Market",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Industrial city commercial hub. Mobile snatching, ATM fraud, and bike theft.",
+      "source": "Asansol-Durgapur Police Commissionerate",
+      "crimeTypes": [
+        "mobile_theft",
+        "fraud",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "wb_dgp_02",
+      "lat": 23.57,
+      "lng": 87.27,
+      "area": "Andal Junction & Railway Yard, Paschim Bardhaman",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Massive coal marshalling yard. Coal pilferage gangs, night train robberies, armed clashes.",
+      "source": "RPF + Asansol-Durgapur Police",
+      "crimeTypes": [
+        "robbery",
+        "gang_crime",
+        "cargo_crime"
+      ]
+    },
+    {
+      "id": "wb_asn_01",
+      "lat": 23.6889,
+      "lng": 86.9661,
+      "area": "Asansol Station & Rail Colony Belt",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Coal belt transit corridor. Armed robbery, scrap iron mafia violence, night theft.",
+      "source": "NCRB 2023 + Anandabazar Patrika",
+      "crimeTypes": [
+        "robbery",
+        "gang_crime",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_asn_02",
+      "lat": 23.62,
+      "lng": 87.13,
+      "area": "Raniganj Coalfield & Market, Paschim Bardhaman",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Illegal coal mining corridor. Armed mafia conflicts, extortion, night highway truck extortion.",
+      "source": "Asansol-Durgapur Police Commissionerate",
+      "crimeTypes": [
+        "armed_robbery",
+        "extortion",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "wb_asn_03",
+      "lat": 23.73,
+      "lng": 86.85,
+      "area": "Kulti & Barakar Border Checkpost, Paschim Bardhaman",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Inter-state Jharkhand border transit. Inter-state vehicle theft gangs and armed highway muggings.",
+      "source": "Paschim Bardhaman Police",
+      "crimeTypes": [
+        "vehicle_theft",
+        "armed_robbery"
+      ]
+    },
+    {
+      "id": "wb_nad_01",
+      "lat": 22.975,
+      "lng": 88.435,
+      "area": "Kalyani Ghoshpara Station & University Fringe",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 350,
+      "description": "Planned township. Bicycle theft and night purse snatching on quiet avenues.",
+      "source": "Ranaghat Police District",
+      "crimeTypes": [
+        "theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_nad_02",
+      "lat": 23.18,
+      "lng": 88.58,
+      "area": "Ranaghat Junction & Bus Stand, Nadia",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Major railway junction. Pickpocketing on border trains and luggage theft.",
+      "source": "Ranaghat Police District + RPF",
+      "crimeTypes": [
+        "pickpocket",
+        "luggage_theft"
+      ]
+    },
+    {
+      "id": "wb_nad_03",
+      "lat": 23.4,
+      "lng": 88.5,
+      "area": "Krishnanagar Station & Post Office More, Nadia",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "District town center. Chain snatching on bikes and clay doll artisan shop burglary.",
+      "source": "Krishnanagar Police District",
+      "crimeTypes": [
+        "chain_snatching",
+        "burglary"
+      ]
+    },
+    {
+      "id": "wb_nad_04",
+      "lat": 23.41,
+      "lng": 88.37,
+      "area": "Nabadwip Dham Pilgrim Ghats & Station, Nadia",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Heavy Vaishnava pilgrim center. Pilgrim purse snatching, fake donation fraud, mobile theft.",
+      "source": "Krishnanagar Police District",
+      "crimeTypes": [
+        "tourist_targeting",
+        "pickpocket",
+        "fraud"
+      ]
+    },
+    {
+      "id": "wb_nad_05",
+      "lat": 23.73,
+      "lng": 88.63,
+      "area": "Tehatta & Karimpur Border Road, Nadia",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Border corridor. Cattle rustling, cross-border smuggling clashes, night road robbery.",
+      "source": "Krishnanagar Police District + BSF",
+      "crimeTypes": [
+        "smuggling",
+        "robbery"
+      ]
+    },
+    {
+      "id": "wb_msd_01",
+      "lat": 24.09,
+      "lng": 88.25,
+      "area": "Berhampore Mohona Bus Stand & Station, Murshidabad",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "District center and highway hub. Pickpocketing, silk trade cash snatching, vehicle theft.",
+      "source": "Murshidabad Police District + NCRB",
+      "crimeTypes": [
+        "pickpocket",
+        "snatching",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "wb_msd_02",
+      "lat": 24.18,
+      "lng": 88.27,
+      "area": "Lalbagh Hazarduari Heritage Outer, Murshidabad",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Tourist core. Touts, fake guide extortion, tourist luggage theft.",
+      "source": "Murshidabad Police District",
+      "crimeTypes": [
+        "tourist_targeting",
+        "fraud"
+      ]
+    },
+    {
+      "id": "wb_msd_03",
+      "lat": 24.77,
+      "lng": 87.96,
+      "area": "Dhulian Ganga Ghat & Farakka Feeder Canal, Murshidabad",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Bidi industry hub and river border. High cash transaction robberies and cross-river smuggling.",
+      "source": "Jangipur Police District",
+      "crimeTypes": [
+        "robbery",
+        "smuggling",
+        "extortion"
+      ]
+    },
+    {
+      "id": "wb_msd_04",
+      "lat": 24,
+      "lng": 88.55,
+      "area": "Domkal & Jalangi Border Stretch, Murshidabad",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 600,
+      "description": "Dense border line. Contraband smuggling, violent clashes, crude bomb manufacturing reports.",
+      "source": "Murshidabad Police District + CID",
+      "crimeTypes": [
+        "smuggling",
+        "armed_violence"
+      ]
+    },
+    {
+      "id": "wb_msd_05",
+      "lat": 24.58,
+      "lng": 88.07,
+      "area": "Raghunathganj & Jangipur Station, Murshidabad",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Commercial grain and jute market. Shop burglary and vehicle theft.",
+      "source": "Jangipur Police District",
+      "crimeTypes": [
+        "burglary",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_pur_01",
+      "lat": 23.33,
+      "lng": 86.36,
+      "area": "Purulia Town Station & Main Market",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "District town. Motorcycle theft, mobile snatching, lacquer craft shop burglary.",
+      "source": "Purulia District Police",
+      "crimeTypes": [
+        "vehicle_theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_pur_02",
+      "lat": 23.54,
+      "lng": 86.67,
+      "area": "Raghunathpur & Santaldih Industrial Belt, Purulia",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Power plant belt. Night highway theft on state highway and factory scrap pilferage.",
+      "source": "Purulia District Police",
+      "crimeTypes": [
+        "robbery",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_pur_03",
+      "lat": 23.36,
+      "lng": 85.93,
+      "area": "Jhalda Border Corridor, Purulia",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Inter-state Jharkhand forested border. History of extortion and armed dacoity.",
+      "source": "Purulia District Police + NCRB",
+      "crimeTypes": [
+        "armed_robbery",
+        "extortion"
+      ]
+    },
+    {
+      "id": "wb_bnk_01",
+      "lat": 23.23,
+      "lng": 87.07,
+      "area": "Bankura Town Machantala & Station",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Commercial heart. Pickpocketing in bus stands and two-wheeler theft.",
+      "source": "Bankura District Police",
+      "crimeTypes": [
+        "pickpocket",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "wb_bnk_02",
+      "lat": 23.07,
+      "lng": 87.32,
+      "area": "Bishnupur Terracotta Temple Outer & Station, Bankura",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 350,
+      "description": "Heritage center. Silk saree shoplifting and tourist tout scams.",
+      "source": "Bankura District Police",
+      "crimeTypes": [
+        "tourist_targeting",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_bnk_03",
+      "lat": 23.56,
+      "lng": 87.09,
+      "area": "Mejia Coal & Sponge Iron Belt, Bankura",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Heavy truck freight corridor on NH-14. Coal truck extortion and night driver robberies.",
+      "source": "Bankura District Police",
+      "crimeTypes": [
+        "highway_robbery",
+        "extortion"
+      ]
+    },
+    {
+      "id": "wb_bir_01",
+      "lat": 23.91,
+      "lng": 87.53,
+      "area": "Suri Town Bus Stand & Court, Birbhum",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Administrative center. Vehicle theft, land deed fraud, and market pickpocketing.",
+      "source": "Birbhum District Police",
+      "crimeTypes": [
+        "vehicle_theft",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "wb_bir_02",
+      "lat": 23.67,
+      "lng": 87.69,
+      "area": "Bolpur-Santiniketan Station & Jambuni, Birbhum",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 350,
+      "description": "University and tourist town. Tourist cycle/scooter theft and handicraft market fraud.",
+      "source": "Birbhum District Police",
+      "crimeTypes": [
+        "tourist_targeting",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_bir_03",
+      "lat": 24.17,
+      "lng": 87.78,
+      "area": "Rampurhat Station & Stone Quarry Belt, Birbhum",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Stone crushing and railway hub. Stone mafia clashes, extortion, armed robbery history.",
+      "source": "Birbhum District Police + NCRB",
+      "crimeTypes": [
+        "armed_robbery",
+        "gang_crime",
+        "extortion"
+      ]
+    },
+    {
+      "id": "wb_bir_04",
+      "lat": 23.8,
+      "lng": 87.37,
+      "area": "Dubrajpur & Bakreshwar Thermal Fringe, Birbhum",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Highway approach on NH-14. Truck looting and night robbery on unlit stretches.",
+      "source": "Birbhum District Police",
+      "crimeTypes": [
+        "highway_robbery",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "wb_mid_01",
+      "lat": 22.42,
+      "lng": 87.32,
+      "area": "Medinipur Town Keranitola & Collectorate, Paschim Medinipur",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "District town. Chain snatching on two-wheelers and office area vehicle theft.",
+      "source": "Paschim Medinipur District Police",
+      "crimeTypes": [
+        "chain_snatching",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "wb_mid_02",
+      "lat": 22.346,
+      "lng": 87.323,
+      "area": "Kharagpur Station & Golbazar, Paschim Medinipur",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Massive railway junction. Railway scrap mafias, knife muggings, night station theft.",
+      "source": "NCRB 2023 + RPF South Eastern",
+      "crimeTypes": [
+        "robbery",
+        "gang_crime",
+        "scrap_theft"
+      ]
+    },
+    {
+      "id": "wb_mid_03",
+      "lat": 22.6,
+      "lng": 87.72,
+      "area": "Ghatal Town & Old Market, Paschim Medinipur",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 300,
+      "description": "Market center. Shoplifting and bicycle theft.",
+      "source": "Paschim Medinipur Police",
+      "crimeTypes": [
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_mid_04",
+      "lat": 22.45,
+      "lng": 86.99,
+      "area": "Jhargram Town & Forest Fringe, Jhargram",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Forest perimeter highway. Timber pilferage, isolated road muggings at night.",
+      "source": "Jhargram District Police",
+      "crimeTypes": [
+        "robbery",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "wb_mid_05",
+      "lat": 22.15,
+      "lng": 86.82,
+      "area": "Gopiballavpur Border Stretch, Jhargram",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Inter-state Odisha/Jharkhand border forest corridor. History of highway robbery.",
+      "source": "Jhargram Police + NCRB",
+      "crimeTypes": [
+        "highway_robbery",
+        "armed_robbery"
+      ]
+    },
+    {
+      "id": "wb_pmd_01",
+      "lat": 22.28,
+      "lng": 87.92,
+      "area": "Tamluk Town & Nimtouri Crossing, Purba Medinipur",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "District headquarters. Highway intersection snatching and betel leaf cash theft.",
+      "source": "Purba Medinipur District Police",
+      "crimeTypes": [
+        "snatching",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_pmd_02",
+      "lat": 22.06,
+      "lng": 88.08,
+      "area": "Haldia Port & Petrochemical Industrial Belt, Purba Medinipur",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Major sea port. Fuel pilferage mafias, cargo theft, armed robbery in dark port roads.",
+      "source": "Purba Medinipur Police + Port Security",
+      "crimeTypes": [
+        "cargo_crime",
+        "robbery",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "wb_pmd_03",
+      "lat": 21.78,
+      "lng": 87.75,
+      "area": "Contai (Kanthi) Bus Stand & Central Market, Purba Medinipur",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Coastal commercial center. Pickpocketing, cash bag snatching from cashew traders.",
+      "source": "Purba Medinipur Police",
+      "crimeTypes": [
+        "pickpocket",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_pmd_04",
+      "lat": 21.62,
+      "lng": 87.51,
+      "area": "Digha Tourist Beach Strip & Old Digha Bus Stand",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Massive seaside tourist hub. Hotel tout fraud, beach luggage theft, night alcohol brawls.",
+      "source": "Digha Police Station + Tourism Police",
+      "crimeTypes": [
+        "tourist_targeting",
+        "luggage_theft",
+        "night_crime"
+      ]
+    },
+    {
+      "id": "wb_pmd_05",
+      "lat": 21.84,
+      "lng": 87.55,
+      "area": "Egra Town & Interstate Odisha Highway, Purba Medinipur",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Illegal fireworks manufacturing and interstate transit. Illegal explosives, extortion.",
+      "source": "CID West Bengal + District Police",
+      "crimeTypes": [
+        "extortion",
+        "armed_violence"
+      ]
+    },
+    {
+      "id": "wb_mld_01",
+      "lat": 25.0108,
+      "lng": 88.1411,
+      "area": "English Bazar / Malda Town Station & Rathbari",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Gateway to North Bengal. Cross-border smuggling corridor, fake currency, motorcycle theft.",
+      "source": "NCRB 2023 + Malda District Police",
+      "crimeTypes": [
+        "smuggling",
+        "vehicle_theft",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_mld_02",
+      "lat": 24.88,
+      "lng": 88.13,
+      "area": "Kaliachak National Highway (NH-12) Belt, Malda",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 600,
+      "description": "High security surveillance zone. Documented poppy contraband, FICN networks, armed robbery.",
+      "source": "CID West Bengal + BSF + NCRB",
+      "crimeTypes": [
+        "smuggling",
+        "armed_robbery",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "wb_mld_03",
+      "lat": 25.39,
+      "lng": 87.99,
+      "area": "Chanchal & Harishchandrapur Station, Malda",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Sub-divisional market. Jute trading cash snatching and train pickpocketing.",
+      "source": "Malda District Police",
+      "crimeTypes": [
+        "theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_udn_01",
+      "lat": 25.62,
+      "lng": 88.12,
+      "area": "Raiganj Station & Siliguri More, Uttar Dinajpur",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "District town transit core. Mobile snatching, motorcycle lifting on NH-12 bypass.",
+      "source": "Raiganj Police District",
+      "crimeTypes": [
+        "vehicle_theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_udn_02",
+      "lat": 26.27,
+      "lng": 88.18,
+      "area": "Islampur Chicken Neck Highway Belt, Uttar Dinajpur",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Strategic Siliguri Corridor bottleneck. Inter-state dacoity, night highway robbery on NH-27.",
+      "source": "Islampur Police District + NCRB",
+      "crimeTypes": [
+        "highway_robbery",
+        "armed_robbery"
+      ]
+    },
+    {
+      "id": "wb_ddn_01",
+      "lat": 25.22,
+      "lng": 88.76,
+      "area": "Balurghat Station & Hili Border Checkpost, Dakshin Dinajpur",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Border transit terminus. Border contraband touts, bicycle theft, night shoplifting.",
+      "source": "Dakshin Dinajpur Police",
+      "crimeTypes": [
+        "smuggling",
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_slg_01",
+      "lat": 26.7271,
+      "lng": 88.3953,
+      "area": "Siliguri Junction & Hill Cart Road, Darjeeling Dist",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Gateway to 4 countries and Northeast. Tourist tout syndicates, snatching, human trafficking hub.",
+      "source": "NCRB 2023 + Siliguri Police Commissionerate",
+      "crimeTypes": [
+        "pickpocket",
+        "smuggling",
+        "tourist_targeting"
+      ]
+    },
+    {
+      "id": "wb_slg_02",
+      "lat": 26.69,
+      "lng": 88.44,
+      "area": "New Jalpaiguri (NJP) Railway Station Outer",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Massive North Bengal rail hub. Platform luggage lifters, fake taxi syndicates, auto overcharging.",
+      "source": "RPF Northeast Frontier + Siliguri Police",
+      "crimeTypes": [
+        "luggage_theft",
+        "fraud",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_slg_03",
+      "lat": 26.73,
+      "lng": 88.35,
+      "area": "Matigara & Bagdogra Airport Highway, Siliguri",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 500,
+      "description": "Fast expanding suburban highway. Night robbery on unlit bypass lanes, vehicle theft.",
+      "source": "Siliguri Police Commissionerate",
+      "crimeTypes": [
+        "highway_robbery",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "wb_jal_01",
+      "lat": 26.54,
+      "lng": 88.72,
+      "area": "Jalpaiguri Town & Kadamtala More, Jalpaiguri",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Divisional town. Two-wheeler theft, timber pilferage, court area pickpocketing.",
+      "source": "Jalpaiguri District Police",
+      "crimeTypes": [
+        "vehicle_theft",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "wb_jal_02",
+      "lat": 26.6,
+      "lng": 89.01,
+      "area": "Dhupguri & Mainaguri NH-27 Highway Crossing, Jalpaiguri",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Agricultural trade crossroads. Cash snatching from potato traders, truck part theft.",
+      "source": "Jalpaiguri District Police",
+      "crimeTypes": [
+        "theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_jal_03",
+      "lat": 26.86,
+      "lng": 88.71,
+      "area": "Malbazar Dooars Tea Garden Fringe, Jalpaiguri",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Isolated tea plantation roads. Night pay-packet snatching and timber smuggling.",
+      "source": "Jalpaiguri Police",
+      "crimeTypes": [
+        "robbery",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "wb_apd_01",
+      "lat": 26.49,
+      "lng": 89.53,
+      "area": "Alipurduar Junction & Buxa Gateway, Alipurduar",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Dooars rail junction. Railway theft and Bhutan cross-border contraband transport.",
+      "source": "Alipurduar District Police",
+      "crimeTypes": [
+        "theft",
+        "smuggling"
+      ]
+    },
+    {
+      "id": "wb_apd_02",
+      "lat": 26.86,
+      "lng": 89.38,
+      "area": "Jaigaon Bhutan Border Gate, Alipurduar",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Bustling international border gate. Currency exchange fraud, contraband smuggling, pickpocketing.",
+      "source": "Alipurduar Police + SSB",
+      "crimeTypes": [
+        "fraud",
+        "smuggling",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "wb_cob_01",
+      "lat": 26.32,
+      "lng": 89.45,
+      "area": "Cooch Behar Palace Outer & Central Bus Stand",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Heritage town. Tourist bag snatching, tobacco trading cash theft, bicycle lifting.",
+      "source": "Cooch Behar District Police",
+      "crimeTypes": [
+        "theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "wb_cob_02",
+      "lat": 26.13,
+      "lng": 89.47,
+      "area": "Dinhata & Sitai Border Belt, Cooch Behar",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Enclave border territory. Cattle smuggling clashes, cross-border armed dacoity.",
+      "source": "Cooch Behar Police + BSF reports",
+      "crimeTypes": [
+        "smuggling",
+        "armed_robbery"
+      ]
+    },
+    {
+      "id": "wb_dar_01",
+      "lat": 27.04,
+      "lng": 88.26,
+      "area": "Darjeeling Chowrasta / Mall Road Fringe & Taxi Stand",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 350,
+      "description": "Hill station core. Fake hotel reservation touts, tourist luggage theft at shared taxi stands.",
+      "source": "Darjeeling District Police",
+      "crimeTypes": [
+        "tourist_targeting",
+        "fraud"
+      ]
+    },
+    {
+      "id": "wb_dar_02",
+      "lat": 26.88,
+      "lng": 88.28,
+      "area": "Kurseong Hill Cart Road & Motor Stand, Darjeeling Dist",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 300,
+      "description": "Transit hill town. Baggage lifting from tourist jeeps.",
+      "source": "Darjeeling Police",
+      "crimeTypes": [
+        "theft"
+      ]
+    },
+    {
+      "id": "wb_dar_03",
+      "lat": 27.06,
+      "lng": 88.47,
+      "area": "Kalimpong Main Market & Dambar Chowk, Kalimpong",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 300,
+      "description": "Hill market town. Tourist vehicle theft and market pickpocketing.",
+      "source": "Kalimpong District Police",
+      "crimeTypes": [
+        "theft",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "del_001",
+      "lat": 28.6562,
+      "lng": 77.241,
+      "area": "Seemapuri, North-East Delhi",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "North-East Delhi high crime belt. Robbery, assault, armed snatching per NCRB records.",
+      "source": "NCRB 2023 Delhi + Times of India",
+      "crimeTypes": [
+        "robbery",
+        "assault",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "del_002",
+      "lat": 28.6448,
+      "lng": 77.1218,
+      "area": "Uttam Nagar, West Delhi",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "High-density residential and market corridor with documented chain snatching and daylight robbery.",
+      "source": "Delhi Police crime data + Hindustan Times",
+      "crimeTypes": [
+        "chain_snatching",
+        "robbery"
+      ]
+    },
+    {
+      "id": "del_003",
+      "lat": 28.7041,
+      "lng": 77.1025,
+      "area": "Bawana & Narela Industrial Belt",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 650,
+      "description": "Outer Delhi industrial corridor. Violent vehicle theft, armed extortion, night robberies.",
+      "source": "NCRB 2023 + India Today Delhi",
+      "crimeTypes": [
+        "vehicle_theft",
+        "robbery",
+        "assault"
+      ]
+    },
+    {
+      "id": "del_004",
+      "lat": 28.672,
+      "lng": 77.284,
+      "area": "Shahdara & Welcome, East Delhi",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "High crime density per Delhi Police stats. Daylight snatching, knife muggings.",
+      "source": "NCRB 2023 + Delhi Police",
+      "crimeTypes": [
+        "robbery",
+        "chain_snatching",
+        "assault"
+      ]
+    },
+    {
+      "id": "del_005",
+      "lat": 28.72,
+      "lng": 77.17,
+      "area": "Jahangirpuri & Bhalswa, North Delhi",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Frequent communal tension, knife attacks, street robberies, drug peddling corridors.",
+      "source": "Delhi Police Annual Review 2023",
+      "crimeTypes": [
+        "robbery",
+        "assault",
+        "weapons"
+      ]
+    },
+    {
+      "id": "del_006",
+      "lat": 28.695,
+      "lng": 77.085,
+      "area": "Mangolpuri & Sultanpuri, North-West Delhi",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Consistently ranks among Delhi top police stations for violent street robbery and assault.",
+      "source": "Delhi Police statistics + HT",
+      "crimeTypes": [
+        "robbery",
+        "assault",
+        "snatching"
+      ]
+    },
+    {
+      "id": "del_007",
+      "lat": 28.645,
+      "lng": 77.228,
+      "area": "GB Road / Ajmeri Gate Red-Light Belt",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 350,
+      "description": "Extreme caution zone at night. Extortion, robbery, drugging, and violent assault on pedestrians.",
+      "source": "Delhi Police advisories",
+      "crimeTypes": [
+        "extortion",
+        "robbery",
+        "night_crime"
+      ]
+    },
+    {
+      "id": "del_008",
+      "lat": 28.6139,
+      "lng": 77.209,
+      "area": "New Delhi Railway Station & Paharganj",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Major transit hub. Tourist touts, bag lifting, drugging, and late-night muggings.",
+      "source": "RPF Delhi Zone + NCRB 2023",
+      "crimeTypes": [
+        "pickpocket",
+        "luggage_theft",
+        "fraud",
+        "tourist_targeting"
+      ]
+    },
+    {
+      "id": "del_009",
+      "lat": 28.648,
+      "lng": 77.315,
+      "area": "Anand Vihar ISBT & Railway Station",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Inter-state bus terminal border zone. Auto fraud, baggage lifting, mobile snatching.",
+      "source": "RPF + Delhi Police East",
+      "crimeTypes": [
+        "snatching",
+        "auto_fraud",
+        "theft"
+      ]
+    },
+    {
+      "id": "del_010",
+      "lat": 28.5245,
+      "lng": 77.1855,
+      "area": "Tughlaqabad & Sangam Vihar, South Delhi",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Dense unauthorized colonies with unlit gullies. Documented gang attacks and night robbery.",
+      "source": "Delhi Police South + NDTV",
+      "crimeTypes": [
+        "robbery",
+        "mugging",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "del_011",
+      "lat": 28.58,
+      "lng": 77.05,
+      "area": "Dwarka Sector 14-23 Dark Corridors",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 500,
+      "description": "Deserted sub-city arterial roads. Gunpoint carjacking and women safety concerns at night.",
+      "source": "Delhi Police South-West",
+      "crimeTypes": [
+        "carjacking",
+        "women_safety",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "del_012",
+      "lat": 28.6692,
+      "lng": 77.2168,
+      "area": "Old Delhi / Chandni Chowk / Chawri Bazar",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Crowded labyrinth alleys. Professional pickpocketing, e-rickshaw bag cuts, mobile snatching.",
+      "source": "Delhi Police Central",
+      "crimeTypes": [
+        "pickpocket",
+        "mobile_theft"
+      ]
+    },
+    {
+      "id": "del_013",
+      "lat": 28.63,
+      "lng": 77.218,
+      "area": "Connaught Place Outer Circle (Late Night)",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 350,
+      "description": "Commercial center. High pickpocketing and mobile snatching near subway stairs after 10 PM.",
+      "source": "Delhi Police Crime Desk",
+      "crimeTypes": [
+        "pickpocket",
+        "night_crime"
+      ]
+    },
+    {
+      "id": "del_014",
+      "lat": 28.6692,
+      "lng": 77.4538,
+      "area": "Ghaziabad Loni / Sahibabad Border Belt",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 600,
+      "description": "High rate of armed highway robbery, illegal firearms, vehicle snatching on border roads.",
+      "source": "UP Police + NCRB 2023",
+      "crimeTypes": [
+        "armed_robbery",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "del_015",
+      "lat": 28.57,
+      "lng": 77.32,
+      "area": "Noida Sector 18 & Atta Market Area",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Commercial core. Vehicle theft, bag snatching from parked cars, ATM card swapping.",
+      "source": "Noida Police Commissionerate",
+      "crimeTypes": [
+        "vehicle_theft",
+        "snatching",
+        "fraud"
+      ]
+    },
+    {
+      "id": "del_016",
+      "lat": 28.48,
+      "lng": 77.08,
+      "area": "Gurugram MG Road Mall Mile (Night)",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Night-life strip with frequent drunken brawls, harassment reports, and mobile snatching.",
+      "source": "Gurugram Police + HT",
+      "crimeTypes": [
+        "night_crime",
+        "harassment",
+        "snatching"
+      ]
+    },
+    {
+      "id": "del_017",
+      "lat": 28.41,
+      "lng": 77.31,
+      "area": "Faridabad NIT 1-5 & Bata Chowk",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Industrial city hub. Two-wheeler theft, factory gate robbery, chain snatching.",
+      "source": "Haryana Police records",
+      "crimeTypes": [
+        "vehicle_theft",
+        "chain_snatching"
+      ]
+    },
+    {
+      "id": "mum_001",
+      "lat": 19.04,
+      "lng": 72.855,
+      "area": "Dharavi Slum Cluster, Mumbai",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 600,
+      "description": "World largest informal settlement. Intricate gullies, phone snatching, localized gang crime.",
+      "source": "NCRB 2023 + Mumbai Police",
+      "crimeTypes": [
+        "robbery",
+        "pickpocket",
+        "assault"
+      ]
+    },
+    {
+      "id": "mum_002",
+      "lat": 19.055,
+      "lng": 72.93,
+      "area": "Govandi & Shivaji Nagar, Mumbai",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Documented high violent crime index in eastern suburbs. Knife assaults, drug turf crime.",
+      "source": "NCRB 2023 + Times of India Mumbai",
+      "crimeTypes": [
+        "robbery",
+        "gang_crime",
+        "assault"
+      ]
+    },
+    {
+      "id": "mum_003",
+      "lat": 19.065,
+      "lng": 72.88,
+      "area": "Kurla Station & LBS Marg, Mumbai",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Major railway junction. Heavy bag lifting, commuter phone snatching, overcrowded stampede theft.",
+      "source": "RPF Central Railway reports",
+      "crimeTypes": [
+        "pickpocket",
+        "bag_snatching",
+        "mobile_theft"
+      ]
+    },
+    {
+      "id": "mum_004",
+      "lat": 18.94,
+      "lng": 72.835,
+      "area": "CST / Churchgate / Crawford Market, Mumbai",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "South Mumbai commercial hub. Pickpocketing targeting rush-hour office commuters.",
+      "source": "Mumbai Police Crime Branch",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "mum_005",
+      "lat": 19.19,
+      "lng": 72.97,
+      "area": "Thane Railway Station & Kopri",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Huge commuter traffic. Frequent train-door mobile snatching by track gangs.",
+      "source": "RPF Central Railway 2023",
+      "crimeTypes": [
+        "mobile_theft",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "mum_006",
+      "lat": 19.42,
+      "lng": 72.81,
+      "area": "Nallasopara & Vasai East Belt",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 600,
+      "description": "Rapidly growing suburb with high documented rate of armed robbery, fake call centers, night crime.",
+      "source": "Mira-Bhayandar Vasai-Virar Police",
+      "crimeTypes": [
+        "robbery",
+        "assault",
+        "cyber_theft"
+      ]
+    },
+    {
+      "id": "mum_007",
+      "lat": 19.28,
+      "lng": 73.05,
+      "area": "Bhiwandi Powerloom Belt & Warehouses",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 600,
+      "description": "Logistics and loom hub. Truck hijacking, cargo theft, armed robbery on unlit roads.",
+      "source": "Thane Rural Police",
+      "crimeTypes": [
+        "cargo_crime",
+        "armed_robbery"
+      ]
+    },
+    {
+      "id": "mum_008",
+      "lat": 19.22,
+      "lng": 73.15,
+      "area": "Ulhasnagar & Kalyan Station Outer",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Commercial market and railway bottleneck. Chain snatching on bikes and shop burglary.",
+      "source": "Thane Police Commissionerate",
+      "crimeTypes": [
+        "chain_snatching",
+        "burglary"
+      ]
+    },
+    {
+      "id": "mum_009",
+      "lat": 19.015,
+      "lng": 72.87,
+      "area": "Antop Hill & Wadala Truck Terminal",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Historically notorious crime pocket. Dark freight stretches, knife robbery at night.",
+      "source": "Mumbai Police Zone 4",
+      "crimeTypes": [
+        "robbery",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "mum_010",
+      "lat": 19.18,
+      "lng": 72.82,
+      "area": "Malad Malvani & Charkop Gaon",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Coastal marsh belt with dense slum pockets. Drug-related crimes, burglaries, mobile theft.",
+      "source": "Mumbai Police Zone 11",
+      "crimeTypes": [
+        "theft",
+        "drug_crime"
+      ]
+    },
+    {
+      "id": "pun_001",
+      "lat": 18.518,
+      "lng": 73.856,
+      "area": "Budhwar Peth & Shaniwar Wada Outer, Pune",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Dense historic market and red-light fringe. Robbery, assault, mobile theft documented.",
+      "source": "Pune Police Commissionerate + NCRB",
+      "crimeTypes": [
+        "robbery",
+        "theft",
+        "assault"
+      ]
+    },
+    {
+      "id": "pun_002",
+      "lat": 18.502,
+      "lng": 73.864,
+      "area": "Swargate Bus Stand & Hadapsar Fringe, Pune",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Intercity bus junction. Luggage theft, auto extortion, night-time street crime.",
+      "source": "Pune Police Crime Branch",
+      "crimeTypes": [
+        "luggage_theft",
+        "auto_fraud",
+        "snatching"
+      ]
+    },
+    {
+      "id": "pun_003",
+      "lat": 18.62,
+      "lng": 73.8,
+      "area": "Pimpri-Chinchwad MIDC Industrial Corridor",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 500,
+      "description": "Industrial belt with documented vehicle theft and factory worker pay-day muggings.",
+      "source": "PCMC Police stats 2023",
+      "crimeTypes": [
+        "vehicle_theft",
+        "mugging"
+      ]
+    },
+    {
+      "id": "pun_004",
+      "lat": 18.45,
+      "lng": 73.86,
+      "area": "Katraj Ghat / Highway Dark Stretches",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 600,
+      "description": "Highway descent with unlit curves. Night robberies targeting stranded motorists.",
+      "source": "Pune Rural Police",
+      "crimeTypes": [
+        "highway_robbery",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "nag_001",
+      "lat": 21.1458,
+      "lng": 79.0882,
+      "area": "Itwari & Gandhibagh Market, Nagpur",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Central India market. Pickpocketing, chain snatching, and commercial extortion.",
+      "source": "Nagpur Police + Times of India",
+      "crimeTypes": [
+        "pickpocket",
+        "chain_snatching",
+        "extortion"
+      ]
+    },
+    {
+      "id": "nas_001",
+      "lat": 19.9975,
+      "lng": 73.7898,
+      "area": "Panchavati & Godavari Ghats, Nashik",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "High pilgrim footfall. Bag lifting, jewelry snatching, and vehicle theft.",
+      "source": "Nashik City Police",
+      "crimeTypes": [
+        "tourist_targeting",
+        "theft"
+      ]
+    },
+    {
+      "id": "aur_001",
+      "lat": 19.8762,
+      "lng": 75.3433,
+      "area": "CIDCO Bus Stand & Railway Station, Sambhajinagar",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Transit and commercial center. Mobile snatching, luggage theft.",
+      "source": "Chhatrapati Sambhajinagar Police",
+      "crimeTypes": [
+        "snatching",
+        "theft"
+      ]
+    },
+    {
+      "id": "blr_001",
+      "lat": 12.983,
+      "lng": 77.605,
+      "area": "Shivajinagar Bus Station & Russell Market",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Commercial heart. Documented chain snatching, phone grabbing, and gang fights.",
+      "source": "NCRB 2023 Karnataka + Bengaluru Police",
+      "crimeTypes": [
+        "chain_snatching",
+        "mobile_theft",
+        "assault"
+      ]
+    },
+    {
+      "id": "blr_002",
+      "lat": 12.965,
+      "lng": 77.575,
+      "area": "KR Market (City Market) & Kalasipalya",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Huge vegetable and flower market. Rampant pickpocketing, bag slashing, crowded crime.",
+      "source": "Bengaluru Police West",
+      "crimeTypes": [
+        "pickpocket",
+        "bag_slashing",
+        "theft"
+      ]
+    },
+    {
+      "id": "blr_003",
+      "lat": 12.977,
+      "lng": 77.57,
+      "area": "Majestic (KSRTC & Sangolli Rayanna Station)",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Main state transit hub. Inter-state theft gangs, drugging passengers, tout extortion.",
+      "source": "RPF SWR + Bengaluru Police",
+      "crimeTypes": [
+        "luggage_theft",
+        "drugging",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "blr_004",
+      "lat": 13.03,
+      "lng": 77.51,
+      "area": "Peenya Industrial Area & Jalahalli Cross",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 600,
+      "description": "Largest industrial cluster in South Asia. Late night muggings, payroll robbery, deserted alleys.",
+      "source": "Bengaluru Police North",
+      "crimeTypes": [
+        "robbery",
+        "mugging",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "blr_005",
+      "lat": 12.918,
+      "lng": 77.623,
+      "area": "Madiwala & Silk Board Corridor, Bengaluru",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Tech commuter hub. Night bike-borne mobile snatching, auto overcharging harassment.",
+      "source": "Bengaluru Police South-East",
+      "crimeTypes": [
+        "mobile_theft",
+        "night_crime"
+      ]
+    },
+    {
+      "id": "blr_006",
+      "lat": 13.005,
+      "lng": 77.62,
+      "area": "DJ Halli & KG Halli Corridors, Bengaluru",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Historically sensitive zone with documented riot history, street robbery, knife assault.",
+      "source": "NCRB 2023 + Deccan Herald",
+      "crimeTypes": [
+        "assault",
+        "gang_crime",
+        "robbery"
+      ]
+    },
+    {
+      "id": "blr_007",
+      "lat": 12.97,
+      "lng": 77.64,
+      "area": "Indiranagar 100ft Road / 12th Main (Late Night)",
+      "type": "theft_snatching",
+      "severity": "low",
+      "radius": 350,
+      "description": "Pub street. Night-time street harassment, phone snatching outside bars after midnight.",
+      "source": "Bengaluru Police East",
+      "crimeTypes": [
+        "night_crime",
+        "snatching"
+      ]
+    },
+    {
+      "id": "mys_001",
+      "lat": 12.305,
+      "lng": 76.655,
+      "area": "Devaraja Market & Mysore Palace Outer",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Tourist center with documented pickpocketing, fake handicraft scams, vehicle theft.",
+      "source": "Mysuru City Police",
+      "crimeTypes": [
+        "tourist_targeting",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "mng_001",
+      "lat": 12.87,
+      "lng": 74.84,
+      "area": "State Bank & Bunder Port, Mangalore",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Port and fish market area with documented extortion, gang clashes, mobile theft.",
+      "source": "Mangaluru Police",
+      "crimeTypes": [
+        "extortion",
+        "assault"
+      ]
+    },
+    {
+      "id": "hyd_001",
+      "lat": 17.3616,
+      "lng": 78.4747,
+      "area": "Old City / Charminar / Laad Bazar, Hyderabad",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Dense historic market. Pickpocketing, chain snatching targeting tourists and shoppers.",
+      "source": "NCRB 2023 Telangana + Hyderabad Police",
+      "crimeTypes": [
+        "pickpocket",
+        "chain_snatching",
+        "tourist_targeting"
+      ]
+    },
+    {
+      "id": "hyd_002",
+      "lat": 17.375,
+      "lng": 78.455,
+      "area": "Dhoolpet & Mangalhat, Hyderabad",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "High illegal contraband and bootlegging hub. Knife assault, gang fights, robbery.",
+      "source": "Hyderabad Police South Zone",
+      "crimeTypes": [
+        "gang_crime",
+        "assault",
+        "robbery"
+      ]
+    },
+    {
+      "id": "hyd_003",
+      "lat": 17.35,
+      "lng": 78.47,
+      "area": "Falaknuma & Chandrayangutta, Hyderabad",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "High crime density per Telangana Police stats. Armed street fights, property offences.",
+      "source": "Telangana Police Annual Report",
+      "crimeTypes": [
+        "assault",
+        "robbery"
+      ]
+    },
+    {
+      "id": "hyd_004",
+      "lat": 17.4399,
+      "lng": 78.4983,
+      "area": "Secunderabad Railway Station Area",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Transit hub. Mobile theft, bag snatching on footbridges, auto meter tampering.",
+      "source": "RPF SCR + Deccan Chronicle",
+      "crimeTypes": [
+        "mobile_theft",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "hyd_005",
+      "lat": 17.4065,
+      "lng": 78.4772,
+      "area": "Abids & Nampally Market, Hyderabad",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Commercial corridor. Two-wheeler mobile snatching and shop burglary.",
+      "source": "Hyderabad Police records",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "vzg_001",
+      "lat": 17.6868,
+      "lng": 83.2185,
+      "area": "Gajuwaka Industrial Corridor, Vizag",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 500,
+      "description": "Industrial belt with documented vehicle theft and midnight worker mugging.",
+      "source": "NCRB 2023 Andhra Pradesh + The Hindu",
+      "crimeTypes": [
+        "vehicle_theft",
+        "robbery"
+      ]
+    },
+    {
+      "id": "vzg_002",
+      "lat": 17.7231,
+      "lng": 83.3013,
+      "area": "Visakhapatnam Railway Station & RTC Complex",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Major coastal transit hub. Pickpocketing, luggage theft, fake taxi rings.",
+      "source": "RPF ECoR reports",
+      "crimeTypes": [
+        "pickpocket",
+        "luggage_theft"
+      ]
+    },
+    {
+      "id": "vij_001",
+      "lat": 16.515,
+      "lng": 80.632,
+      "area": "One Town & Pandit Nehru Bus Station, Vijayawada",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Massive transit hub. Inter-district theft syndicates, chain snatching from autos.",
+      "source": "Vijayawada Police Commissionerate",
+      "crimeTypes": [
+        "chain_snatching",
+        "theft"
+      ]
+    },
+    {
+      "id": "tpt_001",
+      "lat": 13.6288,
+      "lng": 79.4192,
+      "area": "Tirupati Railway Station & Pilgrim Bus Stand",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "High pilgrim footfall. Bag lifters targeting devotees, fake ticket scams, mobile theft.",
+      "source": "Tirupati Urban Police",
+      "crimeTypes": [
+        "tourist_targeting",
+        "pickpocket",
+        "fraud"
+      ]
+    },
+    {
+      "id": "chn_001",
+      "lat": 13.115,
+      "lng": 80.295,
+      "area": "Kasimedu Port & Royapuram, North Chennai",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Harbor area with historical gang rivalry, knife attacks, fish market extortion, night theft.",
+      "source": "NCRB 2023 Tamil Nadu + The Hindu Chennai",
+      "crimeTypes": [
+        "robbery",
+        "assault",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "chn_002",
+      "lat": 13.1,
+      "lng": 80.255,
+      "area": "Vyasarpadi & Pulianthope, Chennai",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Dense urban belt with documented gang violence and weapon offences per Greater Chennai Police.",
+      "source": "NCRB 2023 + Times of India",
+      "crimeTypes": [
+        "gang_crime",
+        "assault",
+        "robbery"
+      ]
+    },
+    {
+      "id": "chn_003",
+      "lat": 13.0843,
+      "lng": 80.2791,
+      "area": "Chennai Central (Puratchi Thalaivar Dr. MGR) Station",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Major Southern Railway terminus. Pickpocketing, luggage lifting on long-distance trains.",
+      "source": "RPF Southern Railway + NCRB",
+      "crimeTypes": [
+        "pickpocket",
+        "luggage_theft"
+      ]
+    },
+    {
+      "id": "chn_004",
+      "lat": 13.07,
+      "lng": 80.19,
+      "area": "Koyambedu CMBT Market & Bus Terminus",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Asia largest wholesale market and bus terminal. Snatching, luggage lifting, auto mafia extortion.",
+      "source": "Chennai City Police",
+      "crimeTypes": [
+        "theft",
+        "extortion",
+        "snatching"
+      ]
+    },
+    {
+      "id": "chn_005",
+      "lat": 13.04,
+      "lng": 80.23,
+      "area": "T Nagar Ranganathan Street",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Extreme crowd density shopping street. Expert pickpocketing, jewelry chain cutting.",
+      "source": "Chennai Police South",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "cbe_001",
+      "lat": 11.0168,
+      "lng": 76.9558,
+      "area": "Gandhipuram & Ukkadam Bus Stand, Coimbatore",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Textile city hub. Chain snatching on bikes, mobile theft in bus crowds.",
+      "source": "Coimbatore City Police",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "mdu_001",
+      "lat": 9.9252,
+      "lng": 78.1198,
+      "area": "Periyar Bus Stand & Simmakkal, Madurai",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Dense temple city hub. Weapon assaults, street theft, pilgrim fraud.",
+      "source": "Madurai City Police",
+      "crimeTypes": [
+        "assault",
+        "tourist_targeting",
+        "theft"
+      ]
+    },
+    {
+      "id": "trc_001",
+      "lat": 10.7905,
+      "lng": 78.7047,
+      "area": "Chathiram Bus Stand & Gandhi Market, Trichy",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Central market area with documented purse snatching and bicycle/bike theft.",
+      "source": "Tiruchirappalli City Police",
+      "crimeTypes": [
+        "snatching",
+        "theft"
+      ]
+    },
+    {
+      "id": "lko_001",
+      "lat": 26.852,
+      "lng": 80.915,
+      "area": "Chowk, Aminabad & Nakkhas, Lucknow",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Dense historic market corridors. Professional pickpocketing, jewelry snatching, shop burglary.",
+      "source": "NCRB 2023 UP + Hindustan Times Lucknow",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket",
+        "burglary"
+      ]
+    },
+    {
+      "id": "lko_002",
+      "lat": 26.83,
+      "lng": 80.92,
+      "area": "Charbagh Railway Station & Bus Stand, Lucknow",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Major junction. Touts, baggage lifting, auto extortion, late night drugging gangs.",
+      "source": "RPF Northern Railway + UP Police",
+      "crimeTypes": [
+        "pickpocket",
+        "drugging",
+        "fraud"
+      ]
+    },
+    {
+      "id": "lko_003",
+      "lat": 26.88,
+      "lng": 81.02,
+      "area": "Gomti Nagar Extension Dark Stretches",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 600,
+      "description": "Unlit desolate peripheral stretches. Gunpoint car and bike snatching after dark.",
+      "source": "Lucknow Police Commissionerate",
+      "crimeTypes": [
+        "vehicle_theft",
+        "unlit_stretch",
+        "robbery"
+      ]
+    },
+    {
+      "id": "kan_001",
+      "lat": 26.4499,
+      "lng": 80.3319,
+      "area": "Chamanganj, Babupurwa & Juhi, Kanpur",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Kanpur consistently ranks at the top for urban violence in NCRB. Gun crimes, armed robbery.",
+      "source": "NCRB 2023 UP + Dainik Jagran",
+      "crimeTypes": [
+        "robbery",
+        "assault",
+        "weapons"
+      ]
+    },
+    {
+      "id": "kan_002",
+      "lat": 26.455,
+      "lng": 80.35,
+      "area": "Kanpur Central Station & Collectorganj",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Heaviest rail bottleneck in North India. High volume of luggage lifting and platform theft.",
+      "source": "RPF NCR + UP Police",
+      "crimeTypes": [
+        "luggage_theft",
+        "theft"
+      ]
+    },
+    {
+      "id": "var_001",
+      "lat": 25.31,
+      "lng": 83.01,
+      "area": "Godowlia, Dashashwamedh & Chowk, Varanasi",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Crowded labyrinth ghat gullies. Pickpocketing, foreign tourist scams, fake guide extortion.",
+      "source": "UP Tourism Police + NCRB 2023",
+      "crimeTypes": [
+        "pickpocket",
+        "tourist_targeting",
+        "fraud"
+      ]
+    },
+    {
+      "id": "var_002",
+      "lat": 25.328,
+      "lng": 82.985,
+      "area": "Varanasi Cantt (Junction) Station Area",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Major transit terminal. Bag lifters, auto meter refusal scams, snatching.",
+      "source": "RPF NER reports",
+      "crimeTypes": [
+        "luggage_theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "pry_001",
+      "lat": 25.445,
+      "lng": 81.835,
+      "area": "Civil Lines Station & Katra Market, Prayagraj",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Commercial core. Student clashes, bike theft, chain snatching on university routes.",
+      "source": "Prayagraj Police",
+      "crimeTypes": [
+        "vehicle_theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "pry_002",
+      "lat": 25.41,
+      "lng": 81.87,
+      "area": "Naini Industrial Bridge Corridor, Prayagraj",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Dark bridge approaches and industrial sector. Night robbery on Yamuna crossings.",
+      "source": "UP Police Prayagraj",
+      "crimeTypes": [
+        "highway_robbery",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "agr_001",
+      "lat": 27.1767,
+      "lng": 78.0081,
+      "area": "Tajganj & Agra Fort Outer, Agra",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "High tourist concentration. Persistent lapka touts, pickpocketing, jewelry theft, fake marble scams.",
+      "source": "NCRB 2023 + UP Tourism Police",
+      "crimeTypes": [
+        "pickpocket",
+        "tourist_targeting",
+        "fraud"
+      ]
+    },
+    {
+      "id": "mee_001",
+      "lat": 28.98,
+      "lng": 77.7,
+      "area": "Kotwali, Lisari Gate & Nauchandi, Meerut",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 550,
+      "description": "Illegal weapons manufacturing hub. Armed robbery, car dismantling gangs, violent clashes.",
+      "source": "NCRB 2023 UP + Amar Ujala",
+      "crimeTypes": [
+        "armed_robbery",
+        "weapons",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "bly_001",
+      "lat": 28.367,
+      "lng": 79.43,
+      "area": "Bareilly Junction & Kutubkhana Market",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Old city hub with documented commercial burglary and mobile snatching.",
+      "source": "Bareilly Police",
+      "crimeTypes": [
+        "burglary",
+        "snatching"
+      ]
+    },
+    {
+      "id": "gkp_001",
+      "lat": 26.76,
+      "lng": 83.37,
+      "area": "Golghar & Gorakhpur Junction Outer",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Commercial center. Transit theft, vehicle snatching on highway approaches.",
+      "source": "Gorakhpur Police",
+      "crimeTypes": [
+        "theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "pat_001",
+      "lat": 25.5941,
+      "lng": 85.1376,
+      "area": "Patna Junction & Fraser Road, Patna",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 550,
+      "description": "Bihar consistently high in violent property crimes in NCRB. Night robbery, bag lifting.",
+      "source": "NCRB 2023 Bihar + Hindustan Patna",
+      "crimeTypes": [
+        "pickpocket",
+        "luggage_theft",
+        "robbery"
+      ]
+    },
+    {
+      "id": "pat_002",
+      "lat": 25.61,
+      "lng": 85.12,
+      "area": "Boring Road & Bailey Road, Patna",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Coaching and student corridor. Bike-borne chain and mobile snatching incidents.",
+      "source": "Patna Police records",
+      "crimeTypes": [
+        "chain_snatching",
+        "mobile_theft"
+      ]
+    },
+    {
+      "id": "pat_003",
+      "lat": 25.625,
+      "lng": 85.045,
+      "area": "Danapur Railway Station Fringe",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Railway siding and peri-urban belt. Armed robbery targeting late-arrival trains.",
+      "source": "RPF ECR + Bihar Police",
+      "crimeTypes": [
+        "armed_robbery",
+        "assault"
+      ]
+    },
+    {
+      "id": "gay_001",
+      "lat": 24.7955,
+      "lng": 85.0002,
+      "area": "Gaya Junction & GB Road, Gaya",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Pilgrim hub with documented armed robberies in outer gullies and station roads.",
+      "source": "NCRB 2023 Bihar",
+      "crimeTypes": [
+        "robbery",
+        "theft"
+      ]
+    },
+    {
+      "id": "muz_001",
+      "lat": 26.1209,
+      "lng": 85.3647,
+      "area": "Maripur & Station Road, Muzaffarpur",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "North Bihar commercial centre with high incidence of extortion, highway robbery, bike theft.",
+      "source": "Muzaffarpur District Police",
+      "crimeTypes": [
+        "extortion",
+        "highway_robbery"
+      ]
+    },
+    {
+      "id": "rnc_001",
+      "lat": 23.37,
+      "lng": 85.33,
+      "area": "Firayalal, Upper Bazar & Daily Market, Ranchi",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Commercial core. Gang extortion, mobile snatching, daylight shop burglaries.",
+      "source": "NCRB 2023 Jharkhand + Prabhat Khabar",
+      "crimeTypes": [
+        "chain_snatching",
+        "robbery",
+        "extortion"
+      ]
+    },
+    {
+      "id": "dhn_001",
+      "lat": 23.7957,
+      "lng": 86.4304,
+      "area": "Bank More & Jharia Coalfields Belt, Dhanbad",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 600,
+      "description": "Coal mafia violent clashes, extortion, armed shootouts, highway coal hijacking.",
+      "source": "NCRB 2023 + Dainik Bhaskar Jharkhand",
+      "crimeTypes": [
+        "armed_robbery",
+        "gang_crime",
+        "extortion"
+      ]
+    },
+    {
+      "id": "jsr_001",
+      "lat": 22.8046,
+      "lng": 86.2029,
+      "area": "Jugsalai, Mango & Sakchi Market, Jamshedpur",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Steel city commercial hub. Two-wheeler gang crime, night assault on river bridges.",
+      "source": "East Singhbhum District Police",
+      "crimeTypes": [
+        "robbery",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "jai_001",
+      "lat": 26.9124,
+      "lng": 75.7873,
+      "area": "Walled City (Johari & Bapu Bazar), Jaipur",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Major international tourist hub. Gemstone fraud, pickpocketing, jewelry bag snatching.",
+      "source": "NCRB 2023 Rajasthan + Jaipur Police",
+      "crimeTypes": [
+        "pickpocket",
+        "tourist_targeting",
+        "jewelry_theft"
+      ]
+    },
+    {
+      "id": "jai_002",
+      "lat": 26.92,
+      "lng": 75.79,
+      "area": "Sindhi Camp Bus Stand & Railway Station, Jaipur",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Central bus and train hub. Gangs targeting night arrivals, baggage lifting, auto overcharging.",
+      "source": "Jaipur Police Commissionerate",
+      "crimeTypes": [
+        "luggage_theft",
+        "fraud",
+        "snatching"
+      ]
+    },
+    {
+      "id": "jod_001",
+      "lat": 26.29,
+      "lng": 73.02,
+      "area": "Clock Tower (Ghanta Ghar) & Old City, Jodhpur",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Heritage labyrinth gullies. Pickpocketing and tourist souvenir fraud.",
+      "source": "Jodhpur Police",
+      "crimeTypes": [
+        "pickpocket",
+        "tourist_targeting"
+      ]
+    },
+    {
+      "id": "kot_001",
+      "lat": 25.18,
+      "lng": 75.83,
+      "area": "Gumanpura & Nayapura, Kota",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Coaching hub. High incidence of bicycle, laptop and smartphone theft among students.",
+      "source": "Kota City Police",
+      "crimeTypes": [
+        "theft",
+        "mobile_theft"
+      ]
+    },
+    {
+      "id": "ahm_001",
+      "lat": 23.0225,
+      "lng": 72.5714,
+      "area": "Dariapur, Kalupur & Shahpur Walled City, Ahmedabad",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Intricate pol (gully) network. Chain snatching, bootlegging dens, communal sensitivity.",
+      "source": "NCRB 2023 Gujarat + Ahmedabad Police",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket",
+        "gang_crime"
+      ]
+    },
+    {
+      "id": "ahm_002",
+      "lat": 23.03,
+      "lng": 72.595,
+      "area": "Kalupur Railway Station Area, Ahmedabad",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Major western rail terminal. Luggage theft, mobile snatching from slow trains.",
+      "source": "RPF WR + Times of India Gujarat",
+      "crimeTypes": [
+        "pickpocket",
+        "luggage_theft"
+      ]
+    },
+    {
+      "id": "sur_001",
+      "lat": 21.1702,
+      "lng": 72.8311,
+      "area": "Ring Road Textile Market & Chowk Bazar, Surat",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Massive textile cash turnover. Cash bag snatching, pickpocketing, diamond fraud.",
+      "source": "Surat Police Commissionerate",
+      "crimeTypes": [
+        "chain_snatching",
+        "theft",
+        "fraud"
+      ]
+    },
+    {
+      "id": "sur_002",
+      "lat": 21.16,
+      "lng": 72.85,
+      "area": "Varachha & Katargam Diamond Bourse Belt, Surat",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Diamond cutter concentration. Opportunistic bag thefts and motorcycle snatchings.",
+      "source": "Surat Police",
+      "crimeTypes": [
+        "theft",
+        "snatching"
+      ]
+    },
+    {
+      "id": "bdq_001",
+      "lat": 22.3,
+      "lng": 73.18,
+      "area": "Panigate, Mandvi & Wadi, Vadodara",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Walled city lanes with history of stone-pelting clashes, burglaries, snatching.",
+      "source": "Vadodara City Police",
+      "crimeTypes": [
+        "assault",
+        "burglary"
+      ]
+    },
+    {
+      "id": "ldh_001",
+      "lat": 30.901,
+      "lng": 75.8573,
+      "area": "Clock Tower & Chaura Bazar, Ludhiana",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Industrial hub. Weapon-point mobile snatching by motorcycle gangs (khaptis).",
+      "source": "NCRB 2023 Punjab + Tribune India",
+      "crimeTypes": [
+        "chain_snatching",
+        "mobile_theft",
+        "assault"
+      ]
+    },
+    {
+      "id": "asr_001",
+      "lat": 31.634,
+      "lng": 74.873,
+      "area": "Hall Gate, Katra Jaimal Singh & Station, Amritsar",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Border city pilgrim hub. Heroin addict-driven snatchings, tourist bag lifting.",
+      "source": "Amritsar Police Commissionerate",
+      "crimeTypes": [
+        "snatching",
+        "drug_crime",
+        "tourist_targeting"
+      ]
+    },
+    {
+      "id": "jal_001",
+      "lat": 31.326,
+      "lng": 75.5762,
+      "area": "Rama Mandi & Railway Station, Jalandhar",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Sports market and transit intersection. Highway bike snatching and burglaries.",
+      "source": "Jalandhar Police",
+      "crimeTypes": [
+        "snatching",
+        "burglary"
+      ]
+    },
+    {
+      "id": "pan_001",
+      "lat": 29.3909,
+      "lng": 76.9635,
+      "area": "GT Road Industrial Corridor, Panipat",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Weaver industrial belt. Gang robberies on unlit highway cuts, vehicle theft.",
+      "source": "Haryana Police records",
+      "crimeTypes": [
+        "highway_robbery",
+        "vehicle_theft"
+      ]
+    },
+    {
+      "id": "ind_001",
+      "lat": 22.7196,
+      "lng": 75.8577,
+      "area": "Rajwada, Sarafa & Chhatribagh, Indore",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Night street food market. Dense crowd pickpocketing, jewelry theft, midnight brawls.",
+      "source": "Indore Police + Dainik Bhaskar",
+      "crimeTypes": [
+        "pickpocket",
+        "night_crime",
+        "snatching"
+      ]
+    },
+    {
+      "id": "bhp_001",
+      "lat": 23.2599,
+      "lng": 77.4126,
+      "area": "Hamidia Road, Mangalwara & Old Bhopal",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "Old city market belt. Street robberies, knife crime, mobile theft near station.",
+      "source": "NCRB 2023 MP + Bhopal Police",
+      "crimeTypes": [
+        "chain_snatching",
+        "mobile_theft",
+        "assault"
+      ]
+    },
+    {
+      "id": "jbp_001",
+      "lat": 23.1815,
+      "lng": 79.9864,
+      "area": "Lordganj & Gorakhpur Market, Jabalpur",
+      "type": "robbery",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Documented violent assault and extortion in market gullies.",
+      "source": "Jabalpur Police",
+      "crimeTypes": [
+        "assault",
+        "extortion"
+      ]
+    },
+    {
+      "id": "gwl_001",
+      "lat": 26.2183,
+      "lng": 78.1828,
+      "area": "Maharaj Bada & Morar, Gwalior",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Chambal regional hub with high rate of firearm offences and armed property theft.",
+      "source": "NCRB 2023 MP",
+      "crimeTypes": [
+        "armed_robbery",
+        "weapons"
+      ]
+    },
+    {
+      "id": "rai_001",
+      "lat": 21.2514,
+      "lng": 81.6296,
+      "area": "Gol Bazar & Raipur Junction Outer",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "State capital commercial core. Snatching, mobile theft, scrap yard crime.",
+      "source": "NCRB 2023 Chhattisgarh + Raipur Police",
+      "crimeTypes": [
+        "chain_snatching",
+        "mobile_theft"
+      ]
+    },
+    {
+      "id": "koc_001",
+      "lat": 9.98,
+      "lng": 76.28,
+      "area": "Broadway, Marine Drive & Ernakulam South",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Commercial and tourist strip. Unlit walkway muggings, pickpocketing, ATM skimming.",
+      "source": "NCRB 2023 Kerala + Mathrubhumi",
+      "crimeTypes": [
+        "pickpocket",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "tvm_001",
+      "lat": 8.485,
+      "lng": 76.95,
+      "area": "East Fort & Chalai Market, Thiruvananthapuram",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 350,
+      "description": "Dense historic market corridor. Chain snatching and shop theft incidents.",
+      "source": "Kerala Police records",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "goa_001",
+      "lat": 15.54,
+      "lng": 73.76,
+      "area": "Calangute, Baga & Tito Lane (Late Night), Goa",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Nightlife belt. Drug peddling, drunken brawls, tourist mugging, counterfeit currency.",
+      "source": "Goa Police Crime Branch",
+      "crimeTypes": [
+        "night_crime",
+        "tourist_targeting",
+        "drug_crime"
+      ]
+    },
+    {
+      "id": "bbsr_001",
+      "lat": 20.27,
+      "lng": 85.84,
+      "area": "Master Canteen, Station Square & Rasulgarh, Bhubaneswar",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Capital transit corridor. Two-wheeler mobile snatching and luggage theft.",
+      "source": "Bhubaneswar-Cuttack Police Commissionerate",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "ctc_001",
+      "lat": 20.46,
+      "lng": 85.88,
+      "area": "Choudhury Bazar & Malgodown, Cuttack",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 450,
+      "description": "Historic silver and wholesale market. Notorious for criminal dada extortion syndicates.",
+      "source": "Odisha Police Crime Branch",
+      "crimeTypes": [
+        "extortion",
+        "assault"
+      ]
+    },
+    {
+      "id": "puri_001",
+      "lat": 19.8,
+      "lng": 85.82,
+      "area": "Grand Road & Sea Beach Dark Stretch, Puri",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Pilgrim hub. Sea beach late night muggings, fake panda priest extortion, bag lifting.",
+      "source": "Puri District Police",
+      "crimeTypes": [
+        "tourist_targeting",
+        "extortion"
+      ]
+    },
+    {
+      "id": "gwh_001",
+      "lat": 26.18,
+      "lng": 91.74,
+      "area": "Paltan Bazar & Fancy Bazar, Guwahati",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 500,
+      "description": "Northeast biggest commercial gateway. Inter-state pickpocketing rings, contraband theft.",
+      "source": "NCRB 2023 Assam + Northeast Now",
+      "crimeTypes": [
+        "chain_snatching",
+        "pickpocket",
+        "contraband"
+      ]
+    },
+    {
+      "id": "gwh_002",
+      "lat": 26.11,
+      "lng": 91.7,
+      "area": "ISBT Betkuchi & NH-27 Corridor, Guwahati",
+      "type": "robbery",
+      "severity": "high",
+      "radius": 500,
+      "description": "Highway bus terminal and unlit peripheral stretch. Midnight armed mugging.",
+      "source": "Guwahati City Police",
+      "crimeTypes": [
+        "highway_robbery",
+        "unlit_stretch"
+      ]
+    },
+    {
+      "id": "shl_001",
+      "lat": 25.5788,
+      "lng": 91.8933,
+      "area": "Police Bazar & Iewduh (Bara Bazar), Shillong",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Commercial heart of Meghalaya. Heavy footfall pickpocketing and tourist overcharging.",
+      "source": "East Khasi Hills Police",
+      "crimeTypes": [
+        "pickpocket",
+        "tourist_targeting"
+      ]
+    },
+    {
+      "id": "ddn_001",
+      "lat": 30.3165,
+      "lng": 78.0322,
+      "area": "Paltan Bazar & Dehradun Railway Station",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Valley commercial market. Pickpocketing, student laptop theft, shop break-ins.",
+      "source": "Uttarakhand Police",
+      "crimeTypes": [
+        "theft",
+        "pickpocket"
+      ]
+    },
+    {
+      "id": "hdw_001",
+      "lat": 29.9457,
+      "lng": 78.1642,
+      "area": "Har Ki Pauri & Moti Bazar, Haridwar",
+      "type": "theft_snatching",
+      "severity": "high",
+      "radius": 450,
+      "description": "High pilgrim congestion. Organized child pickpocket rings, bag lifting at ghats.",
+      "source": "Haridwar District Police",
+      "crimeTypes": [
+        "pickpocket",
+        "tourist_targeting"
+      ]
+    },
+    {
+      "id": "jam_001",
+      "lat": 32.7266,
+      "lng": 74.857,
+      "area": "Raghunath Bazar & Jammu Tawi Station",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 400,
+      "description": "Transit hub for Vaishno Devi pilgrims. High volume of touts and luggage snatching.",
+      "source": "J&K Police",
+      "crimeTypes": [
+        "tourist_targeting",
+        "luggage_theft"
+      ]
+    },
+    {
+      "id": "sri_001",
+      "lat": 34.0837,
+      "lng": 74.7973,
+      "area": "Lal Chowk & Batamaloo, Srinagar",
+      "type": "theft_snatching",
+      "severity": "medium",
+      "radius": 450,
+      "description": "Central commercial hub with heavy security deployment. Pickpocketing, market disputes.",
+      "source": "Srinagar District Police",
+      "crimeTypes": [
+        "theft",
+        "pickpocket"
+      ]
+    }
+  ],
+  "accident_blackspots": [
+    {
+      "id": "acc_kol_01",
+      "lat": 22.563,
+      "lng": 88.402,
+      "area": "Chingrighata Crossing, EM Bypass, Kolkata",
+      "type": "pedestrian_corridor",
+      "severity": "critical",
+      "radius": 350,
+      "title": "High-Fatality Pedestrian Intersection",
+      "description": "Busiest intersection on EM Bypass connecting Salt Lake. Heavy mix of high-speed traffic, buses, and crossing pedestrians.",
+      "source": "Kolkata Traffic Police Blackspot Survey + MoRTH",
+      "penalty": 3
+    },
+    {
+      "id": "acc_kol_02",
+      "lat": 22.513,
+      "lng": 88.398,
+      "area": "Ruby Roundabout & Kasba Connector, EM Bypass",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 300,
+      "title": "Major Arterial Conflict Point",
+      "description": "High vehicular collision density during signal changes and merge lanes from Prince Anwar Shah Road connector.",
+      "source": "Kolkata Traffic Police Annual Safety Audit",
+      "penalty": 2
+    },
+    {
+      "id": "acc_kol_03",
+      "lat": 22.544,
+      "lng": 88.395,
+      "area": "Science City Flyover Descent & Park Circus Connector",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 350,
+      "title": "High Speed Flyover Convergence",
+      "description": "Speeding vehicles descending Maa Flyover merge abruptly with EM Bypass surface traffic.",
+      "source": "Kolkata Police Traffic Department",
+      "penalty": 2
+    },
+    {
+      "id": "acc_kol_04",
+      "lat": 22.476,
+      "lng": 88.395,
+      "area": "Patuli Crossing & Garia Dhalai Bridge Choke Point",
+      "type": "high_speed_junction",
+      "severity": "medium",
+      "radius": 300,
+      "title": "Southern Bypass Merge Zone",
+      "description": "Frequent two-wheeler collisions at un-signalized u-turns and bus stops along the southern bypass.",
+      "source": "Kolkata Traffic Police",
+      "penalty": 2
+    },
+    {
+      "id": "acc_kol_05",
+      "lat": 22.518,
+      "lng": 88.312,
+      "area": "Taratala - Majerhat Bridge Approach, Kolkata",
+      "type": "bridge_bottleneck",
+      "severity": "high",
+      "radius": 400,
+      "title": "Heavy Commercial Vehicle Choke Point",
+      "description": "Port container trailers, auto rickshaws, and buses converge on narrow bridge ramps with blind merge corners.",
+      "source": "Port Division Traffic Police",
+      "penalty": 2
+    },
+    {
+      "id": "acc_kol_06",
+      "lat": 22.652,
+      "lng": 88.375,
+      "area": "Dunlop Crossing & Belghoria Expressway Entry, Kolkata",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 400,
+      "title": "Northern Multi-Highway Junction",
+      "description": "Intersection of BT Road and Belghoria Expressway. Frequent heavy truck and two-wheeler fatal accidents.",
+      "source": "Barrackpore Traffic Police",
+      "penalty": 3
+    },
+    {
+      "id": "acc_nh16_01",
+      "lat": 22.57,
+      "lng": 88.28,
+      "area": "Santragachi Rail Overbridge Sharp Curve, Kona Expressway",
+      "type": "blind_curve",
+      "severity": "critical",
+      "radius": 450,
+      "title": "Sharp Elevated Curve with Blind Descent",
+      "description": "Narrow 2-lane overbridge with tight s-curve handling massive intercity bus and truck volume from Kolkata.",
+      "source": "MoRTH National Blackspot Identification + WB Police",
+      "penalty": 3
+    },
+    {
+      "id": "acc_nh16_02",
+      "lat": 22.58,
+      "lng": 88.22,
+      "area": "Nibra Crossing & Salap Junction, NH-16 Howrah",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 500,
+      "title": "High Speed Highway Intersection",
+      "description": "NH-16 and Kona Expressway merge. Frequent high-speed rear-end collisions during night hours.",
+      "source": "Howrah Traffic Police Report",
+      "penalty": 3
+    },
+    {
+      "id": "acc_nh16_03",
+      "lat": 22.56,
+      "lng": 88.16,
+      "area": "Dhulagarh Toll Plaza & Truck Bay, NH-16 Howrah",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 500,
+      "title": "Toll Queue Congestion & Lane Switching Blackspot",
+      "description": "Abrupt vehicle deceleration and multi-lane cutting of interstate trucks near toll booths.",
+      "source": "NHAI Regional Safety Audit",
+      "penalty": 2
+    },
+    {
+      "id": "acc_nh16_04",
+      "lat": 22.465,
+      "lng": 87.968,
+      "area": "Bagnan Intersection & Overbridge Ramp, NH-16",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 450,
+      "title": "Highway Crossing Blackspot",
+      "description": "Local market traffic and pedestrians crossing 6-lane highway without foot overbridge.",
+      "source": "WB Highway Safety Cell + MoRTH",
+      "penalty": 3
+    },
+    {
+      "id": "acc_nh16_05",
+      "lat": 22.43,
+      "lng": 87.87,
+      "area": "Kolaghat Bridge Approach & Rupnarayan River Bend, NH-16",
+      "type": "bridge_bottleneck",
+      "severity": "critical",
+      "radius": 550,
+      "title": "Major River Bridge Bottleneck & Speed Zone",
+      "description": "Sudden deceleration on bridge entry, tourist vehicles stopping near highway eateries.",
+      "source": "Purba Medinipur District Police",
+      "penalty": 3
+    },
+    {
+      "id": "acc_nh16_06",
+      "lat": 22.42,
+      "lng": 87.75,
+      "area": "Mecheda Junction (Digha-Haldia Turnoff), NH-16",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 500,
+      "title": "Multi-Way Expressway Interchange",
+      "description": "Heavy tourist and port traffic diverts onto state highway. Frequent side-impact collisions.",
+      "source": "WB Traffic Police Annual Blackspot Report",
+      "penalty": 2
+    },
+    {
+      "id": "acc_nh19_01",
+      "lat": 22.685,
+      "lng": 88.305,
+      "area": "Dankuni Toll Plaza & Delhi Highway Merge, NH-19",
+      "type": "high_speed_junction",
+      "severity": "critical",
+      "radius": 600,
+      "title": "NH-19 & NH-16 Connecting Hub Blackspot",
+      "description": "Massive truck parking on shoulders, high speed merges, and dense winter fog pile-ups.",
+      "source": "NHAI National Blackspot Registry",
+      "penalty": 3
+    },
+    {
+      "id": "acc_nh19_02",
+      "lat": 22.81,
+      "lng": 88.23,
+      "area": "Singur Crossing, Durgapur Expressway (NH-19)",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 450,
+      "title": "Expressway Median Cut & Village Crossing",
+      "description": "Tractors and two-wheelers taking unauthorized median turns across high-speed expressway lanes.",
+      "source": "Hooghly Rural Police Traffic Audit",
+      "penalty": 2
+    },
+    {
+      "id": "acc_nh19_03",
+      "lat": 23.06,
+      "lng": 88.08,
+      "area": "Gurap & Palsit Junction, Durgapur Expressway",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 500,
+      "title": "Expressway & Old GT Road Convergence",
+      "description": "Transition point from 4-lane expressway with high night-time collision rates of long-distance buses.",
+      "source": "Purba Bardhaman Police",
+      "penalty": 2
+    },
+    {
+      "id": "acc_nh19_04",
+      "lat": 23.45,
+      "lng": 87.45,
+      "area": "Panagarh Bypass & Military Base Crossing, NH-19",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 550,
+      "title": "Industrial & Military Freight Intersection",
+      "description": "High-speed corridor with heavy sand trucks and oversized steel cargo vehicles.",
+      "source": "Asansol-Durgapur Police Commissionerate",
+      "penalty": 3
+    },
+    {
+      "id": "acc_nh19_05",
+      "lat": 23.68,
+      "lng": 86.98,
+      "area": "Asansol Jubillee More / Kalipahari Crossing, NH-19",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 500,
+      "title": "Coal Belt Highway Intersection",
+      "description": "Urban flyover entry with heavy dumpers, auto rickshaws, and pedestrian traffic cross-movements.",
+      "source": "ADPC Traffic Division",
+      "penalty": 2
+    },
+    {
+      "id": "acc_nh12_01",
+      "lat": 22.7231,
+      "lng": 88.4792,
+      "area": "Barasat Champadali - Duckbungalow More, NH-12",
+      "type": "pedestrian_corridor",
+      "severity": "high",
+      "radius": 400,
+      "title": "Suburban Highway Pedestrian Bottleneck",
+      "description": "Narrow highway stretch with tree-lined shoulders and heavy pedestrian/cycle-rickshaw interference.",
+      "source": "Barasat Police District",
+      "penalty": 2
+    },
+    {
+      "id": "acc_nh12_02",
+      "lat": 23.18,
+      "lng": 88.56,
+      "area": "Ranaghat Bypass Intersection, NH-12 Nadia",
+      "type": "high_speed_junction",
+      "severity": "medium",
+      "radius": 450,
+      "title": "Bypass High-Speed Intersection",
+      "description": "Unregulated local crossings across 4-lane bypass with high two-wheeler casualty records.",
+      "source": "Ranaghat Police District",
+      "penalty": 2
+    },
+    {
+      "id": "acc_nh12_03",
+      "lat": 24.88,
+      "lng": 88.13,
+      "area": "Kaliachak Market Stretch, NH-12 Malda",
+      "type": "pedestrian_corridor",
+      "severity": "high",
+      "radius": 500,
+      "title": "Extremely Congested Highway Bazaar",
+      "description": "Highway passes through dense market. Constant pedestrian crossing and unregulated e-rickshaws.",
+      "source": "Malda District Police",
+      "penalty": 3
+    },
+    {
+      "id": "acc_nh10_01",
+      "lat": 26.885,
+      "lng": 88.472,
+      "area": "Sevoke Coronation Bridge & 29th Mile, NH-10",
+      "type": "blind_curve",
+      "severity": "critical",
+      "radius": 600,
+      "title": "Deep Gorge Blind Hairpin Curves",
+      "description": "Single-lane mountain curves overlooking deep Teesta gorge. Heavy landslides, brake failure, and head-on collisions.",
+      "source": "Kalimpong & Darjeeling Traffic Police + MoRTH",
+      "penalty": 3
+    },
+    {
+      "id": "acc_nh27_01",
+      "lat": 26.71,
+      "lng": 88.32,
+      "area": "Bagdogra Airport Highway Crossing & Bihar More, Siliguri",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 500,
+      "title": "East-West Corridor Multi-Leg Blackspot",
+      "description": "Intersection of NH-27 Asian Highway and airport arterial. High-speed vehicle crossing conflicts.",
+      "source": "Siliguri Police Commissionerate Traffic Cell",
+      "penalty": 2
+    },
+    {
+      "id": "acc_nh27_02",
+      "lat": 26.6,
+      "lng": 89.01,
+      "area": "Dhupguri Railway Overbridge & Bypass Junction, NH-27",
+      "type": "bridge_bottleneck",
+      "severity": "high",
+      "radius": 450,
+      "title": "Narrow Highway Bridge Collision Zone",
+      "description": "Sudden lane constriction from 4-lane to 2-lane overbridge approach with heavy agricultural truck movement.",
+      "source": "Jalpaiguri District Police",
+      "penalty": 2
+    },
+    {
+      "id": "acc_nh12_05",
+      "lat": 22.75,
+      "lng": 88.48,
+      "area": "Barasat Colony More Crossing, NH-12 & NH-112",
+      "type": "high_speed_junction",
+      "severity": "critical",
+      "radius": 400,
+      "title": "Severe Three-Highway Convergence Blackspot",
+      "description": "Meeting point of Jessore Road, Taki Road, and NH-12. Highest documented pedestrian and two-wheeler collision site in North 24 Parganas.",
+      "source": "Barasat Police District + MoRTH Blackspot List",
+      "penalty": 3
+    },
+    {
+      "id": "acc_kona_02",
+      "lat": 22.565,
+      "lng": 88.245,
+      "area": "Kona Expressway Carritt Point & Flyover Descent, Howrah",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 350,
+      "title": "Expressway Flyover Merge Blackspot",
+      "description": "Heavy container trucks converging with local two-wheelers at high speeds heading towards Vidyasagar Setu.",
+      "source": "Howrah Police Traffic Division",
+      "penalty": 3
+    },
+    {
+      "id": "acc_kol_09",
+      "lat": 22.55,
+      "lng": 88.355,
+      "area": "Park Circus 7-Point Crossing, Kolkata",
+      "type": "high_speed_junction",
+      "severity": "high",
+      "radius": 300,
+      "title": "Complex Multi-Arm Traffic Rotary Collision Point",
+      "description": "Seven arterial roads converge at high speed with Maa Flyover ramp traffic.",
+      "source": "Kolkata Traffic Police Annual Safety Audit",
+      "penalty": 2
+    },
+    {
+      "id": "acc_nh19_04",
+      "lat": 23.25,
+      "lng": 87.85,
+      "area": "Bardhaman Renaissance & Nawabhat Bypass Crossing, NH-19",
+      "type": "high_speed_junction",
+      "severity": "critical",
+      "radius": 450,
+      "title": "High-Speed Long Distance Freight Collision Point",
+      "description": "High rate of nighttime rear-end collisions and unauthorized median crossings on Durgapur Expressway.",
+      "source": "Purba Bardhaman District Police + NHAI Audit",
+      "penalty": 3
+    }
+  ],
+  "flood_zones": [
+    {
+      "id": "fl_001",
+      "lat": 22.526,
+      "lng": 88.29,
+      "area": "Metiabruz / Garden Reach, Kolkata",
+      "radius": 1800,
+      "severity": "high",
+      "description": "Low-lying riverside area. Regularly inundated during monsoon per KMC flood maps.",
+      "source": "KMC Flood Map 2022 + ISRO Bhuvan",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_002",
+      "lat": 22.52,
+      "lng": 88.385,
+      "area": "Tiljala / Tangra Wetlands, Kolkata",
+      "radius": 1500,
+      "severity": "high",
+      "description": "Former wetland area. Chronic flooding due to drainage issues documented by KMC.",
+      "source": "KMC Drainage Report 2021",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_003",
+      "lat": 22.546,
+      "lng": 88.394,
+      "area": "Kasba / Mukundapur, Kolkata",
+      "radius": 1200,
+      "severity": "medium",
+      "description": "Low drainage coefficient. Flooding documented after 50mm+ rainfall events.",
+      "source": "KMC Annual Report 2022",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_004",
+      "lat": 22.62,
+      "lng": 88.4,
+      "area": "North Dum Dum, WB",
+      "radius": 1400,
+      "severity": "medium",
+      "description": "Suburban drainage issues. Flood inundation documented in 2021, 2022 monsoon.",
+      "source": "NDMA West Bengal Report",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_005",
+      "lat": 22.5058,
+      "lng": 88.31,
+      "area": "Thakurpukur / Maheshtala, WB",
+      "radius": 1600,
+      "severity": "medium",
+      "description": "South Kolkata low-lying area with recurring flood issues near Tolly Nullah.",
+      "source": "ISRO Flood Hazard Atlas WB",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_006",
+      "lat": 22.7231,
+      "lng": 88.4792,
+      "area": "Barasat / Deganga, WB",
+      "radius": 3000,
+      "severity": "high",
+      "description": "Recorded as high flood hazard zone in NDMA Atlas. Ichamati River overflow.",
+      "source": "NDMA Flood Hazard Zonation Atlas WB 2020",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_007",
+      "lat": 22.8,
+      "lng": 88.55,
+      "area": "Basirhat / Sandeshkhali, WB",
+      "radius": 4000,
+      "severity": "high",
+      "description": "Extremely high flood risk. Cyclone Amphan + Yaas caused severe inundation 2020-2021.",
+      "source": "NRSC ISRO Post-Cyclone Assessment",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_008",
+      "lat": 22.95,
+      "lng": 88.49,
+      "area": "Hasnabad Area, WB",
+      "radius": 3500,
+      "severity": "high",
+      "description": "Coastal zone. Recurring flood from Ichhamati and storm surge. NDMA High Risk Zone.",
+      "source": "NDMA Atlas 2020",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_009",
+      "lat": 22.2,
+      "lng": 88.4,
+      "area": "Diamond Harbour / Mathurapur, WB",
+      "radius": 5000,
+      "severity": "high",
+      "description": "Tidal flooding zone. Rupnarayan and Hooghly confluence. Very high risk per ISRO.",
+      "source": "ISRO Bhuvan Flood Hazard Atlas",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_010",
+      "lat": 22.35,
+      "lng": 88.55,
+      "area": "Kakdwip / Namkhana, WB",
+      "radius": 6000,
+      "severity": "high",
+      "description": "Coastal Sundarbans buffer zone. Among highest flood risk in WB.",
+      "source": "NDMA + ISRO Joint Assessment",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_011",
+      "lat": 22.52,
+      "lng": 88.08,
+      "area": "Amta / Udaynarayanpur, WB",
+      "radius": 4000,
+      "severity": "high",
+      "description": "Damodar flood plain. Recorded catastrophic flooding 2000, 2009, 2021.",
+      "source": "CWC + NRSC Flood History",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_012",
+      "lat": 22.68,
+      "lng": 88.15,
+      "area": "Uluberia, WB",
+      "radius": 3000,
+      "severity": "high",
+      "description": "Damodar-Rupnarayan convergence zone. NDMA categorised as Very High Hazard.",
+      "source": "NDMA Hazard Atlas WB",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_013",
+      "lat": 22.9014,
+      "lng": 88.3948,
+      "area": "Hooghly / Chinsurah, WB",
+      "radius": 2500,
+      "severity": "medium",
+      "description": "Hooghly River banks. Moderate flood risk from river overflow during high discharge.",
+      "source": "CWC Flood Monitoring + ISRO",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_014",
+      "lat": 23,
+      "lng": 88.14,
+      "area": "Arambagh, WB",
+      "radius": 3500,
+      "severity": "high",
+      "description": "Damodar plains. Severe flood documented multiple times. CWC red alert zone.",
+      "source": "CWC Historical Flood Data",
+      "monsoonRisk": true
+    },
+    {
+      "id": "fl_015",
+      "lat": 23.47,
+      "lng": 88.55,
+      "area": "Krishnanagar / Chapra, WB",
+      "radius": 4000,
+      "severity": "high",
+      "description": "Jalangi River flood zone. High hazard per NDMA Flood Atlas.",
+      "source": "NDMA Hazard Zonation WB",
+      "monsoonRisk": true
+    },
+    {
+      "id": "as_001",
+      "lat": 26.1445,
+      "lng": 91.7362,
+      "area": "Guwahati Low Areas (Bharalumukh)",
+      "radius": 3000,
+      "severity": "high",
+      "description": "Brahmaputra floodplain. Annual flooding documented. NDMA Very High Hazard zone.",
+      "source": "NDMA Assam Flood Report 2023 + NRSC",
+      "monsoonRisk": true
+    },
+    {
+      "id": "as_002",
+      "lat": 26.69,
+      "lng": 93.96,
+      "area": "Jorhat / Majuli Island, Assam",
+      "radius": 8000,
+      "severity": "high",
+      "description": "Majuli is world's largest river island, frequently flooded by Brahmaputra. Annual inundation.",
+      "source": "ISRO + CWC Northeast Division",
+      "monsoonRisk": true
+    },
+    {
+      "id": "as_003",
+      "lat": 26.5,
+      "lng": 90.2,
+      "area": "Bongaigaon / Chirang, Assam",
+      "radius": 5000,
+      "severity": "high",
+      "description": "Manas and Aie river system. Repeated catastrophic flooding per ASDMA reports.",
+      "source": "ASDMA + NDMA 2022",
+      "monsoonRisk": true
+    },
+    {
+      "id": "as_004",
+      "lat": 27.48,
+      "lng": 94.91,
+      "area": "Dibrugarh / Tinsukia, Assam",
+      "radius": 6000,
+      "severity": "high",
+      "description": "Upper Brahmaputra corridor. High flood risk, embankment breaches documented yearly.",
+      "source": "ASDMA Flood Report 2023 + CWC",
+      "monsoonRisk": true
+    },
+    {
+      "id": "as_005",
+      "lat": 26.35,
+      "lng": 92.5,
+      "area": "Nagaon / Morigaon, Assam",
+      "radius": 7000,
+      "severity": "high",
+      "description": "Central Assam floodplain. Among worst-affected areas in annual Assam floods.",
+      "source": "NDMA + ISRO Bhuvan Flood Atlas",
+      "monsoonRisk": true
+    },
+    {
+      "id": "bh_001",
+      "lat": 26.12,
+      "lng": 87,
+      "area": "Supaul / Araria, Bihar (Kosi Floodplain)",
+      "radius": 15000,
+      "severity": "high",
+      "description": "Kosi river is called \"Sorrow of Bihar\". Catastrophic 2008 breach displaced millions. CWC Very High Hazard.",
+      "source": "CWC Kosi Project + NDMA Bihar 2023",
+      "monsoonRisk": true
+    },
+    {
+      "id": "bh_002",
+      "lat": 26.37,
+      "lng": 85.87,
+      "area": "Darbhanga / Madhubani, Bihar",
+      "radius": 10000,
+      "severity": "high",
+      "description": "Bagmati and Kamla river flood zone. Annual inundation documented. NDMA High Hazard.",
+      "source": "NDMA Bihar + Bihar Flood Management",
+      "monsoonRisk": true
+    },
+    {
+      "id": "bh_003",
+      "lat": 26.1209,
+      "lng": 85.3647,
+      "area": "Muzaffarpur / Sitamarhi, Bihar",
+      "radius": 8000,
+      "severity": "high",
+      "description": "Gandak and Burhi Gandak rivers. Recurring catastrophic flooding per CWC records.",
+      "source": "CWC + Bihar SDMA 2022",
+      "monsoonRisk": true
+    },
+    {
+      "id": "bh_004",
+      "lat": 25.6,
+      "lng": 85.14,
+      "area": "Patna Low-Lying Areas",
+      "radius": 4000,
+      "severity": "medium",
+      "description": "Ganga flooding causes inundation in low-lying Patna areas. 2019 Patna flood documented.",
+      "source": "Bihar SDMA + ISRO Emergency Flood Report",
+      "monsoonRisk": true
+    },
+    {
+      "id": "bh_005",
+      "lat": 25.55,
+      "lng": 84.9,
+      "area": "Saran / Siwan, Bihar",
+      "radius": 8000,
+      "severity": "high",
+      "description": "Ghaghra and Ganga confluence zone. Severe annual flooding documented.",
+      "source": "CWC + NDMA Bihar",
+      "monsoonRisk": true
+    },
+    {
+      "id": "up_001",
+      "lat": 25.3176,
+      "lng": 82.9739,
+      "area": "Varanasi Low-Lying Areas",
+      "radius": 3000,
+      "severity": "high",
+      "description": "Ganga flooding of low ghats and riverside areas. Annual CWC alert zone.",
+      "source": "CWC + ISRO Post-Flood Mapping 2023",
+      "monsoonRisk": true
+    },
+    {
+      "id": "up_002",
+      "lat": 26.4499,
+      "lng": 80.3319,
+      "area": "Kanpur Riverside (Sisamau, Rawatpur)",
+      "radius": 4000,
+      "severity": "medium",
+      "description": "Ganga floodplain. Inundation documented 2019, 2020, 2021, 2022.",
+      "source": "CWC Kanpur Gauge + UP SDMA",
+      "monsoonRisk": true
+    },
+    {
+      "id": "up_003",
+      "lat": 26.7606,
+      "lng": 83.3732,
+      "area": "Gorakhpur (Rapti River zone)",
+      "radius": 5000,
+      "severity": "high",
+      "description": "Rapti and Rohini rivers. Severe flooding documented multiple times. NDMA High Risk zone.",
+      "source": "NDMA + CWC Eastern UP",
+      "monsoonRisk": true
+    },
+    {
+      "id": "up_004",
+      "lat": 25.9316,
+      "lng": 81.6837,
+      "area": "Allahabad / Prayagraj Sangam area",
+      "radius": 4000,
+      "severity": "high",
+      "description": "Ganga-Yamuna confluence. Extreme flooding during high discharge years (2019, 2021).",
+      "source": "CWC Allahabad Gauge + NDMA",
+      "monsoonRisk": true
+    },
+    {
+      "id": "up_005",
+      "lat": 27.5706,
+      "lng": 80.0982,
+      "area": "Lakhimpur Kheri / Dudhwa",
+      "radius": 8000,
+      "severity": "high",
+      "description": "Ghaghra/Sharda river flood zone. Among highest flood hazard districts in UP per NDMA.",
+      "source": "NDMA Flood Atlas UP 2021",
+      "monsoonRisk": true
+    },
+    {
+      "id": "dl_001",
+      "lat": 28.6692,
+      "lng": 77.219,
+      "area": "Delhi Yamuna Flood Plain (Yamuna Pushta)",
+      "radius": 4000,
+      "severity": "high",
+      "description": "Yamuna floodplain. 2023 Delhi flood was most severe in decades. CWC Red Alert zone.",
+      "source": "CWC + Delhi Govt Flood Report 2023",
+      "monsoonRisk": true
+    },
+    {
+      "id": "dl_002",
+      "lat": 28.65,
+      "lng": 77.28,
+      "area": "East Delhi Yamuna Khadar",
+      "radius": 3000,
+      "severity": "high",
+      "description": "East Delhi low-lying areas adjacent to Yamuna. Inundated in 2023 floods.",
+      "source": "ISRO Emergency Flood Mapping Delhi 2023",
+      "monsoonRisk": true
+    },
+    {
+      "id": "gj_001",
+      "lat": 21.1702,
+      "lng": 72.8311,
+      "area": "Surat (Tapti River Low Areas)",
+      "radius": 5000,
+      "severity": "high",
+      "description": "Tapti river flooding caused catastrophic 2006 Surat flood. CWC Very High Hazard zone.",
+      "source": "CWC + NDMA Gujarat + ISRO Bhuvan",
+      "monsoonRisk": true
+    },
+    {
+      "id": "gj_002",
+      "lat": 21.72,
+      "lng": 72.98,
+      "area": "Bharuch (Narmada Floodplain)",
+      "radius": 6000,
+      "severity": "high",
+      "description": "Narmada river. Sardar Sarovar dam releases cause downstream flooding. NDMA High Risk.",
+      "source": "CWC Narmada Division + NDMA 2023",
+      "monsoonRisk": true
+    },
+    {
+      "id": "gj_003",
+      "lat": 23.0225,
+      "lng": 72.5714,
+      "area": "Ahmedabad Low Areas (Sabarmati)",
+      "radius": 3000,
+      "severity": "medium",
+      "description": "Sabarmati river flooding of low-lying areas. 2024 flood inundated parts of city.",
+      "source": "Ahmedabad Municipal Corporation + CWC",
+      "monsoonRisk": true
+    },
+    {
+      "id": "gj_004",
+      "lat": 22.3039,
+      "lng": 70.8022,
+      "area": "Rajkot / Morbi, Gujarat",
+      "radius": 5000,
+      "severity": "high",
+      "description": "2022 Morbi bridge collapse + flood disaster. Machchhu river flood zone. CWC High Hazard.",
+      "source": "NDMA + CWC Gujarat Post-Disaster 2022",
+      "monsoonRisk": true
+    },
+    {
+      "id": "od_001",
+      "lat": 20.4625,
+      "lng": 85.883,
+      "area": "Cuttack (Mahanadi Floodplain)",
+      "radius": 5000,
+      "severity": "high",
+      "description": "Mahanadi river. Cuttack is historically one of most flood-prone cities in India.",
+      "source": "NDMA + Odisha SDMA + CWC 2023",
+      "monsoonRisk": true
+    },
+    {
+      "id": "od_002",
+      "lat": 20.9517,
+      "lng": 85.0985,
+      "area": "Sambalpur / Hirakud Downstream",
+      "radius": 6000,
+      "severity": "high",
+      "description": "Hirakud dam releases cause downstream flooding. NDMA categorises as Very High Risk.",
+      "source": "CWC Hirakud Data + NDMA Odisha",
+      "monsoonRisk": true
+    },
+    {
+      "id": "od_003",
+      "lat": 20.27,
+      "lng": 86.13,
+      "area": "Jagatsinghpur / Ersama, Odisha",
+      "radius": 7000,
+      "severity": "high",
+      "description": "Coastal Odisha. Cyclone-induced flooding + tidal inundation. 1999 super cyclone zone.",
+      "source": "ISRO + NDMA Coastal Odisha Assessment",
+      "monsoonRisk": true
+    },
+    {
+      "id": "od_004",
+      "lat": 19.315,
+      "lng": 84.7941,
+      "area": "Berhampur / Ganjam Coastal Area",
+      "radius": 5000,
+      "severity": "high",
+      "description": "Coastal Odisha. Repeated cyclone storm surge inundation documented.",
+      "source": "NDMA + ISRO Post-Cyclone Mapping",
+      "monsoonRisk": true
+    },
+    {
+      "id": "ap_001",
+      "lat": 17.0005,
+      "lng": 81.7799,
+      "area": "Rajahmundry / Godavari Delta",
+      "radius": 8000,
+      "severity": "high",
+      "description": "Godavari delta. One of most flood-prone river systems. CWC Very High Hazard.",
+      "source": "CWC Godavari + NDMA AP",
+      "monsoonRisk": true
+    },
+    {
+      "id": "ap_002",
+      "lat": 16.5062,
+      "lng": 80.648,
+      "area": "Vijayawada (Krishna River)",
+      "radius": 5000,
+      "severity": "high",
+      "description": "Krishna river flooding. 2020 floods inundated much of Vijayawada. CWC High Hazard.",
+      "source": "CWC Krishna + NDMA AP 2020",
+      "monsoonRisk": true
+    },
+    {
+      "id": "ap_003",
+      "lat": 16.3067,
+      "lng": 80.4365,
+      "area": "Eluru / Krishna-Godavari Delta",
+      "radius": 7000,
+      "severity": "high",
+      "description": "Delta interfluve area. Extremely high flood hazard per ISRO Atlas.",
+      "source": "ISRO Bhuvan + NDMA AP",
+      "monsoonRisk": true
+    },
+    {
+      "id": "tel_001",
+      "lat": 17.385,
+      "lng": 78.4867,
+      "area": "Hyderabad Low-Lying Areas (Musi River)",
+      "radius": 4000,
+      "severity": "medium",
+      "description": "Musi river flooding. 2020 Hyderabad floods caused severe urban inundation.",
+      "source": "GHMC + Telangana SDMA 2020",
+      "monsoonRisk": true
+    },
+    {
+      "id": "mh_001",
+      "lat": 19.076,
+      "lng": 72.8777,
+      "area": "Mumbai Suburban Low Areas (Mithi River)",
+      "radius": 3000,
+      "severity": "high",
+      "description": "Mithi river flooding. 2005 Mumbai floods caused over 1000 deaths. NDMA Very High Hazard.",
+      "source": "NDMA + BMC Flood Atlas Mumbai 2023",
+      "monsoonRisk": true
+    },
+    {
+      "id": "mh_002",
+      "lat": 19.2183,
+      "lng": 72.9781,
+      "area": "Thane Creek Low Areas / Mumbra",
+      "radius": 3500,
+      "severity": "medium",
+      "description": "Tidal flooding and Ulhas river overflow. Documented inundation during extreme rainfall.",
+      "source": "TMC + NDMA Maharashtra",
+      "monsoonRisk": true
+    },
+    {
+      "id": "mh_003",
+      "lat": 16.705,
+      "lng": 74.2433,
+      "area": "Kolhapur / Sangli (Panchganga River)",
+      "radius": 6000,
+      "severity": "high",
+      "description": "2019, 2021 catastrophic floods. Panchganga and Krishna rivers. NDMA High Risk.",
+      "source": "NDMA + Maharashtra SDMA + CWC 2021",
+      "monsoonRisk": true
+    },
+    {
+      "id": "kl_001",
+      "lat": 9.5,
+      "lng": 76.33,
+      "area": "Kuttanad / Alappuzha (Below Sea Level)",
+      "radius": 10000,
+      "severity": "high",
+      "description": "Kuttanad is below sea level — among most flood-vulnerable areas in Asia. Annual inundation.",
+      "source": "Kerala Irrigation + ISRO + NDMA Kerala",
+      "monsoonRisk": true
+    },
+    {
+      "id": "kl_002",
+      "lat": 10.07,
+      "lng": 76.38,
+      "area": "Ernakulam / Periyar River Low Areas",
+      "radius": 4000,
+      "severity": "medium",
+      "description": "Periyar river flooding. 2018 Kerala floods severely impacted this zone.",
+      "source": "KSDMA + NDMA 2018 + ISRO",
+      "monsoonRisk": true
+    },
+    {
+      "id": "kl_003",
+      "lat": 11.1271,
+      "lng": 75.91,
+      "area": "Kozhikode Coastal Low Areas",
+      "radius": 3500,
+      "severity": "medium",
+      "description": "Coastal flooding + Chaliyar river overflow. 2018 flood impacts documented.",
+      "source": "Kerala Revenue Dept + NDMA 2018",
+      "monsoonRisk": true
+    },
+    {
+      "id": "kl_004",
+      "lat": 9.2648,
+      "lng": 76.787,
+      "area": "Pathanamthitta / Pampa River",
+      "radius": 5000,
+      "severity": "high",
+      "description": "Pampa river. Most severely affected district in 2018 Kerala floods.",
+      "source": "KSDMA 2018 + ISRO Emergency Flood Mapping",
+      "monsoonRisk": true
+    },
+    {
+      "id": "rj_001",
+      "lat": 25.15,
+      "lng": 74.63,
+      "area": "Kota / Baran (Chambal River)",
+      "radius": 6000,
+      "severity": "high",
+      "description": "Chambal river dam releases cause downstream flooding. CWC High Hazard zone.",
+      "source": "CWC Chambal Division + NDMA Rajasthan",
+      "monsoonRisk": true
+    },
+    {
+      "id": "rj_002",
+      "lat": 24.88,
+      "lng": 74.62,
+      "area": "Jhalawar / Baran Flash Flood Zone",
+      "radius": 5000,
+      "severity": "medium",
+      "description": "Flash flood prone in Hadoti region. Documented incidents 2019, 2022, 2023.",
+      "source": "Rajasthan SDMA + NDMA",
+      "monsoonRisk": true
+    },
+    {
+      "id": "hp_001",
+      "lat": 31.1048,
+      "lng": 77.1734,
+      "area": "Shimla / Solan Flash Flood Zone",
+      "radius": 3000,
+      "severity": "high",
+      "description": "Cloudbursts cause flash floods and landslides. 2023 Himachal floods severely impacted this area.",
+      "source": "NDMA + Himachal SDMA 2023 + ISRO",
+      "monsoonRisk": true
+    },
+    {
+      "id": "hp_002",
+      "lat": 32.0809,
+      "lng": 76.5887,
+      "area": "Mandi / Kullu, Himachal Pradesh",
+      "radius": 4000,
+      "severity": "high",
+      "description": "Beas river flooding + flash floods. 2023 Mandi floods among worst in decades.",
+      "source": "CWC Beas + NDMA HP 2023",
+      "monsoonRisk": true
+    },
+    {
+      "id": "uk_001",
+      "lat": 30.3165,
+      "lng": 78.0322,
+      "area": "Dehradun / Rishikesh (Ganga, Song River)",
+      "radius": 3000,
+      "severity": "high",
+      "description": "Flash floods and Ganga surges. 2013 Kedarnath disaster zone upstream.",
+      "source": "CWC + NDMA Uttarakhand",
+      "monsoonRisk": true
+    },
+    {
+      "id": "jk_001",
+      "lat": 34.0837,
+      "lng": 74.7973,
+      "area": "Srinagar (Jhelum River)",
+      "radius": 4000,
+      "severity": "high",
+      "description": "Jhelum river. 2014 Kashmir floods were worst in 60 years — catastrophic inundation.",
+      "source": "CWC Jhelum + NDMA JK 2014 + ISRO",
+      "monsoonRisk": true
+    }
+  ],
+  "disaster_zones": [
+    {
+      "id": "dis_cyc_01",
+      "lat": 21.6266,
+      "lng": 87.5074,
+      "area": "Digha - Shankarpur Coastal Belt, Purba Medinipur",
+      "type": "cyclone_surge",
+      "severity": "high",
+      "radius": 3500,
+      "title": "High Cyclone & Storm Surge Zone",
+      "description": "Open Bay of Bengal coast. Severe storm surge vulnerability during pre-monsoon & post-monsoon cyclone seasons.",
+      "source": "NDMA Cyclone Vulnerability Atlas + IMD",
+      "penalty": 8
+    },
+    {
+      "id": "dis_cyc_02",
+      "lat": 21.778,
+      "lng": 87.751,
+      "area": "Contai (Kanthi) - Mandarmani Coast, Purba Medinipur",
+      "type": "cyclone_surge",
+      "severity": "high",
+      "radius": 4000,
+      "title": "Coastal Inundation & Wind Hazard",
+      "description": "Low-lying coastal strip vulnerable to tidal surge overflow and cyclone winds exceeding 120 km/h.",
+      "source": "WBSDMA Coastal Hazard Profile",
+      "penalty": 7
+    },
+    {
+      "id": "dis_cyc_03",
+      "lat": 21.65,
+      "lng": 88.08,
+      "area": "Sagar Island & Muriganga Confluence, South 24 Pgs",
+      "type": "cyclone_surge",
+      "severity": "critical",
+      "radius": 6000,
+      "title": "Severe Cyclone & Sea Ingress Zone",
+      "description": "Estuarine island facing direct cyclonic tidal surges (Amphan, Yaas, Bulbul). High vulnerability.",
+      "source": "WBSDMA + NDMA Super Cyclone Records",
+      "penalty": 10
+    },
+    {
+      "id": "dis_cyc_04",
+      "lat": 21.56,
+      "lng": 88.25,
+      "area": "Bakkhali & Fraserganj Coast, South 24 Pgs",
+      "type": "cyclone_surge",
+      "severity": "high",
+      "radius": 3500,
+      "title": "Tidal Surge & Embankment Vulnerability",
+      "description": "Exposed outer coastal barrier. Regular tidal overtopping during cyclonic spring tides.",
+      "source": "Sundarban Biosphere Reserve Authority",
+      "penalty": 8
+    },
+    {
+      "id": "dis_cyc_05",
+      "lat": 22.16,
+      "lng": 88.8,
+      "area": "Gosaba & Sandeshkhali Delta Island, Sundarbans",
+      "type": "cyclone_surge",
+      "severity": "critical",
+      "radius": 5000,
+      "title": "Estuarine Cyclone Inundation Zone",
+      "description": "Earthen embankment network vulnerable to breaches during severe cyclonic surges and river swell.",
+      "source": "ISRO Post-Disaster Atlas + WBSDMA",
+      "penalty": 9
+    },
+    {
+      "id": "dis_cyc_06",
+      "lat": 22.31,
+      "lng": 88.66,
+      "area": "Canning - Basanti Matla Estuary, South 24 Pgs",
+      "type": "cyclone_surge",
+      "severity": "high",
+      "radius": 4000,
+      "title": "Tidal River Surge Funnel",
+      "description": "Matla river funneling storm surge water upstream during Bay of Bengal depressions.",
+      "source": "Irrigation & Waterways Dept WB",
+      "penalty": 7
+    },
+    {
+      "id": "dis_lnd_01",
+      "lat": 26.885,
+      "lng": 88.472,
+      "area": "NH-10 Sevoke - Teesta Bazaar Corridor, Kalimpong",
+      "type": "landslide",
+      "severity": "critical",
+      "radius": 4500,
+      "title": "Severe Landslide & Rockfall Corridor",
+      "description": "Critical Sikkim-Bengal arterial highway. Highly unstable phyllite/schist rock face prone to monsoonal collapses and road closures.",
+      "source": "Geological Survey of India (GSI) + NHAI",
+      "penalty": 10
+    },
+    {
+      "id": "dis_lnd_02",
+      "lat": 26.85,
+      "lng": 88.33,
+      "area": "Rohini Road & Tindharia Slopes, Kurseong Hills",
+      "type": "landslide",
+      "severity": "high",
+      "radius": 3500,
+      "title": "Active Landslide & Slope Instability",
+      "description": "Frequent monsoonal debris flow and road sinking along Paglajhora & Rohini descent routes.",
+      "source": "GSI Landslide Hazard Mapping",
+      "penalty": 8
+    },
+    {
+      "id": "dis_lnd_03",
+      "lat": 26.89,
+      "lng": 88.19,
+      "area": "Mirik - Soureni Tea Valley Slopes, Darjeeling",
+      "type": "landslide",
+      "severity": "medium",
+      "radius": 3000,
+      "title": "Monsoonal Slope Wash & Mudslide Zone",
+      "description": "Steep agricultural slopes subject to soil slippage after heavy precipitation events (>100mm/day).",
+      "source": "Darjeeling District Disaster Management Plan",
+      "penalty": 5
+    },
+    {
+      "id": "dis_lnd_04",
+      "lat": 27.06,
+      "lng": 88.52,
+      "area": "Lava - Pedong - Rhenock Hill Road, Kalimpong",
+      "type": "landslide",
+      "severity": "medium",
+      "radius": 3500,
+      "title": "Hill Road Blockade Risk",
+      "description": "Narrow mountain road with documented mudslides and tree falls during monsoon squalls.",
+      "source": "Kalimpong District Police Traffic Cell",
+      "penalty": 5
+    },
+    {
+      "id": "dis_eq_01",
+      "lat": 27.036,
+      "lng": 88.2627,
+      "area": "Darjeeling - Kalimpong Himalayan Ridge",
+      "type": "seismic",
+      "severity": "high",
+      "radius": 6000,
+      "title": "Seismic Zone IV / V Boundary",
+      "description": "Active Main Boundary Thrust (MBT) fault line. High vulnerability to moderate-to-severe tectonic tremors.",
+      "source": "BMTPC Seismic Zone Map of India",
+      "penalty": 4
+    },
+    {
+      "id": "dis_eq_02",
+      "lat": 26.54,
+      "lng": 89.45,
+      "area": "Cooch Behar - Alipurduar Sub-Himalayan Plains",
+      "type": "seismic",
+      "severity": "high",
+      "radius": 7000,
+      "title": "Seismic Zone V (Highest Hazard)",
+      "description": "Classified under Seismic Zone V (very high damage risk) along Assam-Bengal tectonic boundary.",
+      "source": "Bureau of Indian Standards (IS 1893)",
+      "penalty": 5
+    },
+    {
+      "id": "dis_ers_01",
+      "lat": 25.04,
+      "lng": 87.89,
+      "area": "Manikchak & Bhutni Island, Malda",
+      "type": "river_erosion",
+      "severity": "critical",
+      "radius": 5000,
+      "title": "Ganga Severe Bank Erosion Zone",
+      "description": "Aggressive Ganga river meandering causing sudden bank slumping, agricultural loss, and road washing.",
+      "source": "Central Water Commission (CWC) + Malda DDMA",
+      "penalty": 8
+    },
+    {
+      "id": "dis_ers_02",
+      "lat": 24.77,
+      "lng": 87.93,
+      "area": "Farakka Barrage & Dhulian Embankment, Murshidabad",
+      "type": "river_erosion",
+      "severity": "high",
+      "radius": 4000,
+      "title": "Ganga Left Bank Erosion Corridor",
+      "description": "High velocity discharge during peak monsoon undermining protective spurs and approach roads.",
+      "source": "Farakka Barrage Project (Ministry of Jal Shakti)",
+      "penalty": 7
+    },
+    {
+      "id": "dis_ers_03",
+      "lat": 26.47,
+      "lng": 88.85,
+      "area": "Teesta River Basin (Domohani - Mekhliganj Belt)",
+      "type": "river_erosion",
+      "severity": "high",
+      "radius": 4500,
+      "title": "Teesta Flash Swell & Channel Shifting",
+      "description": "Glacial fed river prone to sudden multi-meter water level spikes and channel avulsion.",
+      "source": "CWC Jalpaiguri Gauge Division",
+      "penalty": 7
+    },
+    {
+      "id": "dis_wtl_01",
+      "lat": 22.583,
+      "lng": 88.368,
+      "area": "Thanthania - Amherst Street - College Street, Kolkata",
+      "type": "waterlogging",
+      "severity": "high",
+      "radius": 600,
+      "title": "Chronic Rain Waterlogging Choke Point",
+      "description": "Historic low bowl topography. Knee-deep to waist-deep water accumulation after >30mm/hr cloudbursts.",
+      "source": "KMC Drainage Master Plan + Kolkata Traffic Police",
+      "penalty": 6
+    },
+    {
+      "id": "dis_wtl_02",
+      "lat": 22.502,
+      "lng": 88.318,
+      "area": "Behala Chowrasta - Taratala - James Long Sarani, Kolkata",
+      "type": "waterlogging",
+      "severity": "high",
+      "radius": 900,
+      "title": "South Kolkata Severe Inundation Corridor",
+      "description": "Inadequate outfall discharge to Tolly Nullah. Heavy waterlogging disrupts Diamond Harbour Road traffic.",
+      "source": "KMC Drainage Dept",
+      "penalty": 6
+    },
+    {
+      "id": "dis_wtl_03",
+      "lat": 22.54,
+      "lng": 88.368,
+      "area": "Park Circus 7-Point & Suhrawardy Ave, Kolkata",
+      "type": "waterlogging",
+      "severity": "medium",
+      "radius": 500,
+      "title": "Roadway Water Inundation Spot",
+      "description": "Underpass and roundabout flooding causing vehicular breakdowns during monsoons.",
+      "source": "Kolkata Traffic Police advisories",
+      "penalty": 4
+    },
+    {
+      "id": "dis_wtl_04",
+      "lat": 22.595,
+      "lng": 88.32,
+      "area": "Howrah Tikiapara & Dasnagar Low Belt, Howrah",
+      "type": "waterlogging",
+      "severity": "high",
+      "radius": 800,
+      "title": "Railway Underpass & Road Submersion",
+      "description": "Railway siding low catchment zone. Underpass roads impassable during continuous showers.",
+      "source": "Howrah Municipal Corporation",
+      "penalty": 6
+    },
+    {
+      "id": "dis_wtl_05",
+      "lat": 22.52,
+      "lng": 88.398,
+      "area": "Kasba - Ruby Roundabout - EM Bypass Connectors",
+      "type": "waterlogging",
+      "severity": "medium",
+      "radius": 700,
+      "title": "Suburban Drainage Bottleneck",
+      "description": "Service lanes and subway ramps submerge during high tides and cloudbursts.",
+      "source": "KMDA Urban Drainage Report",
+      "penalty": 4
+    },
+    {
+      "id": "dis_wtl_06",
+      "lat": 22.61,
+      "lng": 88.435,
+      "area": "VIP Road - Haldirams to Teghoria Choke Point",
+      "type": "waterlogging",
+      "severity": "high",
+      "radius": 650,
+      "title": "Airport Arterial Water Accumulation",
+      "description": "Severe road flooding after intense showers, causing multi-kilometer airport transit gridlocks.",
+      "source": "Bidhannagar Police + KMC Drainage Master Plan",
+      "penalty": 6
+    },
+    {
+      "id": "dis_wtl_07",
+      "lat": 22.502,
+      "lng": 88.318,
+      "area": "Behala Chowrasta & Diamond Harbour Road Basin",
+      "type": "waterlogging",
+      "severity": "high",
+      "radius": 750,
+      "title": "Low Basin Chronic Waterlogging",
+      "description": "Tolly Nullah backflow and flat terrain causes knee-deep inundation on major south arterial.",
+      "source": "KMC Borough XIV Flood Records",
+      "penalty": 5
+    },
+    {
+      "id": "dis_wtl_08",
+      "lat": 22.635,
+      "lng": 88.385,
+      "area": "Belgharia Expressway & Dunlop Junction Subway",
+      "type": "waterlogging",
+      "severity": "medium",
+      "radius": 500,
+      "title": "Expressway Ramp Drainage Bottleneck",
+      "description": "Underpass inundation during monsoon storms, diverting heavy commercial freight.",
+      "source": "Barrackpore Police Traffic Division",
+      "penalty": 4
+    },
+    {
+      "id": "dis_wtl_09",
+      "lat": 22.584,
+      "lng": 88.42,
+      "area": "Ultadanga Underpass & Kankurgachi Rail Bridge",
+      "type": "waterlogging",
+      "severity": "high",
+      "radius": 500,
+      "title": "Rail Underpass Submersion Hazard",
+      "description": "Critical urban connection submerges up to 3 feet during heavy cloudbursts.",
+      "source": "Kolkata Traffic Police monsoon advisory",
+      "penalty": 6
+    },
+    {
+      "id": "dis_wtl_10",
+      "lat": 22.535,
+      "lng": 88.312,
+      "area": "Taratala & Hyde Road Industrial Lowlands",
+      "type": "waterlogging",
+      "severity": "high",
+      "radius": 700,
+      "title": "Industrial Freight Water Inundation",
+      "description": "Inadequate stormwater outfall to Hooghly causes prolonged water stagnation.",
+      "source": "KMC Drainage Department",
+      "penalty": 5
+    },
+    {
+      "id": "dis_ltg_01",
+      "lat": 22.42,
+      "lng": 87.15,
+      "area": "Midnapore - Jhargram Red Laterite Plain Belt",
+      "type": "lightning_storm",
+      "severity": "medium",
+      "radius": 8000,
+      "title": "High Lightning Flash Density Zone",
+      "description": "Frequent severe lightning strikes during pre-monsoon Kalbaishakhi (Nor'wester) squall lines.",
+      "source": "IMD Thunderstorm Climatology of India + NDMA",
+      "penalty": 4
+    },
+    {
+      "id": "dis_ltg_02",
+      "lat": 23.25,
+      "lng": 87.05,
+      "area": "Bankura - Purulia Open Rurban Corridor",
+      "type": "lightning_storm",
+      "severity": "medium",
+      "radius": 7500,
+      "title": "Kalbaishakhi Squall & Lightning Corridor",
+      "description": "High open ground lightning casualty incidence in March-June transition months.",
+      "source": "WBSDMA Lightning Hazard Atlas",
+      "penalty": 4
+    },
+    {
+      "id": "dis_ltg_03",
+      "lat": 23.68,
+      "lng": 86.95,
+      "area": "Asansol - Raniganj Mining Subsidence & Quake Zone",
+      "type": "seismic",
+      "severity": "high",
+      "radius": 5000,
+      "title": "Abandoned Underground Coal Mine Subsidence Risk",
+      "description": "Unstabilized underground voids prone to sudden road caving and tremors during heavy rain.",
+      "source": "ECL & Directorate General of Mines Safety (DGMS)",
+      "penalty": 7
+    }
+  ]
+}

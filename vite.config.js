@@ -111,7 +111,14 @@ export default defineConfig({
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
-    }
+    },
+    proxy: {
+      '/api/ml': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ml/, ''),
+      },
+    },
   },
   optimizeDeps: {
     exclude: ['maplibre-gl'],
