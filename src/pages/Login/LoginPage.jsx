@@ -175,8 +175,17 @@ export default function LoginPage() {
       setIsLoggedIn(true)
       navigate('/')
     } catch (err) {
-      if (err.code !== 'auth/popup-closed-by-user') {
-        showToast('Google sign-in failed. Try again.')
+      console.error('[Google sign-in error]:', err)
+      if (err.code === 'auth/popup-closed-by-user') {
+        // User closed popup; no error needed
+      } else if (err.code === 'auth/unauthorized-domain') {
+        showToast('Domain not authorized in Firebase Console (Authentication > Settings > Authorized domains).', 'error', 6000)
+      } else if (err.code === 'auth/operation-not-allowed') {
+        showToast('Google provider is disabled in Firebase Console (Authentication > Sign-in method).', 'error', 6000)
+      } else if (err.code === 'auth/popup-blocked') {
+        showToast('Sign-in popup was blocked by browser. Please allow popups.', 'error', 5000)
+      } else {
+        showToast(err.message || 'Google sign-in failed. Try again.', 'error', 5000)
       }
     }
     setProcessing(false)
