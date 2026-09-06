@@ -19,6 +19,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
 import { HAZARD_TYPES, SEVERITY_COLORS } from '../../constants'
 import { mapProvider } from '../../services/mapProvider'
+import { getCurrentLocation, watchLocation, clearLocationWatch, getInitialLocation } from '../../services/location'
 
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 
@@ -124,10 +125,11 @@ export default function NavigationPage() {
 
   const geometry = useMemo(() => {
     if (rawGeometry && rawGeometry.length >= 2) return rawGeometry
-    const sLat = parseFloat(startLocation?.lat || userLocation?.lat || 22.5726)
-    const sLng = parseFloat(startLocation?.lng || startLocation?.lon || userLocation?.lng || userLocation?.lon || 88.3639)
-    const dLat = parseFloat(destination?.lat || 22.5800)
-    const dLng = parseFloat(destination?.lng || destination?.lon || 88.3700)
+    const defLoc = getInitialLocation()
+    const sLat = parseFloat(startLocation?.lat || userLocation?.lat || defLoc.lat)
+    const sLng = parseFloat(startLocation?.lng || startLocation?.lon || userLocation?.lng || userLocation?.lon || defLoc.lng)
+    const dLat = parseFloat(destination?.lat || (defLoc.lat + 0.008))
+    const dLng = parseFloat(destination?.lng || destination?.lon || (defLoc.lng + 0.008))
     if (sLat && sLng && dLat && dLng) {
       return [[sLat, sLng], [dLat, dLng]]
     }
@@ -199,14 +201,22 @@ export default function NavigationPage() {
   }, [validCoords])
 
   // Coordinates & State
-  const initLoc = startLocation || userLocation
-  const [currentLat, setCurrentLat] = useState(parseFloat(initLoc?.lat || 22.57))
-  const [currentLng, setCurrentLng] = useState(parseFloat(initLoc?.lng || initLoc?.lon || 88.36))
+  const initLoc = startLocation || userLocation || getInitialLocation()
+  const [currentLat, setCurrentLat] = useState(parseFloat(initLoc?.lat || 22.73))
+  const [currentLng, setCurrentLng] = useState(parseFloat(initLoc?.lng || initLoc?.lon || 88.48))
   const [bearing, setBearing] = useState(initialBearing)
   const [mapBearing, setMapBearing] = useState(initialBearing)
   const [arrowHeading, setArrowHeading] = useState(initialBearing)
   const [continuousArrowAngle, setContinuousArrowAngle] = useState(0)
   const prevContinuousAngleRef = useRef(0)
+
+  // Direct DOM and MapLibre Refs for rock-solid 60 FPS synchronization without vibration
+  const markerRef = useRef(null)
+  const arrowIconRef = useRef(null)
+  const compassNeedleRef = useRef(null)
+  const vehicleHeadingRef = useRef(initialBearing)
+  const currentLatRef = useRef(parseFloat(initLoc?.lat || 22.73))
+  const currentLngRef = useRef(parseFloat(initLoc?.lng || initLoc?.lon || 88.48))
 
   const [stepIdx, setStepIdx] = useState(0)
   const [gpsMode, setGpsMode] = useState('live')
@@ -240,22 +250,24 @@ export default function NavigationPage() {
   const prevGpsPos = useRef(null)
   const lastSpokenHazardRef = useRef(false)
 
-  // Arrowhead rotation angle:
-  // In 3D follow mode, camera aligns with road, so arrow points straight UP (0° relative).
-  // In 2D mode, map is North-up, so arrow points in world travel direction (relative to mapBearing).
+  // Arrowhead rotation angle for LIVE GPS mode (Not active during 60 FPS simulation to prevent CSS transition fighting)
   useEffect(() => {
+    if (isSimulating) return
     const currentMapHeading = is3DMode && isFollowing ? cameraBearingRef.current : mapBearing
-    const relativeAngle = arrowHeading - currentMapHeading
+    const relativeAngle = is3DMode && isFollowing
+      ? getShortestAngleDiff(arrowHeading, currentMapHeading)
+      : arrowHeading
     const diff = ((relativeAngle - (prevContinuousAngleRef.current % 360) + 540) % 360) - 180
     const nextAngle = prevContinuousAngleRef.current + diff
     prevContinuousAngleRef.current = nextAngle
     setContinuousArrowAngle(nextAngle)
-  }, [arrowHeading, mapBearing, is3DMode, isFollowing])
+  }, [arrowHeading, mapBearing, is3DMode, isFollowing, isSimulating])
 
   useEffect(() => {
     if (validCoords && validCoords.length > 1) {
       const b = calculateBearing(validCoords[0][1], validCoords[0][0], validCoords[1][1], validCoords[1][0])
       cameraBearingRef.current = b
+      vehicleHeadingRef.current = b
       setBearing(b)
       setMapBearing(is3DMode ? b : 0)
       setArrowHeading(b)
@@ -273,14 +285,14 @@ export default function NavigationPage() {
     })
   }, [])
 
-  // Continuous position & forward tangent bearing at distance s along route
+  // Continuous position, smooth tangent bearing, and forward lookahead bearing along route
   const getInterpolatedRouteState = useCallback((s) => {
     if (!polylineData || !validCoords || validCoords.length < 2) {
       return {
-        lat: currentLat,
-        lng: currentLng,
-        bearing: 0,
-        lookaheadBearing: 0,
+        lat: currentLatRef.current,
+        lng: currentLngRef.current,
+        tangentBearing: vehicleHeadingRef.current,
+        lookaheadBearing: cameraBearingRef.current,
         distance: 0,
       }
     }
@@ -306,9 +318,27 @@ export default function NavigationPage() {
 
     const lng = p0[0] + (p1[0] - p0[0]) * ratio
     const lat = p0[1] + (p1[1] - p0[1]) * ratio
-    const segmentBearing = calculateBearing(p0[1], p0[0], p1[1], p1[0])
 
-    const lookaheadDist = Math.min(totalDistance, clampedS + 30)
+    // Sample road tangent 8 meters ahead (smooth continuous tangent, eliminates discrete vertex jumps)
+    const tangentDist = Math.min(totalDistance, clampedS + 8)
+    let tLow = 0
+    let tHigh = cumDists.length - 1
+    while (tLow <= tHigh) {
+      const mid = (tLow + tHigh) >> 1
+      if (cumDists[mid] <= tangentDist) tLow = mid + 1
+      else tHigh = mid - 1
+    }
+    const tIdx = Math.max(0, Math.min(tHigh, validCoords.length - 2))
+    const tRatio = Math.max(0, Math.min(1, (tangentDist - cumDists[tIdx]) / Math.max(0.001, cumDists[tIdx + 1] - cumDists[tIdx])))
+    const tLng = validCoords[tIdx][0] + (validCoords[tIdx + 1][0] - validCoords[tIdx][0]) * tRatio
+    const tLat = validCoords[tIdx][1] + (validCoords[tIdx + 1][1] - validCoords[tIdx][1]) * tRatio
+
+    const tangentBearing = (tangentDist > clampedS + 0.5)
+      ? calculateBearing(lat, lng, tLat, tLng)
+      : calculateBearing(p0[1], p0[0], p1[1], p1[0])
+
+    // Sample camera lookahead 28 meters ahead for gentle road curvature preview
+    const lookaheadDist = Math.min(totalDistance, clampedS + 28)
     let aLow = 0
     let aHigh = cumDists.length - 1
     while (aLow <= aHigh) {
@@ -321,10 +351,12 @@ export default function NavigationPage() {
     const aLng = validCoords[aIdx][0] + (validCoords[aIdx + 1][0] - validCoords[aIdx][0]) * aRatio
     const aLat = validCoords[aIdx][1] + (validCoords[aIdx + 1][1] - validCoords[aIdx][1]) * aRatio
 
-    const lookaheadBearing = calculateBearing(lat, lng, aLat, aLng)
+    const lookaheadBearing = (lookaheadDist > clampedS + 0.5)
+      ? calculateBearing(lat, lng, aLat, aLng)
+      : tangentBearing
 
-    return { lat, lng, bearing: segmentBearing, lookaheadBearing, distance: clampedS }
-  }, [polylineData, validCoords, currentLat, currentLng])
+    return { lat, lng, tangentBearing, lookaheadBearing, distance: clampedS }
+  }, [polylineData, validCoords])
 
   // Dynamic Route Progress
   const updateRouteProgress = useCallback((vehicleLng, vehicleLat, distanceAlongRoute) => {
@@ -527,9 +559,11 @@ export default function NavigationPage() {
     if (!map) return
 
     const targetBearing = cameraBearingRef.current || 0
+    const lat = currentLatRef.current
+    const lng = currentLngRef.current
 
     map.easeTo({
-      center: [currentLng, currentLat],
+      center: [lng, lat],
       bearing: is3DMode ? targetBearing : 0,
       pitch: is3DMode ? 62 : 0,
       zoom: is3DMode ? 18.2 : 16.5,
@@ -539,16 +573,31 @@ export default function NavigationPage() {
       duration: 650,
     })
     setMapBearing(is3DMode ? targetBearing : 0)
-  }, [currentLat, currentLng, is3DMode])
+  }, [is3DMode])
 
-  // ── 60 FPS Smooth Parametric Simulation Loop ─────────────────────────────
+  // ── 60 FPS Smooth Parametric Simulation Loop (Zero Jitter, Synchronous WebGL Marker) ──
   useEffect(() => {
     if (!isSimulating) {
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
+      // When simulation ends, restore smooth CSS transitions for live GPS ticks
+      if (arrowIconRef.current) {
+        arrowIconRef.current.style.transition = 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+      }
+      if (compassNeedleRef.current) {
+        compassNeedleRef.current.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+      }
       return
     }
 
     lastRafTimeRef.current = performance.now()
+
+    // During continuous 60 FPS animation, disable CSS transitions to eliminate transition fighting and jitter
+    if (arrowIconRef.current) {
+      arrowIconRef.current.style.transition = 'none'
+    }
+    if (compassNeedleRef.current) {
+      compassNeedleRef.current.style.transition = 'none'
+    }
 
     const loop = (timestamp) => {
       if (!isSimulatingRef.current) return
@@ -571,12 +620,18 @@ export default function NavigationPage() {
       }
 
       const state = getInterpolatedRouteState(simDistanceRef.current)
+      currentLatRef.current = state.lat
+      currentLngRef.current = state.lng
 
-      // Smooth camera bearing interpolation towards forward lookahead road tangent
-      const angleDiff = getShortestAngleDiff(state.lookaheadBearing, cameraBearingRef.current)
-      cameraBearingRef.current = (cameraBearingRef.current + angleDiff * Math.min(1, dt * 5.5) + 360) % 360
+      // 1. Smooth vehicle heading towards forward tangent (critically damped filter, no node jerk)
+      const headingDiff = getShortestAngleDiff(state.tangentBearing, vehicleHeadingRef.current)
+      vehicleHeadingRef.current = (vehicleHeadingRef.current + headingDiff * Math.min(1, dt * 7.5) + 360) % 360
 
-      // Update Native Map Camera at 60 FPS in Uber-style 3D forward orientation
+      // 2. Smooth camera bearing following behind vehicle heading
+      const camDiff = getShortestAngleDiff(state.lookaheadBearing, cameraBearingRef.current)
+      cameraBearingRef.current = (cameraBearingRef.current + camDiff * Math.min(1, dt * 4.2) + 360) % 360
+
+      // 3. Synchronous WebGL Map Camera update in 3D follow perspective
       if (isFollowingRef.current && mapRef.current) {
         const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
         if (map) {
@@ -592,19 +647,40 @@ export default function NavigationPage() {
         }
       }
 
-      setCurrentLat(state.lat)
-      setCurrentLng(state.lng)
-      setBearing(cameraBearingRef.current)
-      setArrowHeading(state.bearing)
-      setMapBearing(is3DModeRef.current ? cameraBearingRef.current : 0)
+      // 4. Synchronous MapLibre Marker position update (ZERO WebGL canvas vs DOM lag)
+      if (markerRef.current) {
+        markerRef.current.setLngLat([state.lng, state.lat])
+      }
 
-      // Throttled UI State updates (~4Hz)
+      // 5. Arrowhead On-Screen Orientation:
+      // In 3D follow mode: points forward relative to camera, smoothly steering into curves
+      // In 2D mode: points in world travel direction
+      const onScreenArrowAngle = is3DModeRef.current && isFollowingRef.current
+        ? getShortestAngleDiff(vehicleHeadingRef.current, cameraBearingRef.current)
+        : vehicleHeadingRef.current
+
+      if (arrowIconRef.current) {
+        arrowIconRef.current.style.transform = `rotate(${onScreenArrowAngle}deg)`
+      }
+
+      // 6. Mini Compass Needle Direct Update
+      if (compassNeedleRef.current) {
+        const mapHeading = is3DModeRef.current && isFollowingRef.current ? cameraBearingRef.current : 0
+        compassNeedleRef.current.style.transform = `rotate(${-mapHeading}deg)`
+      }
+
+      // 7. Throttled UI State updates (~4 Hz) — eliminates React 60 FPS re-render overhead
       if (timestamp - lastUiThrottleRef.current > 220) {
         lastUiThrottleRef.current = timestamp
         updateRouteProgress(state.lng, state.lat, simDistanceRef.current)
         setRouteDistanceProgress(simDistanceRef.current)
         setSpeed(Math.round(currentSpeed))
         setLiveUserLocation({ lat: state.lat, lng: state.lng })
+        setCurrentLat(state.lat)
+        setCurrentLng(state.lng)
+        setBearing(cameraBearingRef.current)
+        setMapBearing(is3DModeRef.current ? cameraBearingRef.current : 0)
+        setArrowHeading(vehicleHeadingRef.current)
 
         let activeIdx = 0
         for (let i = 0; i < stepTargetDistances.length; i++) {
@@ -639,6 +715,12 @@ export default function NavigationPage() {
     if (isSimulating) {
       setIsSimulating(false)
       setGpsMode('live')
+      if (arrowIconRef.current) {
+        arrowIconRef.current.style.transition = 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+      }
+      if (compassNeedleRef.current) {
+        compassNeedleRef.current.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+      }
     } else {
       setIsSimulating(true)
       setGpsMode('simulated')
@@ -648,35 +730,53 @@ export default function NavigationPage() {
     }
   }
 
-  // Live GPS Watcher (When not simulating)
+  // Live GPS Watcher (When not simulating) with stationary jitter filter
   const handlePosition = useCallback((pos) => {
-    if (isSimulating) return
+    if (isSimulatingRef.current) return
     const lat = pos.coords.latitude
     const lng = pos.coords.longitude
     const spd = pos.coords.speed
 
+    currentLatRef.current = lat
+    currentLngRef.current = lng
     setCurrentLat(lat)
     setCurrentLng(lng)
     setLiveUserLocation({ lat, lng })
     setGpsMode('live')
 
+    if (markerRef.current) {
+      markerRef.current.setLngLat([lng, lat])
+    }
+
     if (spd !== null && spd >= 0) {
       setSpeed(Math.round(spd * 3.6))
     }
 
-    if (pos.coords.heading !== null && !isNaN(pos.coords.heading)) {
-      setArrowHeading(pos.coords.heading)
+    // Determine heading with stationary jitter filter
+    let nextHeading = null
+    if (pos.coords.heading !== null && !isNaN(pos.coords.heading) && pos.coords.heading >= 0) {
+      nextHeading = pos.coords.heading
     } else if (prevGpsPos.current) {
       const moved = haversineMeters(lat, lng, prevGpsPos.current.lat, prevGpsPos.current.lng)
-      if (moved > 2) {
-        const newBearing = calculateBearing(prevGpsPos.current.lat, prevGpsPos.current.lng, lat, lng)
-        setArrowHeading(newBearing)
-        const diff = getShortestAngleDiff(newBearing, cameraBearingRef.current)
-        cameraBearingRef.current = (cameraBearingRef.current + diff * 0.4 + 360) % 360
-        setBearing(cameraBearingRef.current)
-        setMapBearing(cameraBearingRef.current)
+      // Only recalculate bearing if moved > 4 meters and moving (prevents arrow spinning when stopped)
+      if (moved > 4 && (spd === null || spd > 1)) {
+        nextHeading = calculateBearing(prevGpsPos.current.lat, prevGpsPos.current.lng, lat, lng)
       }
     }
+
+    if (nextHeading !== null) {
+      vehicleHeadingRef.current = nextHeading
+      setArrowHeading(nextHeading)
+      const diff = getShortestAngleDiff(nextHeading, cameraBearingRef.current)
+      cameraBearingRef.current = (cameraBearingRef.current + diff * 0.4 + 360) % 360
+      setBearing(cameraBearingRef.current)
+      setMapBearing(is3DModeRef.current ? cameraBearingRef.current : 0)
+
+      if (compassNeedleRef.current) {
+        compassNeedleRef.current.style.transform = `rotate(${- (is3DModeRef.current ? cameraBearingRef.current : 0)}deg)`
+      }
+    }
+
     prevGpsPos.current = { lat, lng }
 
     if (isFollowingRef.current && mapRef.current) {
@@ -694,24 +794,27 @@ export default function NavigationPage() {
         })
       }
     }
-  }, [isSimulating, setLiveUserLocation])
+  }, [setLiveUserLocation])
 
   useEffect(() => {
-    if (!navigator.geolocation) return
+    if (typeof window === 'undefined' || !navigator.geolocation) return
 
-    navigator.geolocation.getCurrentPosition(handlePosition, () => {}, {
-      enableHighAccuracy: true,
-      timeout: 8000,
+    // Multi-tier fast initial fix
+    getCurrentLocation().then(loc => {
+      if (loc && isFinite(loc.lat) && isFinite(loc.lng) && !isSimulatingRef.current) {
+        handlePosition({ coords: { latitude: loc.lat, longitude: loc.lng, speed: null, heading: null } })
+      }
     })
 
-    watchRef.current = navigator.geolocation.watchPosition(handlePosition, () => {}, {
-      enableHighAccuracy: true,
-      maximumAge: 1500,
-      timeout: 10000,
+    const watchId = watchLocation((loc) => {
+      if (!isSimulatingRef.current) {
+        handlePosition({ coords: { latitude: loc.lat, longitude: loc.lng, speed: null, heading: null } })
+      }
     })
+    watchRef.current = watchId
 
     return () => {
-      if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current)
+      if (watchRef.current !== null) clearLocationWatch(watchRef.current)
       setLiveUserLocation(null)
     }
   }, [handlePosition, setLiveUserLocation])
@@ -825,17 +928,18 @@ export default function NavigationPage() {
           </Source>
 
           {/* 3D User Navigation Puck with Rotating Directional Arrow & Heading Beam */}
-          <Marker longitude={currentLng} latitude={currentLat} anchor="center">
+          <Marker ref={markerRef} longitude={currentLng} latitude={currentLat} anchor="center">
             <div className="relative flex items-center justify-center pointer-events-none" style={{ width: 84, height: 84 }}>
               {/* Pulsing radar glow */}
               <div className="absolute w-16 h-16 rounded-full bg-blue-500/25 animate-ping opacity-70" />
 
               {/* Rotating 3D Navigation Arrowhead (Points towards forward movement direction) */}
               <div
-                className="relative z-10 w-11 h-11 rounded-full bg-white shadow-[0_8px_24px_rgba(0,0,0,0.55)] border-[2.5px] border-blue-600 flex items-center justify-center"
+                ref={arrowIconRef}
+                className="relative z-10 w-11 h-11 rounded-full bg-white shadow-[0_8px_24px_rgba(0,0,0,0.55)] border-[2.5px] border-blue-600 flex items-center justify-center will-change-transform"
                 style={{
                   transform: `rotate(${continuousArrowAngle}deg)`,
-                  transition: 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
+                  transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                 }}
               >
                 <svg viewBox="0 0 24 24" className="w-6 h-6 drop-shadow-sm">
@@ -1044,10 +1148,11 @@ export default function NavigationPage() {
           </div>
 
           <div
-            className="relative w-8 h-8 flex items-center justify-center pointer-events-none"
+            ref={compassNeedleRef}
+            className="relative w-8 h-8 flex items-center justify-center pointer-events-none will-change-transform"
             style={{
               transform: `rotate(${-mapBearing}deg)`,
-              transition: 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
+              transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
           >
             <div className="absolute top-0.5 flex flex-col items-center">

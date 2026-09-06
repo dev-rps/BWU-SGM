@@ -12,6 +12,7 @@ export const WB_BOUNDS = {
 }
 
 export const DEFAULT_CENTER = [20.5937, 78.9629] // Geographic centre of India
+export const DEFAULT_BWU_CENTER = [22.7303, 88.4871] // Brainware University, Barasat (Default app anchor)
 export const DEFAULT_ZOOM = 5
 
 export const WB_NOMINATIM_PARAMS = {

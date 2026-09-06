@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { DEFAULT_CENTER } from '../constants'
+import { DEFAULT_CENTER, DEFAULT_BWU_CENTER } from '../constants'
+import { getInitialLocation, saveLastKnownLocation } from '../services/location'
 
 const loadSession = (key, fallback) => {
   try {
@@ -19,17 +20,38 @@ const saveSession = (key, val) => {
   } catch {}
 }
 
+const loadLocal = (key, fallback) => {
+  try {
+    if (typeof window === 'undefined') return fallback
+    const item = localStorage.getItem(key)
+    return item ? JSON.parse(item) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const saveLocal = (key, val) => {
+  try {
+    if (typeof window === 'undefined') return
+    if (val === null || val === undefined) localStorage.removeItem(key)
+    else localStorage.setItem(key, JSON.stringify(val))
+  } catch {}
+}
+
+const initialLoc = getInitialLocation()
+const initialSavedPerms = loadLocal('sg_permissions', {
+  location: false,
+  camera: false,
+  notifications: false,
+})
+
 export const useAppStore = create((set, get) => ({
   // Auth / flow
   hasOnboarded: false,
   isLoggedIn: false,
-  hasPermissions: false,
+  hasPermissions: initialSavedPerms?.location === true,
   isDemoMode: false,
-  permissions: {
-    location: false,
-    camera: false,
-    notifications: false,
-  },
+  permissions: initialSavedPerms,
   user: {
     name: '',
     email: '',
@@ -42,12 +64,13 @@ export const useAppStore = create((set, get) => ({
   setPrefs: (patch) => set((state) => ({ prefs: { ...state.prefs, ...patch } })),
 
   // Location
-  userLocation: {
-    lat: DEFAULT_CENTER[0],
-    lng: DEFAULT_CENTER[1],
-    simulated: true,
+  userLocation: initialLoc,
+  setUserLocation: (loc) => {
+    if (loc && !loc.simulated) {
+      saveLastKnownLocation(loc)
+    }
+    set({ userLocation: loc })
   },
-  setUserLocation: (loc) => set({ userLocation: loc }),
 
   startLocation: loadSession('sg_start_location', null),
   setStartLocation: (loc) => {
@@ -56,8 +79,8 @@ export const useAppStore = create((set, get) => ({
   },
 
   // Map
-  mapCenter: DEFAULT_CENTER,
-  mapZoom: 13,
+  mapCenter: [initialLoc.lat, initialLoc.lng],
+  mapZoom: initialLoc.simulated ? 13 : 15,
   setMapCenter: (center) => set({ mapCenter: center }),
 
   // Search / Route
@@ -120,8 +143,11 @@ export const useAppStore = create((set, get) => ({
   setHasOnboarded: (v) => set({ hasOnboarded: v }),
   setIsLoggedIn: (v) => set({ isLoggedIn: v }),
   setHasPermissions: (v) => set({ hasPermissions: v }),
-  setIsDemoMode: (v) => set({ isDemoMode: v }),
-  setPermission: (perm, val) => set((state) => ({ permissions: { ...state.permissions, [perm]: val } })),
+  setPermission: (perm, val) => set((state) => {
+    const updated = { ...state.permissions, [perm]: val }
+    saveLocal('sg_permissions', updated)
+    return { permissions: updated, hasPermissions: updated.location === true }
+  }),
   // Accepts either a full user object OR a partial patch — always merges
   setUser: (patch) => set((state) => ({ user: { ...state.user, ...(typeof patch === 'function' ? patch(state.user) : patch) } })),
 }))

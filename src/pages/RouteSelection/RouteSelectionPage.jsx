@@ -18,6 +18,7 @@ import L from 'leaflet'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
 import StartNavigationOverlay from '../../components/navigation/StartNavigationOverlay'
+import { getInitialLocation } from '../../services/location'
 import { GOOGLE_TILE_LEAFLET_URL, FALLBACK_TILE_LEAFLET_URL, mapProvider } from '../../services/mapProvider'
 import {
   getRoute, MODE_LABELS,
@@ -271,11 +272,12 @@ export default function RouteSelectionPage() {
     return deduplicateRoutes(withTraffic)
   }, [rawRoutes, nearbyPlaces, reports])
 
-  const rawStart = startLocation || userLocation || { lat: 22.5726, lng: 88.3639 }
+  const defLoc = getInitialLocation()
+  const rawStart = startLocation || userLocation || defLoc
   const startLoc = {
     ...rawStart,
-    lat: isFinite(parseFloat(rawStart?.lat)) ? parseFloat(rawStart.lat) : 22.5726,
-    lng: isFinite(parseFloat(rawStart?.lng ?? rawStart?.lon)) ? parseFloat(rawStart.lng ?? rawStart.lon) : 88.3639,
+    lat: isFinite(parseFloat(rawStart?.lat)) ? parseFloat(rawStart.lat) : defLoc.lat,
+    lng: isFinite(parseFloat(rawStart?.lng ?? rawStart?.lon)) ? parseFloat(rawStart.lng ?? rawStart.lon) : defLoc.lng,
   }
 
   const destLoc = destination && (destination.lat !== undefined && destination.lat !== null) ? {

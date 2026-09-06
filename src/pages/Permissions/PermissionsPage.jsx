@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
-import { DEFAULT_CENTER } from '../../constants'
+import { getCurrentLocation, getInitialLocation } from '../../services/location'
 
 const PERMS = [
   {
@@ -50,33 +50,37 @@ export default function PermissionsPage() {
 
   /* ── Permission Request Handlers ───────────────────────────────────────── */
 
-  const requestLocation = () =>
-    new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        setStatuses((s) => ({ ...s, location: 'unsupported' }))
-        setPermission('location', false)
-        resolve(false)
-        return
-      }
+  const requestLocation = async () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setStatuses((s) => ({ ...s, location: 'unsupported' }))
+      setPermission('location', false)
+      return false
+    }
 
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude: lat, longitude: lng, accuracy } = pos.coords
-          setUserLocation({ lat, lng, accuracy, simulated: false })
-          setPermission('location', true)
-          setStatuses((s) => ({ ...s, location: 'granted' }))
-          resolve(true)
-        },
-        (err) => {
-          console.warn('[Location Permission Error]', err.code, err.message)
-          setUserLocation({ lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1], simulated: true })
-          setPermission('location', false)
-          setStatuses((s) => ({ ...s, location: 'denied' }))
-          resolve(false)
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      )
-    })
+    setRequestingId('location')
+    try {
+      const loc = await getCurrentLocation()
+      if (loc && !loc.simulated) {
+        setUserLocation(loc)
+        setPermission('location', true)
+        setStatuses((s) => ({ ...s, location: 'granted' }))
+        return true
+      } else {
+        setUserLocation(loc || getInitialLocation())
+        setPermission('location', false)
+        setStatuses((s) => ({ ...s, location: 'denied' }))
+        return false
+      }
+    } catch (err) {
+      console.warn('[Location Permission Error]', err)
+      setUserLocation(getInitialLocation())
+      setPermission('location', false)
+      setStatuses((s) => ({ ...s, location: 'denied' }))
+      return false
+    } finally {
+      setRequestingId(null)
+    }
+  }
 
   const requestCamera = async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
