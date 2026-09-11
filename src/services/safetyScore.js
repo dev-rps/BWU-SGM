@@ -30,8 +30,8 @@
  */
 
 import { HAZARD_TYPES, SEVERITY_LEVELS } from '../constants/index.js'
-import { CRIME_SEVERITY_CONFIG, CRIME_ROUTE_PROXIMITY_METERS } from '../data/crimeHotspots.js'
-import { FLOOD_SEVERITY_CONFIG, FLOOD_ROUTE_PROXIMITY_METERS, isMonsoonSeason } from '../data/floodZones.js'
+import { CRIME_HOTSPOTS, CRIME_SEVERITY_CONFIG, CRIME_ROUTE_PROXIMITY_METERS } from '../data/crimeHotspots.js'
+import { FLOOD_ZONES_STATIC, FLOOD_SEVERITY_CONFIG, FLOOD_ROUTE_PROXIMITY_METERS, isMonsoonSeason } from '../data/floodZones.js'
 import { DISASTER_ZONES, DISASTER_SEVERITY_CONFIG, DISASTER_ROUTE_PROXIMITY_METERS } from '../data/disasterZones.js'
 import { ACCIDENT_BLACKSPOTS, ACCIDENT_SEVERITY_CONFIG, ACCIDENT_ROUTE_PROXIMITY_METERS } from '../data/accidentBlackspots.js'
 import { getRouteTrafficRegulations } from '../data/trafficRestrictions.js'
@@ -546,36 +546,64 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
 
     if (db?.items) {
       if (db.items.crime?.length) {
-        onRouteCrimes = db.items.crime.map((c, ci) => ({
-          id: `ml_c_${ci}`,
-          area: c.name,
-          _penalty: c.penalty,
-          _dist: c.distance_m || 250,
-        }))
+        onRouteCrimes = db.items.crime.map((c, ci) => {
+          const match = (route.onRouteCrimes || []).find(ec => ec.area === c.name || ec.name === c.name) ||
+            (CRIME_HOTSPOTS || []).find(ch => (ch.area || ch.name) === c.name) ||
+            (route.onRouteCrimes || [])[ci] || {}
+          return {
+            id: c.id || match.id || `ml_c_${ci}`,
+            area: c.name || match.area || 'Crime Caution Area',
+            lat: (match.lat != null && isFinite(match.lat)) ? parseFloat(match.lat) : null,
+            lng: (match.lng != null && isFinite(match.lng)) ? parseFloat(match.lng) : null,
+            _penalty: c.penalty,
+            _dist: c.distance_m || match._dist || 250,
+          }
+        })
       }
       if (db.items.flood?.length) {
-        onRouteFlood = db.items.flood.map((f, fi) => ({
-          id: `ml_f_${fi}`,
-          area: f.name,
-          _penalty: f.penalty,
-          _dist: f.distance_m || 300,
-        }))
+        onRouteFlood = db.items.flood.map((f, fi) => {
+          const match = (route.onRouteFlood || []).find(ef => ef.area === f.name || ef.name === f.name) ||
+            (FLOOD_ZONES_STATIC || []).find(fz => (fz.area || fz.name) === f.name) ||
+            (route.onRouteFlood || [])[fi] || {}
+          return {
+            id: f.id || match.id || `ml_f_${fi}`,
+            area: f.name || match.area || 'Flood Risk Area',
+            lat: (match.lat != null && isFinite(match.lat)) ? parseFloat(match.lat) : null,
+            lng: (match.lng != null && isFinite(match.lng)) ? parseFloat(match.lng) : null,
+            _penalty: f.penalty,
+            _dist: f.distance_m || match._dist || 300,
+          }
+        })
       }
       if (db.items.accident?.length) {
-        onRouteAccidents = db.items.accident.map((a, ai) => ({
-          id: `ml_a_${ai}`,
-          area: a.name,
-          _penalty: a.penalty,
-          _dist: a.distance_m || 200,
-        }))
+        onRouteAccidents = db.items.accident.map((a, ai) => {
+          const match = (route.onRouteAccidents || []).find(ea => ea.area === a.name || ea.name === a.name) ||
+            (ACCIDENT_BLACKSPOTS || []).find(ab => (ab.area || ab.name) === a.name) ||
+            (route.onRouteAccidents || [])[ai] || {}
+          return {
+            id: a.id || match.id || `ml_a_${ai}`,
+            area: a.name || match.area || 'Accident Blackspot',
+            lat: (match.lat != null && isFinite(match.lat)) ? parseFloat(match.lat) : null,
+            lng: (match.lng != null && isFinite(match.lng)) ? parseFloat(match.lng) : null,
+            _penalty: a.penalty,
+            _dist: a.distance_m || match._dist || 200,
+          }
+        })
       }
       if (db.items.disaster?.length) {
-        onRouteDisasters = db.items.disaster.map((d, di) => ({
-          id: `ml_d_${di}`,
-          area: d.name,
-          _penalty: d.penalty,
-          _dist: d.distance_m || 300,
-        }))
+        onRouteDisasters = db.items.disaster.map((d, di) => {
+          const match = (route.onRouteDisasters || []).find(ed => ed.area === d.name || ed.name === d.name) ||
+            (DISASTER_ZONES || []).find(dz => (dz.area || dz.name) === d.name) ||
+            (route.onRouteDisasters || [])[di] || {}
+          return {
+            id: d.id || match.id || `ml_d_${di}`,
+            area: d.name || match.area || 'Disaster Risk Area',
+            lat: (match.lat != null && isFinite(match.lat)) ? parseFloat(match.lat) : null,
+            lng: (match.lng != null && isFinite(match.lng)) ? parseFloat(match.lng) : null,
+            _penalty: d.penalty,
+            _dist: d.distance_m || match._dist || 300,
+          }
+        })
       }
     }
 
@@ -835,14 +863,18 @@ export function buildSafetySegments(geometry, reports = [], crimes = [], acciden
 
 // ─── Collision-aware map label anchor position ────────────────────────────────
 export function getRouteAnchorPoint(geometry, index, totalRoutes = 3) {
-  if (!geometry || geometry.length === 0) return [22.5726, 88.3639]
-  if (geometry.length === 1) return geometry[0]
+  if (!geometry || !Array.isArray(geometry) || geometry.length === 0) return [22.5726, 88.3639]
+  if (geometry.length === 1) {
+    const p0 = geometry[0]
+    return (Array.isArray(p0) && isFinite(p0[0]) && isFinite(p0[1])) ? [p0[0], p0[1]] : [22.5726, 88.3639]
+  }
 
   const fractions = [0.48, 0.32, 0.65]
   const frac = fractions[index % fractions.length] || 0.50
 
   const targetIdx = Math.floor((geometry.length - 1) * frac)
   const pt = geometry[targetIdx]
+  if (!pt || !Array.isArray(pt) || !isFinite(pt[0]) || !isFinite(pt[1])) return [22.5726, 88.3639]
 
   const offsetLat = (index === 1 ? 0.0018 : index === 2 ? -0.0018 : 0)
   const offsetLng = (index === 1 ? -0.0015 : index === 2 ? 0.0015 : 0)

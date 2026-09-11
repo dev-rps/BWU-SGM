@@ -18,7 +18,7 @@ import L from 'leaflet'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
 import StartNavigationOverlay from '../../components/navigation/StartNavigationOverlay'
-import { getInitialLocation } from '../../services/location'
+import { getInitialLocation, getCurrentLocation, watchLocation, clearLocationWatch } from '../../services/location'
 import { GOOGLE_TILE_LEAFLET_URL, FALLBACK_TILE_LEAFLET_URL, mapProvider } from '../../services/mapProvider'
 import {
   getRoute, MODE_LABELS,
@@ -205,6 +205,7 @@ export default function RouteSelectionPage() {
     userLocation, startLocation, destination, setRoutes,
     selectedRouteIdx, setSelectedRouteIdx,
     nearbyPlaces, reports, setIsNavigating,
+    setUserLocation, setStartLocation,
   } = useAppStore()
 
   const [loading,          setLoading]          = useState(false)
@@ -229,6 +230,40 @@ export default function RouteSelectionPage() {
   const [routeEnvData,     setRouteEnvData]     = useState({})
   const [isStartingNav,    setIsStartingNav]    = useState(false)
   const [tileUrl,          setTileUrl]          = useState(mapProvider.getStatus().tileUrl)
+
+  // ── Acquire Real Live GPS Location on Mount ───────────────────────────────
+  useEffect(() => {
+    let active = true
+    getCurrentLocation()
+      .then(loc => {
+        if (!active || !loc) return
+        if (isFinite(loc.lat) && isFinite(loc.lng)) {
+          setUserLocation(loc)
+          const curStart = useAppStore.getState().startLocation
+          if (!curStart || curStart.name === 'Current Location' || curStart.isCurrentLocation) {
+            setStartLocation({ ...loc, name: 'Current Location', isCurrentLocation: true })
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('[RouteSelection] GPS acquisition fallback:', err?.message || err)
+      })
+
+    const watchId = watchLocation(
+      (loc) => {
+        if (!active || !loc) return
+        if (isFinite(loc.lat) && isFinite(loc.lng)) {
+          setUserLocation(loc)
+        }
+      },
+      (err) => console.warn('[RouteSelection] Watch GPS error:', err?.message || err)
+    )
+
+    return () => {
+      active = false
+      if (watchId != null) clearLocationWatch(watchId)
+    }
+  }, [])
 
   // Subscribe to central map provider tile updates (Google Maps vs OSM fallback)
   useEffect(() => {
@@ -291,19 +326,20 @@ export default function RouteSelectionPage() {
     return deduplicateRoutes(withTraffic)
   }, [rawRoutes, nearbyPlaces, reports])
 
-  const defLoc = getInitialLocation()
+  const defLoc = getInitialLocation() || { lat: 22.7303, lng: 88.4871 }
   const rawStart = startLocation || userLocation || defLoc
   const startLoc = {
     ...rawStart,
-    lat: isFinite(parseFloat(rawStart?.lat)) ? parseFloat(rawStart.lat) : defLoc.lat,
-    lng: isFinite(parseFloat(rawStart?.lng ?? rawStart?.lon)) ? parseFloat(rawStart.lng ?? rawStart.lon) : defLoc.lng,
+    lat: isFinite(parseFloat(rawStart?.lat)) ? parseFloat(rawStart.lat) : (defLoc?.lat || 22.7303),
+    lng: isFinite(parseFloat(rawStart?.lng ?? rawStart?.lon)) ? parseFloat(rawStart.lng ?? rawStart.lon) : (defLoc?.lng || 88.4871),
   }
 
-  const destLoc = destination && (destination.lat !== undefined && destination.lat !== null) ? {
-    ...destination,
-    lat: isFinite(parseFloat(destination.lat)) ? parseFloat(destination.lat) : 22.5726,
-    lng: isFinite(parseFloat(destination.lng ?? destination.lon)) ? parseFloat(destination.lng ?? destination.lon) : 88.3639,
-  } : null
+  const rawDest = destination || { lat: 22.5726, lng: 88.3639, name: 'Howrah Railway Station' }
+  const destLoc = {
+    ...rawDest,
+    lat: isFinite(parseFloat(rawDest?.lat)) ? parseFloat(rawDest.lat) : 22.5726,
+    lng: isFinite(parseFloat(rawDest?.lng ?? rawDest?.lon)) ? parseFloat(rawDest.lng ?? rawDest.lon) : 88.3639,
+  }
 
   // ── Fetch Environmental & AQI Data per Route Midpoint (Linked with Medical Profile) ──
   useEffect(() => {
@@ -527,7 +563,7 @@ export default function RouteSelectionPage() {
       {/* ════════ MAP CANVAS (FULL SCREEN GOOGLE MAP TILES) ════════ */}
       <div className="absolute inset-0 z-0">
         <MapContainer
-          center={[startLoc.lat, startLoc.lng]}
+          center={[isFinite(startLoc?.lat) ? startLoc.lat : 22.7303, isFinite(startLoc?.lng) ? startLoc.lng : 88.4871]}
           zoom={14}
           style={{ height: '100%', width: '100%' }}
           zoomControl={false}
@@ -672,7 +708,7 @@ export default function RouteSelectionPage() {
           })}
 
           {/* ════════ ML BOTTLENECK DANGER MARKER (pulsing red) ════════ */}
-          {selectedRoute?.bottleneck?.lat && selectedRoute?.bottleneck?.lng && (
+          {selectedRoute?.bottleneck?.lat && selectedRoute?.bottleneck?.lng && isFinite(selectedRoute.bottleneck.lat) && isFinite(selectedRoute.bottleneck.lng) && (
             <Circle
               center={[selectedRoute.bottleneck.lat, selectedRoute.bottleneck.lng]}
               radius={60}
@@ -781,97 +817,111 @@ export default function RouteSelectionPage() {
                     lineJoin: 'round',
                   }}
                 />
-                {(selectedRoute.safetySegments || []).map((seg, sIdx) => (
-                  <Polyline
-                    key={`sel-seg-${selectedRouteIdx}-${sIdx}`}
-                    positions={seg.points}
-                    pathOptions={{
-                      color: seg.color,
-                      weight: 5.5,
-                      opacity: 0.95,
-                      lineCap: 'round',
-                      lineJoin: 'round',
-                    }}
-                  />
-                ))}
+                {(selectedRoute.safetySegments || []).map((seg, sIdx) => {
+                  const validPoints = (seg.points || []).filter(p => Array.isArray(p) && p.length >= 2 && isFinite(p[0]) && isFinite(p[1]))
+                  if (validPoints.length < 2) return null
+                  return (
+                    <Polyline
+                      key={`sel-seg-${selectedRouteIdx}-${sIdx}`}
+                      positions={validPoints}
+                      pathOptions={{
+                        color: seg.color,
+                        weight: 5.5,
+                        opacity: 0.95,
+                        lineCap: 'round',
+                        lineJoin: 'round',
+                      }}
+                    />
+                  )
+                })}
 
                 {/* On-Route Accident Blackspot Overlap Markers */}
-                {(selectedRoute?.onRouteAccidents || []).map((acc, ai) => (
-                  <Marker
-                    key={`acc-overlap-${acc.id || ai}`}
-                    position={[acc.lat, acc.lng]}
-                    icon={L.divIcon({
-                      className: 'hazard-overlap-marker',
-                      html: `<div style="
-                        background: #B91C1C;
-                        color: white;
-                        border: 2px solid white;
-                        border-radius: 9999px;
-                        padding: 3px 8px;
-                        font-size: 8.5px;
-                        font-weight: 900;
-                        box-shadow: 0 4px 14px rgba(185,28,28,0.6);
-                        display: flex;
-                        align-items: center;
-                        gap: 3px;
-                        white-space: nowrap;
-                      ">
-                        <span>🚗</span>
-                        <span>${acc.area || 'Accident Blackspot'}</span>
-                      </div>`,
-                      iconSize: [125, 22],
-                      iconAnchor: [62, 11],
-                    })}
-                  >
-                    <Popup>
-                      <div style={{ minWidth: 175 }}>
-                        <p style={{ fontWeight: 900, fontSize: 11, color: '#B91C1C' }}>⚠️ Active Route Overlap</p>
-                        <p style={{ fontSize: 10, fontWeight: 800, color: '#1e293b', marginTop: 2 }}>{acc.area || acc.title || 'Accident Blackspot'}</p>
-                        <p style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Distance to route: {acc._dist}m · Penalty: -{acc._penalty} pts</p>
-                        <p style={{ fontSize: 8.5, color: '#64748b', marginTop: 2 }}>High-risk collision zone · Maintain safe distance</p>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
+                {(selectedRoute?.onRouteAccidents || []).map((acc, ai) => {
+                  const lat = parseFloat(acc.lat ?? acc.latitude)
+                  const lng = parseFloat(acc.lng ?? acc.longitude ?? acc.lon)
+                  if (!isFinite(lat) || !isFinite(lng)) return null
+                  return (
+                    <Marker
+                      key={`acc-overlap-${acc.id || ai}`}
+                      position={[lat, lng]}
+                      icon={L.divIcon({
+                        className: 'hazard-overlap-marker',
+                        html: `<div style="
+                          background: #B91C1C;
+                          color: white;
+                          border: 2px solid white;
+                          border-radius: 9999px;
+                          padding: 3px 8px;
+                          font-size: 8.5px;
+                          font-weight: 900;
+                          box-shadow: 0 4px 14px rgba(185,28,28,0.6);
+                          display: flex;
+                          align-items: center;
+                          gap: 3px;
+                          white-space: nowrap;
+                        ">
+                          <span>🚗</span>
+                          <span>${acc.area || 'Accident Blackspot'}</span>
+                        </div>`,
+                        iconSize: [125, 22],
+                        iconAnchor: [62, 11],
+                      })}
+                    >
+                      <Popup>
+                        <div style={{ minWidth: 175 }}>
+                          <p style={{ fontWeight: 900, fontSize: 11, color: '#B91C1C' }}>⚠️ Active Route Overlap</p>
+                          <p style={{ fontSize: 10, fontWeight: 800, color: '#1e293b', marginTop: 2 }}>{acc.area || acc.title || 'Accident Blackspot'}</p>
+                          <p style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Distance to route: {acc._dist}m · Penalty: -{acc._penalty} pts</p>
+                          <p style={{ fontSize: 8.5, color: '#64748b', marginTop: 2 }}>High-risk collision zone · Maintain safe distance</p>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  )
+                })}
 
                 {/* On-Route Crime Hotspot Overlap Markers */}
-                {(selectedRoute?.onRouteCrimes || []).map((crime, ci) => (
-                  <Marker
-                    key={`crime-overlap-${crime.id || ci}`}
-                    position={[crime.lat, crime.lng]}
-                    icon={L.divIcon({
-                      className: 'crime-overlap-marker',
-                      html: `<div style="
-                        background: #E11D48;
-                        color: white;
-                        border: 2px solid white;
-                        border-radius: 9999px;
-                        padding: 3px 8px;
-                        font-size: 8.5px;
-                        font-weight: 900;
-                        box-shadow: 0 4px 14px rgba(225,29,72,0.6);
-                        display: flex;
-                        align-items: center;
-                        gap: 3px;
-                        white-space: nowrap;
-                      ">
-                        <span>🚨</span>
-                        <span>${crime.area || 'Crime Hotspot'}</span>
-                      </div>`,
-                      iconSize: [125, 22],
-                      iconAnchor: [62, 11],
-                    })}
-                  >
-                    <Popup>
-                      <div style={{ minWidth: 175 }}>
-                        <p style={{ fontWeight: 900, fontSize: 11, color: '#E11D48' }}>🚨 Active Route Overlap</p>
-                        <p style={{ fontSize: 10, fontWeight: 800, color: '#1e293b', marginTop: 2 }}>{crime.area || crime.title || 'Crime Caution Area'}</p>
-                        <p style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Distance to route: {crime._dist}m · Penalty: -{crime._penalty} pts</p>
-                        <p style={{ fontSize: 8.5, color: '#64748b', marginTop: 2 }}>Low light or theft risk · Stay on primary lanes</p>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
+                {(selectedRoute?.onRouteCrimes || []).map((crime, ci) => {
+                  const lat = parseFloat(crime.lat ?? crime.latitude)
+                  const lng = parseFloat(crime.lng ?? crime.longitude ?? crime.lon)
+                  if (!isFinite(lat) || !isFinite(lng)) return null
+                  return (
+                    <Marker
+                      key={`crime-overlap-${crime.id || ci}`}
+                      position={[lat, lng]}
+                      icon={L.divIcon({
+                        className: 'crime-overlap-marker',
+                        html: `<div style="
+                          background: #E11D48;
+                          color: white;
+                          border: 2px solid white;
+                          border-radius: 9999px;
+                          padding: 3px 8px;
+                          font-size: 8.5px;
+                          font-weight: 900;
+                          box-shadow: 0 4px 14px rgba(225,29,72,0.6);
+                          display: flex;
+                          align-items: center;
+                          gap: 3px;
+                          white-space: nowrap;
+                        ">
+                          <span>🚨</span>
+                          <span>${crime.area || 'Crime Hotspot'}</span>
+                        </div>`,
+                        iconSize: [125, 22],
+                        iconAnchor: [62, 11],
+                      })}
+                    >
+                      <Popup>
+                        <div style={{ minWidth: 175 }}>
+                          <p style={{ fontWeight: 900, fontSize: 11, color: '#E11D48' }}>🚨 Active Route Overlap</p>
+                          <p style={{ fontSize: 10, fontWeight: 800, color: '#1e293b', marginTop: 2 }}>{crime.area || crime.title || 'Crime Caution Area'}</p>
+                          <p style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Distance to route: {crime._dist}m · Penalty: -{crime._penalty} pts</p>
+                          <p style={{ fontSize: 8.5, color: '#64748b', marginTop: 2 }}>Low light or theft risk · Stay on primary lanes</p>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  )
+                })}
               </Fragment>
             )
           })()}
@@ -879,6 +929,7 @@ export default function RouteSelectionPage() {
           {/* 3. Floating Interactive Route Map Badges */}
           {displayedRoutes.map((route, idx) => {
             const anchor = getRouteAnchorPoint(route.geometry, idx, displayedRoutes.length)
+            if (!anchor || !Array.isArray(anchor) || !isFinite(anchor[0]) || !isFinite(anchor[1])) return null
             const isSelected = idx === selectedRouteIdx
             return (
               <Marker
