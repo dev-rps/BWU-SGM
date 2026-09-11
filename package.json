@@ -12,8 +12,8 @@
   "dependencies": {
     "@google/genai": "^2.17.1",
     "@mapbox/polyline": "^1.2.1",
+    "@supabase/supabase-js": "^2.116.0",
     "@tailwindcss/vite": "^4.3.3",
-    "firebase": "^12.17.0",
     "leaflet": "^1.9.4",
     "maplibre-gl": "^6.7.0",
     "react": "^19.2.7",
