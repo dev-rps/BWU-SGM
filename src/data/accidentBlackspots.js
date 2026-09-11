@@ -350,7 +350,7 @@ export const ACCIDENT_BLACKSPOTS = [
     penalty: 2,
   },
   {
-    id: 'acc_nh19_04',
+    id: 'acc_nh19_06',
     lat: 23.2500, lng: 87.8500,
     area: 'Bardhaman Renaissance & Nawabhat Bypass Crossing, NH-19',
     type: 'high_speed_junction',

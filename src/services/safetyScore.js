@@ -30,10 +30,10 @@
  */
 
 import { HAZARD_TYPES, SEVERITY_LEVELS } from '../constants/index.js'
-import { CRIME_SEVERITY_CONFIG, CRIME_ROUTE_PROXIMITY_METERS } from '../data/crimeHotspots'
-import { FLOOD_SEVERITY_CONFIG, FLOOD_ROUTE_PROXIMITY_METERS, isMonsoonSeason } from '../data/floodZones'
-import { DISASTER_ZONES, DISASTER_SEVERITY_CONFIG, DISASTER_ROUTE_PROXIMITY_METERS } from '../data/disasterZones'
-import { ACCIDENT_BLACKSPOTS, ACCIDENT_SEVERITY_CONFIG, ACCIDENT_ROUTE_PROXIMITY_METERS } from '../data/accidentBlackspots'
+import { CRIME_SEVERITY_CONFIG, CRIME_ROUTE_PROXIMITY_METERS } from '../data/crimeHotspots.js'
+import { FLOOD_SEVERITY_CONFIG, FLOOD_ROUTE_PROXIMITY_METERS, isMonsoonSeason } from '../data/floodZones.js'
+import { DISASTER_ZONES, DISASTER_SEVERITY_CONFIG, DISASTER_ROUTE_PROXIMITY_METERS } from '../data/disasterZones.js'
+import { ACCIDENT_BLACKSPOTS, ACCIDENT_SEVERITY_CONFIG, ACCIDENT_ROUTE_PROXIMITY_METERS } from '../data/accidentBlackspots.js'
 import { getRouteTrafficRegulations } from '../data/trafficRestrictions.js'
 
 const HAZARD_MAP = Object.fromEntries((HAZARD_TYPES || []).map(h => [h.id, h]))
@@ -48,12 +48,48 @@ export function safeNum(val, fallback = 0) {
   return fallback
 }
 
+/**
+ * Proportionally scales individual hazard items so that sum(items._penalty) === categoryTotal EXACTLY.
+ * Eliminates mathematical discrepancies in the UI.
+ */
+export function scaleItemsToCategoryTotal(items, categoryTotal) {
+  if (!items || !items.length || categoryTotal <= 0) return []
+  const rawWeights = {}
+  items.forEach((item, idx) => {
+    rawWeights[idx] = Math.max(1, safeNum(item._penalty, 1))
+  })
+  const rawSum = Object.values(rawWeights).reduce((a, b) => a + b, 0)
+  if (rawSum <= 0) {
+    return items.map((it, idx) => ({ ...it, _penalty: idx === 0 ? categoryTotal : 0 }))
+  }
+
+  const floats = {}
+  const ints = {}
+  let intSum = 0
+  items.forEach((_, idx) => {
+    const f = (rawWeights[idx] / rawSum) * categoryTotal
+    floats[idx] = f
+    ints[idx] = Math.floor(f)
+    intSum += ints[idx]
+  })
+
+  const rem = categoryTotal - intSum
+  const sortedIdxs = Object.keys(rawWeights).sort((a, b) => (floats[b] - ints[b]) - (floats[a] - ints[a]))
+  for (let i = 0; i < rem; i++) {
+    ints[sortedIdxs[i % sortedIdxs.length]] += 1
+  }
+
+  return items
+    .map((item, idx) => ({ ...item, _penalty: ints[idx] || 0 }))
+    .filter(item => item._penalty > 0)
+}
+
 // ─── Config ─────────────────────────────────────────────────────────────────────────
 const BASE_SCORE              = 100 // Routes start at base 100; every deduction point is accounted for
 const REPORT_PROXIMITY_METERS = 250 // Live community reports within 250m of a route affect it
 const REPORT_MAX_AGE_HOURS    = 72  // Consider reports from last 72 hours
 const MIN_SCORE               = 10  // Floor — route score never goes below 10
-const MAX_SCORE               = 98  // Ceiling (reserve 100 for theoretical perfection)
+const MAX_SCORE               = 100 // Ceiling (100 - sum(deductions) === safetyScore)
 const MONSOON_FLOOD_MULTIPLIER = 1.4 // Flood penalty 40% higher during June-October
 
 
@@ -210,9 +246,9 @@ export function calculateRouteSafetyScores(
     const onRouteDisasters = []
     const onRouteAccidents = []
 
-    // ── (A) Live community hazard report penalties ───────────────────────────────
+    // ── (A) Live community hazard report penalties (cap: 6) ───────────────────
     let totalReportPenalty = 0
-    const REPORT_PENALTY_CAP = 35
+    const REPORT_PENALTY_CAP = 6
     active.forEach(r => {
       const lat = parseFloat(r.latitude ?? r.lat ?? r.location?.latitude ?? r.location?.lat)
       const lng = parseFloat(r.longitude ?? r.lng ?? r.location?.longitude ?? r.location?.lng)
@@ -220,7 +256,7 @@ export function calculateRouteSafetyScores(
 
       const dist = minDistanceToPolyline(lat, lng, geometry)
       if (dist <= REPORT_PROXIMITY_METERS) {
-        const penalty = calcPenalty(r)
+        const penalty = Math.min(3, Math.max(1, Math.round(calcPenalty(r) * 0.4)))
         totalReportPenalty = Math.min(totalReportPenalty + penalty, REPORT_PENALTY_CAP)
         const snapPt  = nearestPolylinePoint(lat, lng, geometry)
         onRouteReports.push({
@@ -232,10 +268,11 @@ export function calculateRouteSafetyScores(
         })
       }
     })
+    const scaledReports = scaleItemsToCategoryTotal(onRouteReports, totalReportPenalty)
 
-    // ── (B) Historical crime hotspot penalties with distance decay ─────────────
+    // ── (B) Historical crime hotspot penalties with distance decay (cap: 7) ─────
     let totalCrimePenalty = 0
-    const CRIME_PENALTY_CAP = 22
+    const CRIME_PENALTY_CAP = 7
     const isNight = (() => { const h = new Date().getHours(); return h < 6 || h >= 20 })()
 
     crimeHotspots.forEach(hotspot => {
@@ -243,65 +280,69 @@ export function calculateRouteSafetyScores(
       const radius = Math.max(hotspot.radius || 350, 350)
       if (dist <= radius) {
         const cfg = CRIME_SEVERITY_CONFIG[hotspot.severity] || CRIME_SEVERITY_CONFIG.low
-        const base = cfg.penalty || 10
+        const base = 3.5
         const decay = Math.max(0.35, 1 - (dist / radius))
         const penalty = Math.max(1, Math.round(base * decay * (isNight ? 1.3 : 1.0)))
         totalCrimePenalty = Math.min(totalCrimePenalty + penalty, CRIME_PENALTY_CAP)
         onRouteCrimes.push({ ...hotspot, _penalty: penalty, _dist: Math.round(dist) })
       }
     })
+    const scaledCrimes = scaleItemsToCategoryTotal(onRouteCrimes, totalCrimePenalty)
 
-    // ── (C) Flood zone penalties with distance decay ───────────────────────────
+    // ── (C) Flood zone penalties with distance decay (cap: 5) ─────────────────
     const monsoon = isMonsoonSeason()
     let totalFloodPenalty = 0
-    const FLOOD_PENALTY_CAP = 18
+    const FLOOD_PENALTY_CAP = 5
 
     floodZones.forEach(zone => {
       const dist = minDistanceToPolyline(zone.lat, zone.lng, geometry)
       const radius = Math.max(zone.radius || 400, 350)
       if (dist <= radius) {
         const cfg = FLOOD_SEVERITY_CONFIG[zone.severity] || FLOOD_SEVERITY_CONFIG.low
-        const base = cfg.penalty || 8
+        const base = 3.0
         const decay = Math.max(0.35, 1 - (dist / radius))
-        const penalty = Math.max(1, Math.round(base * decay * (monsoon && zone.monsoonRisk ? MONSOON_FLOOD_MULTIPLIER : 1.0)))
+        const penalty = Math.max(1, Math.round(base * decay * (monsoon && zone.monsoonRisk ? 1.3 : 1.0)))
         totalFloodPenalty = Math.min(totalFloodPenalty + penalty, FLOOD_PENALTY_CAP)
         onRouteFlood.push({ ...zone, _penalty: penalty, _dist: Math.round(dist) })
       }
     })
+    const scaledFlood = scaleItemsToCategoryTotal(onRouteFlood, totalFloodPenalty)
 
-    // ── (D) Disaster Zone penalties with distance decay ────────────────────────
+    // ── (D) Disaster Zone penalties with distance decay (cap: 4) ──────────────
     let totalDisasterPenalty = 0
-    const DISASTER_PENALTY_CAP = 12
+    const DISASTER_PENALTY_CAP = 4
 
     disasterZones.forEach(dz => {
       const dist = minDistanceToPolyline(dz.lat, dz.lng, geometry)
       const radius = Math.max(dz.radius || 300, 300)
       if (dist <= radius) {
         const cfg = DISASTER_SEVERITY_CONFIG[dz.severity] || DISASTER_SEVERITY_CONFIG.medium
-        const base = cfg.penalty || 6
+        const base = 2.5
         const decay = Math.max(0.35, 1 - (dist / radius))
         const penalty = Math.max(1, Math.round(base * decay))
         totalDisasterPenalty = Math.min(totalDisasterPenalty + penalty, DISASTER_PENALTY_CAP)
         onRouteDisasters.push({ ...dz, _penalty: penalty, _dist: Math.round(dist) })
       }
     })
+    const scaledDisasters = scaleItemsToCategoryTotal(onRouteDisasters, totalDisasterPenalty)
 
-    // ── (E) Accident Blackspot penalties with distance decay ───────────────────
+    // ── (E) Accident Blackspot penalties with distance decay (cap: 4) ─────────
     let totalAccidentPenalty = 0
-    const ACCIDENT_PENALTY_CAP = 12
+    const ACCIDENT_PENALTY_CAP = 4
 
     accidentZones.forEach(acc => {
       const dist = minDistanceToPolyline(acc.lat, acc.lng, geometry)
       const radius = Math.max(acc.radius || 250, 300)
       if (dist <= radius) {
         const cfg = ACCIDENT_SEVERITY_CONFIG[acc.severity] || ACCIDENT_SEVERITY_CONFIG.medium
-        const base = cfg.penalty || 6
+        const base = 2.5
         const decay = Math.max(0.35, 1 - (dist / radius))
         const penalty = Math.max(1, Math.round(base * decay))
         totalAccidentPenalty = Math.min(totalAccidentPenalty + penalty, ACCIDENT_PENALTY_CAP)
         onRouteAccidents.push({ ...acc, _penalty: penalty, _dist: Math.round(dist) })
       }
     })
+    const scaledAccidents = scaleItemsToCategoryTotal(onRouteAccidents, totalAccidentPenalty)
 
     // ── (F) Corridor Road Type & Infrastructure Caution ────────────────────────
     const viaLower = ((route.viaRoads || '') + ' ' + (route.summary || '')).toLowerCase()
@@ -310,15 +351,71 @@ export function calculateRouteSafetyScores(
 
     let roadInfraPenalty = 0
     let roadInfraNote = ''
-    if (isArterialExpress) {
-      roadInfraPenalty = 0
-      roadInfraNote = 'Dual carriageway with high lighting & surveillance'
-    } else if (isDenseNarrowCore) {
-      roadInfraPenalty = 4
-      roadInfraNote = 'Dense urban market corridor with narrow carriageway'
+    if (route.mode === 'walking' || route.mode === 'cycling') {
+      const isResidential = viaLower.includes('residential') || viaLower.includes('colony') || viaLower.includes('quiet') || viaLower.includes('greenway')
+      const isConnector = viaLower.includes('connector') || viaLower.includes('by-lane') || viaLower.includes('secondary')
+      if (isResidential) {
+        roadInfraPenalty = 0
+        roadInfraNote = 'Quiet residential street with minimal vehicular conflict'
+      } else if (isConnector) {
+        roadInfraPenalty = 1
+        roadInfraNote = 'Neighborhood connector with low-speed local traffic'
+      } else if (isArterialExpress) {
+        roadInfraPenalty = 2
+        roadInfraNote = 'High-speed motor corridor; use designated sidewalk/crossing'
+      } else {
+        roadInfraPenalty = 1
+        roadInfraNote = 'Mixed urban street profile'
+      }
     } else {
-      roadInfraPenalty = 2
-      roadInfraNote = 'Secondary municipal connector road'
+      if (isArterialExpress) {
+        roadInfraPenalty = 0
+        roadInfraNote = 'Dual carriageway with high lighting & surveillance'
+      } else if (isDenseNarrowCore) {
+        roadInfraPenalty = 3
+        roadInfraNote = 'Dense urban market corridor with narrow carriageway'
+      } else {
+        roadInfraPenalty = 1
+        roadInfraNote = 'Secondary municipal connector road'
+      }
+    }
+
+    const crimeOverlapCount = scaledCrimes.length
+    const accidentOverlapCount = scaledAccidents.length
+    const totalHazardOverlaps = crimeOverlapCount + accidentOverlapCount
+    const hasOverlap = totalHazardOverlaps > 0
+
+    let overlapSummary = ''
+    if (totalHazardOverlaps === 0) {
+      overlapSummary = '🛡️ Zero Crime or Accident Overlaps (Safest Corridor)'
+    } else if (accidentOverlapCount > 0 && crimeOverlapCount > 0) {
+      overlapSummary = `⚠️ Overlaps ${accidentOverlapCount} Accident & ${crimeOverlapCount} Crime Zone${totalHazardOverlaps > 1 ? 's' : ''}`
+    } else if (accidentOverlapCount > 0) {
+      const topAcc = scaledAccidents[0]
+      overlapSummary = `⚠️ Overlaps ${accidentOverlapCount} Accident Blackspot (${topAcc.area || topAcc.title || 'High Collision Zone'})`
+    } else {
+      const topCrime = scaledCrimes[0]
+      overlapSummary = `🚨 Overlaps ${crimeOverlapCount} Crime Hotspot (${topCrime.area || topCrime.title || 'Caution Area'})`
+    }
+
+    const overlapAnalysis = {
+      hasOverlap,
+      totalHazardOverlaps,
+      crimeOverlapCount,
+      accidentOverlapCount,
+      crimeZones: scaledCrimes.map(c => ({
+        name: c.area || c.title || 'Crime Hotspot',
+        dist: c._dist,
+        severity: c.severity,
+        penalty: c._penalty,
+      })),
+      accidentZones: scaledAccidents.map(a => ({
+        name: a.area || a.title || 'Accident Blackspot',
+        dist: a._dist,
+        severity: a.severity,
+        penalty: a._penalty,
+      })),
+      summary: overlapSummary,
     }
 
     // Mathematical identity: Score = 100 - sum(Deductions)
@@ -328,11 +425,11 @@ export function calculateRouteSafetyScores(
     return {
       ...route,
       safetyScore:       score,
-      onRouteReports,
-      onRouteCrimes,
-      onRouteFlood,
-      onRouteDisasters,
-      onRouteAccidents,
+      onRouteReports:    scaledReports,
+      onRouteCrimes:     scaledCrimes,
+      onRouteFlood:      scaledFlood,
+      onRouteDisasters:  scaledDisasters,
+      onRouteAccidents:  scaledAccidents,
       reportPenalty:     totalReportPenalty,
       crimePenalty:      totalCrimePenalty,
       floodPenalty:      totalFloodPenalty,
@@ -340,6 +437,10 @@ export function calculateRouteSafetyScores(
       accidentPenalty:   totalAccidentPenalty,
       roadInfraPenalty,
       roadInfraNote,
+      crimeOverlapCount,
+      accidentOverlapCount,
+      totalHazardOverlaps,
+      overlapAnalysis,
     }
   })
 
@@ -375,19 +476,23 @@ export function calculateRouteSafetyScores(
       tradeOffText = `+${timeDiffMin} min vs fastest`
     }
 
-    const safetySegments = buildSafetySegments(route.geometry, route.onRouteReports, route.onRouteCrimes)
+    const safetySegments = buildSafetySegments(route.geometry, route.onRouteReports, route.onRouteCrimes, route.onRouteAccidents)
     const trafficRegulation = getRouteTrafficRegulations(route)
 
     return {
       ...route,
-      rankLabel:     cfg.label,
-      rankColor:     cfg.color,
-      isRecommended: isRec,
-      recommended:   isRec,
+      rankLabel:            cfg.label,
+      rankColor:            cfg.color,
+      isRecommended:        isRec,
+      recommended:          isRec,
       timeDiffMin,
       tradeOffText,
       safetySegments,
       trafficRegulation,
+      crimeOverlapCount:    route.crimeOverlapCount || 0,
+      accidentOverlapCount: route.accidentOverlapCount || 0,
+      totalHazardOverlaps:  route.totalHazardOverlaps || 0,
+      overlapAnalysis:      route.overlapAnalysis || null,
     }
   })
 
@@ -422,6 +527,58 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
     const mlScore       = Math.max(MIN_SCORE, Math.min(MAX_SCORE, Math.round(ml.safety_score)))
     const customReasons = Array.isArray(ml.reasons) ? ml.reasons : []
 
+    // Extract deduction breakdown from ML prediction
+    const db = ml.deduction_breakdown || ml.point_deductions || null
+
+    let crimePenalty    = db?.categories?.crime       !== undefined ? db.categories.crime       : safeNum(route.crimePenalty, 0)
+    let floodPenalty    = db?.categories?.flood       !== undefined ? db.categories.flood       : safeNum(route.floodPenalty, 0)
+    let accidentPenalty = db?.categories?.accident    !== undefined ? db.categories.accident    : safeNum(route.accidentPenalty, 0)
+    let disasterPenalty = db?.categories?.disaster    !== undefined ? db.categories.disaster    : safeNum(route.disasterPenalty, 0)
+    let roadInfraPenalty= db?.categories?.road_infra  !== undefined ? db.categories.road_infra  : safeNum(route.roadInfraPenalty, 0)
+    let trafficPenalty  = db?.categories?.traffic     !== undefined ? db.categories.traffic     : safeNum(route.trafficPenalty, 0)
+    let envPenalty      = db?.categories?.env         !== undefined ? db.categories.env         : safeNum(route.envPenalty, 0)
+    let reportPenalty   = safeNum(route.reportPenalty, 0)
+
+    let onRouteCrimes    = route.onRouteCrimes    || []
+    let onRouteFlood     = route.onRouteFlood     || []
+    let onRouteAccidents = route.onRouteAccidents || []
+    let onRouteDisasters = route.onRouteDisasters || []
+
+    if (db?.items) {
+      if (db.items.crime?.length) {
+        onRouteCrimes = db.items.crime.map((c, ci) => ({
+          id: `ml_c_${ci}`,
+          area: c.name,
+          _penalty: c.penalty,
+          _dist: c.distance_m || 250,
+        }))
+      }
+      if (db.items.flood?.length) {
+        onRouteFlood = db.items.flood.map((f, fi) => ({
+          id: `ml_f_${fi}`,
+          area: f.name,
+          _penalty: f.penalty,
+          _dist: f.distance_m || 300,
+        }))
+      }
+      if (db.items.accident?.length) {
+        onRouteAccidents = db.items.accident.map((a, ai) => ({
+          id: `ml_a_${ai}`,
+          area: a.name,
+          _penalty: a.penalty,
+          _dist: a.distance_m || 200,
+        }))
+      }
+      if (db.items.disaster?.length) {
+        onRouteDisasters = db.items.disaster.map((d, di) => ({
+          id: `ml_d_${di}`,
+          area: d.name,
+          _penalty: d.penalty,
+          _dist: d.distance_m || 300,
+        }))
+      }
+    }
+
     // Extract live data context from ML response (server-fetched)
     const liveSources  = ml.live_data_sources || {}
     const mlAqiPm25    = liveSources.pm25    ?? null
@@ -431,6 +588,44 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
     // Extract road/infra context from bottleneck segment features
     const btk         = ml.bottleneck || {}
     const segments    = ml.segments   || []
+
+    const crimeOverlapCount = onRouteCrimes.length
+    const accidentOverlapCount = onRouteAccidents.length
+    const totalHazardOverlaps = crimeOverlapCount + accidentOverlapCount
+    const hasOverlap = totalHazardOverlaps > 0
+
+    let overlapSummary = ''
+    if (totalHazardOverlaps === 0) {
+      overlapSummary = '🛡️ Zero Crime or Accident Overlaps (Safest Corridor)'
+    } else if (accidentOverlapCount > 0 && crimeOverlapCount > 0) {
+      overlapSummary = `⚠️ Overlaps ${accidentOverlapCount} Accident & ${crimeOverlapCount} Crime Zone${totalHazardOverlaps > 1 ? 's' : ''}`
+    } else if (accidentOverlapCount > 0) {
+      const topAcc = onRouteAccidents[0]
+      overlapSummary = `⚠️ Overlaps ${accidentOverlapCount} Accident Blackspot (${topAcc.area || topAcc.title || 'High Collision Zone'})`
+    } else {
+      const topCrime = onRouteCrimes[0]
+      overlapSummary = `🚨 Overlaps ${crimeOverlapCount} Crime Hotspot (${topCrime.area || topCrime.title || 'Caution Area'})`
+    }
+
+    const overlapAnalysis = {
+      hasOverlap,
+      totalHazardOverlaps,
+      crimeOverlapCount,
+      accidentOverlapCount,
+      crimeZones: onRouteCrimes.map(c => ({
+        name: c.area || c.title || 'Crime Hotspot',
+        dist: c._dist,
+        severity: c.severity,
+        penalty: c._penalty,
+      })),
+      accidentZones: onRouteAccidents.map(a => ({
+        name: a.area || a.title || 'Accident Blackspot',
+        dist: a._dist,
+        severity: a.severity,
+        penalty: a._penalty,
+      })),
+      summary: overlapSummary,
+    }
 
     return {
       ...route,
@@ -444,6 +639,23 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
       mlReasons:        customReasons,
       mlSegments:       segments,
       mlEvaluated:      true,
+      deductionBreakdown: db,
+      crimePenalty,
+      floodPenalty,
+      accidentPenalty,
+      disasterPenalty,
+      roadInfraPenalty,
+      trafficPenalty,
+      envPenalty,
+      reportPenalty,
+      onRouteCrimes,
+      onRouteFlood,
+      onRouteAccidents,
+      onRouteDisasters,
+      crimeOverlapCount,
+      accidentOverlapCount,
+      totalHazardOverlaps,
+      overlapAnalysis,
       // Live data from server-side enrichment
       mlAqiPm25,
       mlWeatherCode,
@@ -458,8 +670,8 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
   // Strict dynamic differentiation if ML regressor produced identical scores
   for (let i = 1; i < sorted.length; i++) {
     if (sorted[i].safetyScore >= sorted[i - 1].safetyScore) {
-      const gap = (sorted[i].safetyScore - sorted[i - 1].safetyScore) + 3
-      sorted[i].safetyScore = Math.max(MIN_SCORE, sorted[i - 1].safetyScore - 3)
+      const gap = (sorted[i].safetyScore - sorted[i - 1].safetyScore) + 2
+      sorted[i].safetyScore = Math.max(MIN_SCORE, sorted[i - 1].safetyScore - 2)
       sorted[i].roadInfraPenalty = (sorted[i].roadInfraPenalty || 0) + gap
       if (sorted[i].mlSafetyScore) {
         sorted[i].mlSafetyScore = sorted[i].safetyScore
@@ -467,7 +679,7 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
     }
   }
 
-  // Synchronize deduction breakdown so sum(deductions) === 100 - safetyScore
+  // Synchronize deduction breakdown so sum(deductions) === 100 - safetyScore ALWAYS holds
   sorted.forEach(route => {
     const targetDeduction = 100 - (route.safetyScore || 75)
     const existingDeductions =
@@ -477,10 +689,13 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
       safeNum(route.accidentPenalty, 0) +
       safeNum(route.trafficPenalty, 0) +
       safeNum(route.envPenalty, 0) +
-      safeNum(route.reportPenalty, 0)
+      safeNum(route.reportPenalty, 0) +
+      safeNum(route.roadInfraPenalty, 0)
 
     const diff = targetDeduction - existingDeductions
-    route.roadInfraPenalty = Math.max(0, diff)
+    if (diff !== 0) {
+      route.roadInfraPenalty = Math.max(0, safeNum(route.roadInfraPenalty, 0) + diff)
+    }
     if (!route.roadInfraNote) {
       route.roadInfraNote = 'ML safety risk: road infrastructure & intersection density'
     }
@@ -498,19 +713,23 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
 
     const safetySegments = route.mlSegments && route.mlSegments.length > 0
       ? route.mlSegments
-      : buildSafetySegments(route.geometry, route.onRouteReports, route.onRouteCrimes)
+      : buildSafetySegments(route.geometry, route.onRouteReports, route.onRouteCrimes, route.onRouteAccidents)
     const trafficRegulation = route.trafficRegulation || getRouteTrafficRegulations(route)
 
     return {
       ...route,
-      rankLabel:     cfg.label,
-      rankColor:     cfg.color,
-      isRecommended: isRec,
-      recommended:   isRec,
+      rankLabel:            cfg.label,
+      rankColor:            cfg.color,
+      isRecommended:        isRec,
+      recommended:          isRec,
       timeDiffMin,
       tradeOffText,
       safetySegments,
       trafficRegulation,
+      crimeOverlapCount:    route.crimeOverlapCount || 0,
+      accidentOverlapCount: route.accidentOverlapCount || 0,
+      totalHazardOverlaps:  route.totalHazardOverlaps || 0,
+      overlapAnalysis:      route.overlapAnalysis || null,
     }
   })
 }
@@ -555,28 +774,57 @@ export function getRouteComparisonSummary(routes) {
 }
 
 // ─── Build geometry-aware safety segments ────────────────────────────────────
-export function buildSafetySegments(geometry, reports = [], crimes = []) {
+export function buildSafetySegments(geometry, reports = [], crimes = [], accidents = []) {
   if (!geometry || geometry.length < 2) return []
 
   const riskPoints = [
-    ...reports.map(r => ({ lat: r._snapLat || r.lat, lng: r._snapLng || r.lng, severity: r.severity || 'medium', label: r.type || 'Hazard' })),
-    ...crimes.map(c => ({ lat: c.lat, lng: c.lng, severity: c.severity || 'high', label: c.area || 'Crime Area' })),
+    ...reports.map(r => ({
+      lat: r._snapLat || r.latitude || r.lat,
+      lng: r._snapLng || r.longitude || r.lng,
+      severity: r.severity || 'medium',
+      radius: r.radius || 200,
+      label: r.type || 'Community Hazard',
+      color: r.severity === 'critical' ? '#B91C1C' : '#F59E0B',
+      type: 'report',
+    })),
+    ...crimes.map(c => ({
+      lat: c.lat,
+      lng: c.lng,
+      severity: c.severity || 'high',
+      radius: c.radius || 350,
+      label: c.area || c.title || 'Crime Hotspot',
+      color: '#E11D48', // Deep rose for crimes
+      type: 'crime',
+    })),
+    ...accidents.map(a => ({
+      lat: a.lat,
+      lng: a.lng,
+      severity: a.severity || 'critical',
+      radius: a.radius || 300,
+      label: a.area || a.title || 'Accident Blackspot',
+      color: '#B91C1C', // Deep crimson for accidents
+      type: 'accident',
+    })),
   ]
 
   if (!riskPoints.length) return []
 
   const segments = []
   for (const risk of riskPoints) {
+    const effectiveRadius = Math.max(180, Math.min(risk.radius || 300, 450))
     for (let i = 0; i < geometry.length - 1; i++) {
       const p1 = geometry[i]
       const p2 = geometry[Math.min(i + 2, geometry.length - 1)]
       const d = minDistanceToPolyline(risk.lat, risk.lng, [p1, p2])
-      if (d < 120) {
+      if (d <= effectiveRadius) {
         segments.push({
           points: geometry.slice(Math.max(0, i - 1), Math.min(geometry.length, i + 3)),
           severity: risk.severity,
-          color: risk.severity === 'high' ? '#EF4444' : '#F59E0B',
+          color: risk.color,
           label: risk.label,
+          type: risk.type,
+          hazardLat: risk.lat,
+          hazardLng: risk.lng,
         })
         break
       }
@@ -603,20 +851,55 @@ export function getRouteAnchorPoint(geometry, index, totalRoutes = 3) {
 }
 
 // ─── Deduplicate near-identical routes ─────────────────────────────────────────
+export function areRoutesSimilar(r1, r2) {
+  if (!r1 || !r2) return false
+  if (r1 === r2) return true
+
+  const d1 = parseFloat(r1.distanceKm || (r1.distance ? r1.distance / 1000 : 0))
+  const d2 = parseFloat(r2.distanceKm || (r2.distance ? r2.distance / 1000 : 0))
+  const t1 = parseInt(r1.durationMin || (r1.duration ? r1.duration / 60 : 0))
+  const t2 = parseInt(r2.durationMin || (r2.duration ? r2.duration / 60 : 0))
+
+  const geom1 = r1.geometry || []
+  const geom2 = r2.geometry || []
+
+  if (geom1.length >= 4 && geom2.length >= 4) {
+    const samplePcts = [0.2, 0.4, 0.6, 0.8]
+    let totalMinDist = 0
+    for (const pct of samplePcts) {
+      const p1 = geom1[Math.floor(geom1.length * pct)]
+      let minDist = Infinity
+      for (let j = 0; j < geom2.length; j += Math.max(1, Math.floor(geom2.length / 25))) {
+        const p2 = geom2[j]
+        const d = Math.hypot(p1[0] - p2[0], p1[1] - p2[1]) * 111000
+        if (d < minDist) minDist = d
+      }
+      totalMinDist += minDist
+    }
+    const avgDist = totalMinDist / samplePcts.length
+    if (avgDist < 80) return true
+    return false // Geometry was checked and verified distinct (> 80m deviation)
+  }
+
+  // Fallback check on distance and duration only when geometry is not detailed
+  const distDiff = Math.abs(d1 - d2)
+  const timeDiff = Math.abs(t1 - t2)
+  const avgDist = (d1 + d2) / 2
+  if (avgDist > 0 && distDiff / avgDist < 0.015 && timeDiff <= 1) {
+    return true
+  }
+
+  return false
+}
+
 export function deduplicateRoutes(routes) {
-  if (!routes || routes.length <= 3) return routes || []
+  if (!routes || !routes.length) return []
   const kept = []
   for (const route of routes) {
-    const isDuplicate = kept.some(k => {
-      const distDiff = Math.abs((route.distanceKm || 0) - (k.distanceKm || 0))
-      const timeDiff = Math.abs((route.durationMin || 0) - (k.durationMin || 0))
-      const distSim  = k.distanceKm  > 0 ? distDiff / k.distanceKm  : 0
-      const timeSim  = k.durationMin > 0 ? timeDiff / k.durationMin : 0
-      return distSim < 0.03 && timeSim < 0.03
-    })
+    const isDuplicate = kept.some(k => areRoutesSimilar(k, route))
     if (!isDuplicate) kept.push(route)
   }
-  return kept.length >= 3 ? kept : routes
+  return kept
 }
 
 // ─── Comparative Score & Safety Breakdown ──────────────────────────────────────
@@ -637,6 +920,9 @@ export function getScoreComparativeBreakdown(score, rankLabel, envReasons = [], 
 
   // 1. Primary Comparative Profile (Ultra-concise 3-6 word points)
   if (rankLabel === 'SAFEST') {
+    if (route?.totalHazardOverlaps === 0) {
+      advantages.push('Zero crime or accident blackspot overlaps')
+    }
     advantages.push('Top safety score (lowest hazard exposure)')
     advantages.push('Divided lanes & bright street lighting')
     advantages.push('Active police posts & emergency help')
@@ -647,10 +933,18 @@ export function getScoreComparativeBreakdown(score, rankLabel, envReasons = [], 
       tradeOffs.push('Standard arterial commute pace')
     }
   } else if (rankLabel === 'BALANCED') {
+    if (route?.totalHazardOverlaps === 0) {
+      advantages.push('Zero crime or accident blackspot overlaps')
+    }
     advantages.push('Balanced safety & travel time')
     advantages.push('Direct bypass with steady lighting')
     advantages.push('Good pedestrian & shop presence')
 
+    if (route?.onRouteAccidents?.length > 0) {
+      tradeOffs.push(`Overlaps ${route.onRouteAccidents[0].area || 'accident blackspot'} (-${route.accidentPenalty} pts)`)
+    } else if (route?.onRouteCrimes?.length > 0) {
+      tradeOffs.push(`Passes near ${route.onRouteCrimes[0].area || 'crime hotspot'} (-${route.crimePenalty} pts)`)
+    }
     tradeOffs.push('Moderate peak rush delays')
     tradeOffs.push('Busier commercial junctions')
   } else {
@@ -658,9 +952,14 @@ export function getScoreComparativeBreakdown(score, rankLabel, envReasons = [], 
     advantages.push('Fastest commute time')
     advantages.push('Shortest direct distance')
 
+    if (route?.onRouteAccidents?.length > 0) {
+      tradeOffs.push(`Traverses ${route.onRouteAccidents[0].area || 'accident blackspot'} (-${route.accidentPenalty} pts)`)
+    }
+    if (route?.onRouteCrimes?.length > 0) {
+      tradeOffs.push(`Passes near ${route.onRouteCrimes[0].area || 'crime hotspot'} (-${route.crimePenalty} pts)`)
+    }
     tradeOffs.push('Higher collision & hazard exposure')
     tradeOffs.push('Narrow streets & blind turns')
-    tradeOffs.push('Near higher theft/crime spots')
     tradeOffs.push('Daytime one-way rules apply')
   }
 
@@ -715,6 +1014,10 @@ export function getScoreComparativeBreakdown(score, rankLabel, envReasons = [], 
     environmental: environmental.slice(0, 2),
     trafficRegulation,
     allReasons,
+    overlapAnalysis: route?.overlapAnalysis || null,
+    totalHazardOverlaps: route?.totalHazardOverlaps ?? 0,
+    accidentOverlapCount: route?.accidentOverlapCount ?? 0,
+    crimeOverlapCount: route?.crimeOverlapCount ?? 0,
   }
 }
 
@@ -800,14 +1103,17 @@ export function applyEnvironmentalPenalties(routes, envPenalties = []) {
     const ep = envPenalties[idx]
     if (!ep) return route
 
-    const totalEnvPenalty = safeNum(ep.envPenalty, 0) + safeNum(ep.riskPenalty, 0)
+    // Calibrated environmental deduction: AQI/Asthma (0-4 pts) + lighting proxy (0-2 pts)
+    const envPts  = safeNum(ep.envPenalty, 0)
+    const riskPts = Math.min(2, Math.round(safeNum(ep.riskPenalty, 0) * 0.2))
+    const totalEnvPenalty = envPts + riskPts
     const newScore = Math.max(MIN_SCORE, Math.min(MAX_SCORE, safeNum(route.safetyScore, 75) - totalEnvPenalty))
 
     return {
       ...route,
       safetyScore:  newScore,
-      envPenalty:   safeNum(ep.envPenalty, 0),
-      riskPenalty:  safeNum(ep.riskPenalty, 0),
+      envPenalty:   totalEnvPenalty,
+      riskPenalty:  riskPts,
       envBreakdown: ep.envBreakdown || {},
       envReasons:   ep.envReasons   || [],
       riskReasons:  ep.riskReasons  || [],

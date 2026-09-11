@@ -2,7 +2,7 @@
 import polyline from '@mapbox/polyline'
 
 const GOOGLE_ROUTES_API = 'https://routes.googleapis.com/directions/v2:computeRoutes'
-const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+const GOOGLE_API_KEY = import.meta.env?.VITE_GOOGLE_MAPS_API_KEY
 
 const MODE_MAP = {
   driving: 'DRIVE',

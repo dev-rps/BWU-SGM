@@ -369,6 +369,19 @@ class SafetyInferenceEngine:
             for r in sample_results
         ]
 
+        # ── Mathematical Deduction Breakdown (Linked strictly to ML Score) ──
+        deduction_breakdown = self._calculate_deduction_breakdown(
+            sample_results=sample_results,
+            global_nearest=global_nearest,
+            min_dists=min_dists,
+            route_safety_score=int(route_safety_score),
+            traffic_level=traffic_level,
+            weather=weather or {},
+            osm_data=osm_data or {},
+            aqi_pm25=aqi_pm25,
+            hour=hour,
+        )
+
         return {
             "safety_score":       int(route_safety_score),
             "risk_score":         round(100.0 - route_safety_score, 1),
@@ -382,6 +395,8 @@ class SafetyInferenceEngine:
             },
             "nearest_hazards":    global_nearest,
             "reasons":            route_reasons,
+            "deduction_breakdown": deduction_breakdown,
+            "point_deductions":   deduction_breakdown,
             "waypoints_evaluated": len(sampled_pts),
             "segments":           segment_points,
             "model_version":      "3.0.0-26feature-live-data",
@@ -587,3 +602,192 @@ class SafetyInferenceEngine:
             reasons.append("✅ Clear corridor — no immediate hazard proximity")
 
         return reasons
+
+    def _calculate_deduction_breakdown(
+        self,
+        sample_results: List[Dict],
+        global_nearest: Dict,
+        min_dists: Dict,
+        route_safety_score: int,
+        traffic_level: Optional[str],
+        weather: Dict,
+        osm_data: Dict,
+        aqi_pm25: Optional[float],
+        hour: int,
+    ) -> Dict[str, Any]:
+        """
+        Calculates mathematically airtight point deductions directly linked to the ML score.
+        Identity: 100 - sum(categories) == route_safety_score
+                  sum(category items) == category deduction
+        """
+        total_deductions = max(0, 100 - route_safety_score)
+        if total_deductions == 0:
+            return {
+                "base_score": 100,
+                "total_deductions": 0,
+                "formula": f"100 - 0 = {route_safety_score}",
+                "categories": {
+                    "crime": 0, "accident": 0, "flood": 0,
+                    "disaster": 0, "road_infra": 0, "traffic": 0, "env": 0
+                },
+                "items": {
+                    "crime": [], "accident": [], "flood": [],
+                    "disaster": [], "road_infra": [], "traffic": [], "env": []
+                }
+            }
+
+        # 1. Collect unique hazards along the route within relevant distances
+        crimes_found = {}
+        accidents_found = {}
+        floods_found = {}
+        disasters_found = {}
+
+        for r in sample_results:
+            nh = r.get("nearest_hazards", {})
+            cr = nh.get("crime")
+            if cr and cr.get("distance_m", float("inf")) <= 450:
+                name = cr.get("name") or "Crime Hotspot"
+                crimes_found[name] = min(crimes_found.get(name, float("inf")), cr["distance_m"])
+            
+            acc = nh.get("accident")
+            if acc and acc.get("distance_m", float("inf")) <= 350:
+                name = acc.get("name") or "Accident Blackspot"
+                accidents_found[name] = min(accidents_found.get(name, float("inf")), acc["distance_m"])
+                
+            fl = nh.get("flood")
+            if fl and fl.get("distance_m", float("inf")) <= 500:
+                name = fl.get("name") or "Waterlogging Zone"
+                floods_found[name] = min(floods_found.get(name, float("inf")), fl["distance_m"])
+                
+            ds = nh.get("disaster")
+            if ds and ds.get("distance_m", float("inf")) <= 500:
+                name = ds.get("name") or "Natural Hazard Zone"
+                disasters_found[name] = min(disasters_found.get(name, float("inf")), ds["distance_m"])
+
+        # 2. Evaluate raw weights for each category
+        raw_weights = {}
+
+        # Crime weight: proximity, number of hotspots, night factor
+        is_night = hour < 6 or hour >= 20
+        crime_w = 0.0
+        if crimes_found:
+            crime_w = sum(max(1.0, 5.0 - (d / 100.0)) for d in crimes_found.values()) * (1.3 if is_night else 1.0)
+        elif min_dists.get("crime", float("inf")) < 600:
+            crime_w = 2.0
+        if crime_w > 0: raw_weights["crime"] = crime_w
+
+        # Accident weight
+        acc_w = 0.0
+        if accidents_found:
+            acc_w = sum(max(1.0, 4.0 - (d / 100.0)) for d in accidents_found.values())
+        elif min_dists.get("accident", float("inf")) < 500:
+            acc_w = 1.5
+        if acc_w > 0: raw_weights["accident"] = acc_w
+
+        # Flood weight
+        flood_w = 0.0
+        if floods_found:
+            flood_w = sum(max(1.0, 4.0 - (d / 150.0)) for d in floods_found.values())
+        elif min_dists.get("flood", float("inf")) < 600:
+            flood_w = 1.5
+        if flood_w > 0: raw_weights["flood"] = flood_w
+
+        # Disaster weight
+        dis_w = 0.0
+        if disasters_found:
+            dis_w = sum(max(1.0, 3.5 - (d / 150.0)) for d in disasters_found.values())
+        elif min_dists.get("disaster", float("inf")) < 600:
+            dis_w = 1.0
+        if dis_w > 0: raw_weights["disaster"] = dis_w
+
+        # Road infrastructure & lighting weight
+        road_w = 0.0
+        road_rank = osm_data.get("road_hierarchy_rank", 0.65)
+        lighting_score = osm_data.get("lighting_score", 2.0)
+        if road_rank < 0.65:
+            road_w += (0.65 - road_rank) * 8.0
+        if lighting_score < 2.0:
+            road_w += (2.0 - lighting_score) * 2.0
+        if road_w > 0 or not raw_weights: # Fallback base corridor weight
+            raw_weights["road_infra"] = max(1.0, road_w)
+
+        # Traffic delay
+        if traffic_level == "heavy":
+            raw_weights["traffic"] = 6.0
+        elif traffic_level == "moderate":
+            raw_weights["traffic"] = 3.0
+
+        # Environmental / AQI / Weather
+        env_w = 0.0
+        if aqi_pm25 and aqi_pm25 > 55.4:
+            env_w += 3.0
+        elif aqi_pm25 and aqi_pm25 > 35.4:
+            env_w += 1.5
+        w_sev = sample_results[0]["features"].get("weather_severity", 0.0) if sample_results else 0.0
+        if w_sev >= 2.8:
+            env_w += 3.0
+        if env_w > 0:
+            raw_weights["env"] = env_w
+
+        # 3. Largest Remainder Integer Allocation across categories
+        raw_sum = sum(raw_weights.values())
+        if raw_sum <= 0:
+            raw_weights["road_infra"] = 1.0
+            raw_sum = 1.0
+
+        cat_alloc = {}
+        floats = {k: (v / raw_sum) * total_deductions for k, v in raw_weights.items()}
+        ints = {k: int(math.floor(v)) for k, v in floats.items()}
+        rem = total_deductions - sum(ints.values())
+        
+        remainders = sorted([(floats[k] - ints[k], k) for k in raw_weights], reverse=True)
+        for i in range(rem):
+            ints[remainders[i % len(remainders)][1]] += 1
+        cat_alloc = ints
+
+        # 4. Allocate item-level deductions for categories with multiple hazards
+        def distribute_items(item_dict, cat_total, default_name):
+            if cat_total <= 0:
+                return []
+            if not item_dict:
+                return [{"name": default_name, "penalty": cat_total}]
+            
+            weights = {k: max(1.0, 1000.0 / max(50.0, d)) for k, d in item_dict.items()}
+            w_sum = sum(weights.values())
+            f_vals = {k: (w / w_sum) * cat_total for k, w in weights.items()}
+            i_vals = {k: int(math.floor(v)) for k, v in f_vals.items()}
+            r_rem = cat_total - sum(i_vals.values())
+            
+            rems = sorted([(f_vals[k] - i_vals[k], k) for k in weights], reverse=True)
+            for j in range(r_rem):
+                i_vals[rems[j % len(rems)][1]] += 1
+                
+            return [{"name": k, "penalty": v, "distance_m": round(item_dict[k])} for k, v in i_vals.items() if v > 0]
+
+        items_breakdown = {
+            "crime": distribute_items(crimes_found, cat_alloc.get("crime", 0), "Urban Crime Caution Zone"),
+            "accident": distribute_items(accidents_found, cat_alloc.get("accident", 0), "Accident-Prone Section"),
+            "flood": distribute_items(floods_found, cat_alloc.get("flood", 0), "Low-Lying Waterlogging Zone"),
+            "disaster": distribute_items(disasters_found, cat_alloc.get("disaster", 0), "Natural Hazard Caution Area"),
+            "road_infra": [{"name": _road_rank_label(road_rank), "penalty": cat_alloc.get("road_infra", 0)}] if cat_alloc.get("road_infra", 0) > 0 else [],
+            "traffic": [{"name": f"{traffic_level.capitalize() if traffic_level else 'Moderate'} Congestion Delay", "penalty": cat_alloc.get("traffic", 0)}] if cat_alloc.get("traffic", 0) > 0 else [],
+            "env": [{"name": f"Air Quality (PM2.5 {round(aqi_pm25, 1) if aqi_pm25 else 'elevated'})", "penalty": cat_alloc.get("env", 0)}] if cat_alloc.get("env", 0) > 0 else [],
+        }
+
+        categories_dict = {
+            "crime": cat_alloc.get("crime", 0),
+            "accident": cat_alloc.get("accident", 0),
+            "flood": cat_alloc.get("flood", 0),
+            "disaster": cat_alloc.get("disaster", 0),
+            "road_infra": cat_alloc.get("road_infra", 0),
+            "traffic": cat_alloc.get("traffic", 0),
+            "env": cat_alloc.get("env", 0),
+        }
+
+        return {
+            "base_score": 100,
+            "total_deductions": total_deductions,
+            "formula": f"100 - {total_deductions} = {route_safety_score}",
+            "categories": categories_dict,
+            "items": items_breakdown,
+        }

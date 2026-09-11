@@ -213,6 +213,7 @@ export default function RouteSelectionPage() {
   const [transportMode,    setTransportMode]    = useState('driving')
   const [sheetState,       setSheetState]       = useState('half') // 'collapsed' | 'half' | 'expanded'
   const [expandedCardIdx,  setExpandedCardIdx]  = useState(null)   // per-card safety breakdown toggle
+  const [expandedCalcIdx,  setExpandedCalcIdx]  = useState(null)   // per-card ML calculation accordion toggle
   const [showCrimes,       setShowCrimes]       = useState(true)
   const [showFloodRisk,    setShowFloodRisk]    = useState(true)
   const [showDisasters,    setShowDisasters]    = useState(true)
@@ -786,12 +787,90 @@ export default function RouteSelectionPage() {
                     positions={seg.points}
                     pathOptions={{
                       color: seg.color,
-                      weight: 3.5,
+                      weight: 5.5,
                       opacity: 0.95,
                       lineCap: 'round',
                       lineJoin: 'round',
                     }}
                   />
+                ))}
+
+                {/* On-Route Accident Blackspot Overlap Markers */}
+                {(selectedRoute?.onRouteAccidents || []).map((acc, ai) => (
+                  <Marker
+                    key={`acc-overlap-${acc.id || ai}`}
+                    position={[acc.lat, acc.lng]}
+                    icon={L.divIcon({
+                      className: 'hazard-overlap-marker',
+                      html: `<div style="
+                        background: #B91C1C;
+                        color: white;
+                        border: 2px solid white;
+                        border-radius: 9999px;
+                        padding: 3px 8px;
+                        font-size: 8.5px;
+                        font-weight: 900;
+                        box-shadow: 0 4px 14px rgba(185,28,28,0.6);
+                        display: flex;
+                        align-items: center;
+                        gap: 3px;
+                        white-space: nowrap;
+                      ">
+                        <span>🚗</span>
+                        <span>${acc.area || 'Accident Blackspot'}</span>
+                      </div>`,
+                      iconSize: [125, 22],
+                      iconAnchor: [62, 11],
+                    })}
+                  >
+                    <Popup>
+                      <div style={{ minWidth: 175 }}>
+                        <p style={{ fontWeight: 900, fontSize: 11, color: '#B91C1C' }}>⚠️ Active Route Overlap</p>
+                        <p style={{ fontSize: 10, fontWeight: 800, color: '#1e293b', marginTop: 2 }}>{acc.area || acc.title || 'Accident Blackspot'}</p>
+                        <p style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Distance to route: {acc._dist}m · Penalty: -{acc._penalty} pts</p>
+                        <p style={{ fontSize: 8.5, color: '#64748b', marginTop: 2 }}>High-risk collision zone · Maintain safe distance</p>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+
+                {/* On-Route Crime Hotspot Overlap Markers */}
+                {(selectedRoute?.onRouteCrimes || []).map((crime, ci) => (
+                  <Marker
+                    key={`crime-overlap-${crime.id || ci}`}
+                    position={[crime.lat, crime.lng]}
+                    icon={L.divIcon({
+                      className: 'crime-overlap-marker',
+                      html: `<div style="
+                        background: #E11D48;
+                        color: white;
+                        border: 2px solid white;
+                        border-radius: 9999px;
+                        padding: 3px 8px;
+                        font-size: 8.5px;
+                        font-weight: 900;
+                        box-shadow: 0 4px 14px rgba(225,29,72,0.6);
+                        display: flex;
+                        align-items: center;
+                        gap: 3px;
+                        white-space: nowrap;
+                      ">
+                        <span>🚨</span>
+                        <span>${crime.area || 'Crime Hotspot'}</span>
+                      </div>`,
+                      iconSize: [125, 22],
+                      iconAnchor: [62, 11],
+                    })}
+                  >
+                    <Popup>
+                      <div style={{ minWidth: 175 }}>
+                        <p style={{ fontWeight: 900, fontSize: 11, color: '#E11D48' }}>🚨 Active Route Overlap</p>
+                        <p style={{ fontSize: 10, fontWeight: 800, color: '#1e293b', marginTop: 2 }}>{crime.area || crime.title || 'Crime Caution Area'}</p>
+                        <p style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Distance to route: {crime._dist}m · Penalty: -{crime._penalty} pts</p>
+                        <p style={{ fontSize: 8.5, color: '#64748b', marginTop: 2 }}>Low light or theft risk · Stay on primary lanes</p>
+                      </div>
+                    </Popup>
+                  </Marker>
                 ))}
               </Fragment>
             )
@@ -1172,6 +1251,28 @@ export default function RouteSelectionPage() {
                                 <span className="font-extrabold">{route.riskLevel || 'Analyzed'}</span>
                               </span>
                             )}
+                            {/* Crime & Accident Zone Overlap Analysis Badge */}
+                            {route.totalHazardOverlaps === 0 ? (
+                              <span
+                                className="text-[8.5px] font-black px-1.5 py-0.5 rounded-md border bg-emerald-50 text-emerald-800 border-emerald-200 flex items-center gap-1"
+                                title="Zero crime or accident zone overlaps detected on this corridor"
+                              >
+                                <span>🛡️</span>
+                                <span>0 Hazard Overlaps</span>
+                              </span>
+                            ) : (
+                              <span
+                                className="text-[8.5px] font-black px-1.5 py-0.5 rounded-md border bg-rose-50 text-rose-800 border-rose-200 flex items-center gap-1"
+                                title={route.overlapAnalysis?.summary || `${route.totalHazardOverlaps} hazard overlaps`}
+                              >
+                                <span>⚠️</span>
+                                <span>
+                                  {route.accidentOverlapCount > 0 ? `${route.accidentOverlapCount} Accident` : ''}
+                                  {route.accidentOverlapCount > 0 && route.crimeOverlapCount > 0 ? ' · ' : ''}
+                                  {route.crimeOverlapCount > 0 ? `${route.crimeOverlapCount} Crime` : ''} Overlap
+                                </span>
+                              </span>
+                            )}
                             {/* ML server-side PM2.5 badge (from OpenAQ via FastAPI) */}
                             {route.mlAqiPm25 != null && (
                               <span
@@ -1302,46 +1403,61 @@ export default function RouteSelectionPage() {
                               </div>
                             </div>
 
-                            {/* 3. Traffic Police & Corridor Timing Intelligence */}
-                            {comparative.trafficRegulation && (
-                              <div className={`p-2 rounded-lg border ${comparative.trafficRegulation.isOneWayNow ? 'bg-rose-50/80 border-rose-200' : 'bg-slate-50/90 border-slate-200'}`}>
-                                <div className="flex items-center justify-between gap-2 mb-1">
-                                  <div className="flex items-center gap-1 font-black uppercase tracking-wider text-[8.5px]" style={{ color: comparative.trafficRegulation.badgeColor }}>
-                                    <span className="material-symbols-outlined text-[12px]">local_police</span>
-                                    <span>{comparative.trafficRegulation.town ? `${comparative.trafficRegulation.town} Traffic Timing` : 'Police Timing Rule'}</span>
-                                  </div>
-                                  <span className={`text-[7.5px] font-black px-1.5 py-0.5 rounded border ${comparative.trafficRegulation.badgeBg}`}>
-                                    {comparative.trafficRegulation.badgeLabel}
+                            {/* 3. Crime & Accident Zone Overlap Analysis */}
+                            {route.overlapAnalysis && (
+                              <div className={`px-2.5 py-1.5 rounded-lg border flex items-center justify-between gap-2 text-[8.5px] ${
+                                route.totalHazardOverlaps === 0
+                                  ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                                  : 'bg-rose-50/70 border-rose-200 text-rose-950'
+                              }`}>
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                  <span
+                                    className="material-symbols-outlined text-[13px] flex-shrink-0"
+                                    style={{ color: route.totalHazardOverlaps === 0 ? '#10B981' : '#EF4444' }}
+                                  >
+                                    {route.totalHazardOverlaps === 0 ? 'verified_user' : 'crisis_alert'}
+                                  </span>
+                                  <span className="truncate">
+                                    <strong className="font-extrabold text-slate-900 mr-1">Zone Overlap:</strong>
+                                    <span className="text-slate-700 font-medium">{route.overlapAnalysis.summary}</span>
                                   </span>
                                 </div>
-                                <div className="space-y-0.5 text-[8.5px] text-slate-700 leading-tight">
-                                  <div className="flex items-baseline gap-1">
-                                    <span className="font-extrabold text-slate-900">{comparative.trafficRegulation.zoneName}</span>
-                                  </div>
-                                  {comparative.trafficRegulation.accessibleWindow && (
-                                    <div className="flex items-baseline gap-1 text-emerald-800 font-semibold">
-                                      <span className="flex-shrink-0">🟢 Accessible:</span>
-                                      <span className="font-bold">{comparative.trafficRegulation.accessibleWindow}</span>
-                                    </div>
-                                  )}
-                                  {comparative.trafficRegulation.avoidWindow && (
-                                    <div className="flex items-baseline gap-1 text-rose-800 font-semibold">
-                                      <span className="flex-shrink-0">⛔ When to Avoid:</span>
-                                      <span className="font-bold">{comparative.trafficRegulation.avoidWindow}</span>
-                                    </div>
-                                  )}
-                                  {comparative.trafficRegulation.suggestion && (
-                                    <div className="text-[8px] text-slate-600 mt-0.5 font-medium">
-                                      💡 {comparative.trafficRegulation.suggestion}
-                                    </div>
-                                  )}
-                                  {comparative.trafficRegulation.policeAdvisory && (
-                                    <div className="flex items-start gap-1 text-rose-700 font-semibold bg-rose-100/60 p-1 rounded mt-0.5 text-[8px]">
-                                      <span className="material-symbols-outlined text-[11px] flex-shrink-0 mt-0.5">policy</span>
-                                      <span>{comparative.trafficRegulation.policeAdvisory}</span>
-                                    </div>
-                                  )}
+                                <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border flex-shrink-0 ${
+                                  route.totalHazardOverlaps === 0
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : 'bg-rose-100 text-rose-800 border-rose-300'
+                                }`}>
+                                  {route.totalHazardOverlaps === 0 ? '0 Overlaps' : `${route.totalHazardOverlaps} Overlap${route.totalHazardOverlaps > 1 ? 's' : ''}`}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* 4. Traffic Police Timing Rule (Minimal One-Line Summary) */}
+                            {comparative.trafficRegulation && (
+                              <div className={`px-2.5 py-1.5 rounded-lg border flex items-center justify-between gap-2 text-[8.5px] ${
+                                comparative.trafficRegulation.isOneWayNow
+                                  ? 'bg-rose-50/70 border-rose-200 text-rose-950'
+                                  : 'bg-slate-50/80 border-slate-200 text-slate-800'
+                              }`}>
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                  <span
+                                    className="material-symbols-outlined text-[13px] flex-shrink-0"
+                                    style={{ color: comparative.trafficRegulation.badgeColor || '#004ac6' }}
+                                  >
+                                    local_police
+                                  </span>
+                                  <span className="truncate">
+                                    <strong className="font-extrabold text-slate-900 mr-1">
+                                      {comparative.trafficRegulation.town ? `${comparative.trafficRegulation.town} Police:` : 'Police Advisory:'}
+                                    </strong>
+                                    <span className="text-slate-600 font-medium">
+                                      {comparative.trafficRegulation.suggestion || comparative.trafficRegulation.policeAdvisory || comparative.trafficRegulation.avoidWindow || 'Active corridor timing rules apply'}
+                                    </span>
+                                  </span>
                                 </div>
+                                <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border flex-shrink-0 ${comparative.trafficRegulation.badgeBg || 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                  {comparative.trafficRegulation.badgeLabel}
+                                </span>
                               </div>
                             )}
 
@@ -1407,7 +1523,7 @@ export default function RouteSelectionPage() {
                               </div>
                             )}
 
-                            {/* Point Deductions & Risk Factors */}
+                            {/* Point Deductions & Actual Calculation Breakdown (Minimized by default, extendable manually) */}
                             {(() => {
                               const totalDeductions =
                                 safeNum(route.crimePenalty, 0) +
@@ -1419,140 +1535,212 @@ export default function RouteSelectionPage() {
                                 safeNum(route.roadInfraPenalty, 0) +
                                 safeNum(route.reportPenalty, 0)
 
-                              if (totalDeductions <= 0 && hazardCnt <= 0) return null
+                              const isCalcExpanded = expandedCalcIdx === idx
 
                               return (
-                                <div className="pt-2 border-t border-slate-100 space-y-1">
-                                  <div className="flex justify-between items-center">
-                                    <p className="font-black text-slate-800 uppercase tracking-wider text-[8.5px]">⚠️ Points Deducted</p>
-                                    <span className="text-[8px] font-black text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                      Total: -{totalDeductions} pts (100 - {totalDeductions} = {route.safetyScore})
-                                    </span>
-                                  </div>
-
-                                  {/* Environmental / AQI / Asthma Deductions */}
-                                  {route.envPenalty > 0 && (
-                                    <div className="bg-rose-50/70 p-1.5 rounded-lg border border-rose-100">
-                                      <div className="flex justify-between items-center text-rose-700 font-bold text-[9px]">
-                                        <span>🫁 Air Quality / Asthma</span>
-                                        <span className="font-black">-{safeNum(route.envPenalty, 0)} pts</span>
-                                      </div>
-                                      <div className="mt-0.5 text-[8px] text-rose-600">
-                                        {route.envBreakdown?.isRespiratory
-                                          ? `Asthma Profile: sensitive to AQI ${route.envData?.aqi || 'levels'}`
-                                          : `Elevated AQI ${route.envData?.aqi || ''}`}
-                                      </div>
+                                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                                  {/* Minimized Collapsible Header Trigger */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setExpandedCalcIdx(isCalcExpanded ? null : idx);
+                                    }}
+                                    className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-white transition-all border border-slate-800 shadow-sm"
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="material-symbols-outlined text-emerald-400 text-[15px] flex-shrink-0">calculate</span>
+                                      <span className="font-black text-[9px] uppercase tracking-wider text-slate-200 truncate">
+                                        Safety Score Calculation
+                                      </span>
+                                      <span className="text-[8px] font-mono font-bold text-emerald-300 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/60 flex-shrink-0">
+                                        100 − {totalDeductions} = {route.safetyScore || 75}
+                                      </span>
                                     </div>
-                                  )}
-
-                                  {/* Road Corridor & Infrastructure */}
-                                  {route.roadInfraPenalty > 0 && (
-                                    <div className="bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                                      <div className="flex justify-between items-center text-slate-700 font-bold text-[9px]">
-                                        <span>🛣️ Road Corridor & Infrastructure</span>
-                                        <span className="font-black">-{safeNum(route.roadInfraPenalty, 0)} pts</span>
-                                      </div>
-                                      <div className="mt-0.5 text-[8px] text-slate-500">
-                                        {route.roadInfraNote || 'Secondary arterial / intersection density'}
-                                      </div>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
+                                      <span className="text-[7.5px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                        {route.mlEvaluated ? '🤖 26-Feature ML' : '🛡️ Spatial Engine'}
+                                      </span>
+                                      <span className="material-symbols-outlined text-[15px] text-slate-400">
+                                        {isCalcExpanded ? 'expand_less' : 'expand_more'}
+                                      </span>
                                     </div>
-                                  )}
+                                  </button>
 
-                                  {/* Crime Deductions */}
-                                  {route.onRouteCrimes?.length > 0 && (
-                                    <div className="bg-red-50/70 p-1.5 rounded-lg border border-red-100">
-                                      <div className="flex justify-between items-center text-red-700 font-bold text-[9px]">
-                                        <span>🚨 Crime Hotspots</span>
-                                        <span className="font-black">-{safeNum(route.crimePenalty, 0)} pts</span>
-                                      </div>
-                                      <div className="mt-0.5 space-y-0.5 text-[8px] text-red-600">
-                                        {route.onRouteCrimes.slice(0, 2).map(c => (
-                                          <div key={c.id} className="flex justify-between">
-                                            <span>• {c.area}</span>
-                                            <span>-{safeNum(c._penalty, 1)}pts</span>
+                                  {/* Extended Detailed Calculation & Itemized Deductions */}
+                                  {isCalcExpanded && (
+                                    <div className="space-y-1.5 pt-0.5">
+                                      {/* ML Calculation Formula Equation Banner */}
+                                      <div className="bg-slate-900 text-white p-2.5 rounded-xl border border-slate-800 shadow-sm space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="material-symbols-outlined text-emerald-400 text-xs">tune</span>
+                                            <span className="font-bold text-[8.5px] text-slate-300">
+                                              Point Deduction Formula
+                                            </span>
                                           </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
+                                          <span className="text-[7.5px] text-emerald-400 font-mono font-bold">
+                                            Base 100 − Σ Deductions
+                                          </span>
+                                        </div>
 
-                                  {/* Flood Risk Deductions */}
-                                  {route.onRouteFlood?.length > 0 && (
-                                    <div className="bg-blue-50/70 p-1.5 rounded-lg border border-blue-100">
-                                      <div className="flex justify-between items-center text-blue-700 font-bold text-[9px]">
-                                        <span>🌊 Waterlogging Risk</span>
-                                        <span className="font-black">-{safeNum(route.floodPenalty, 0)} pts</span>
-                                      </div>
-                                      <div className="mt-0.5 space-y-0.5 text-[8px] text-blue-600">
-                                        {route.onRouteFlood.slice(0, 2).map(z => (
-                                          <div key={z.id} className="flex justify-between">
-                                            <span>• {z.area}</span>
-                                            <span>-{safeNum(z._penalty, 1)}pts</span>
+                                        {/* Equation Banner */}
+                                        <div className="bg-slate-800/80 px-2.5 py-1.5 rounded-lg border border-slate-700/60 flex items-center justify-between font-mono text-[9px]">
+                                          <div className="flex items-center gap-1 text-slate-300">
+                                            <span className="font-bold">100</span>
+                                            <span className="text-slate-400 text-[8px]">(Base)</span>
                                           </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Disaster Risk Deductions */}
-                                  {route.onRouteDisasters?.length > 0 && (
-                                    <div className="bg-orange-50/70 p-1.5 rounded-lg border border-orange-100">
-                                      <div className="flex justify-between items-center text-orange-700 font-bold text-[9px]">
-                                        <span>⚡ Natural Hazards</span>
-                                        <span className="font-black">-{safeNum(route.disasterPenalty, 0)} pts</span>
-                                      </div>
-                                      <div className="mt-0.5 space-y-0.5 text-[8px] text-orange-600">
-                                        {route.onRouteDisasters.slice(0, 2).map(dz => (
-                                          <div key={dz.id} className="flex justify-between">
-                                            <span>• {dz.area}</span>
-                                            <span>-{safeNum(dz._penalty, 1)}pts</span>
+                                          <span className="text-rose-400 font-black">−</span>
+                                          <div className="flex items-center gap-1 text-rose-300 font-bold">
+                                            <span>{totalDeductions} pts</span>
+                                            <span className="text-slate-400 text-[8px]">(Deductions)</span>
                                           </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Accident Blackspots */}
-                                  {route.onRouteAccidents?.length > 0 && (
-                                    <div className="bg-rose-50/70 p-1.5 rounded-lg border border-rose-100">
-                                      <div className="flex justify-between items-center text-rose-700 font-bold text-[9px]">
-                                        <span>🚗 Accident Blackspots</span>
-                                        <span className="font-black">-{safeNum(route.accidentPenalty, 0)} pts</span>
-                                      </div>
-                                      <div className="mt-0.5 space-y-0.5 text-[8px] text-rose-600">
-                                        {route.onRouteAccidents.slice(0, 2).map(acc => (
-                                          <div key={acc.id} className="flex justify-between">
-                                            <span>• {acc.area}</span>
-                                            <span>-{safeNum(acc._penalty, 1)}pts</span>
+                                          <span className="text-slate-400 font-black">=</span>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-emerald-400 font-black text-xs">{route.safetyScore || 75}</span>
+                                            <span className="text-slate-400 text-[8px]">/ 100</span>
                                           </div>
-                                        ))}
+                                        </div>
                                       </div>
-                                    </div>
-                                  )}
 
-                                  {/* Traffic Delay Deductions */}
-                                  {route.trafficPenalty > 0 && (
-                                    <div className="bg-amber-50/70 p-1.5 rounded-lg border border-amber-100 flex justify-between items-center text-amber-800 text-[9.5px] font-bold">
-                                      <span>🚦 Congestion Delay ({route.trafficInfo?.label || 'Traffic slowdown'})</span>
-                                      <span className="font-black text-amber-700">-{safeNum(route.trafficPenalty, 0)} pts</span>
-                                    </div>
-                                  )}
+                                      {/* Itemized Categories */}
+                                      {totalDeductions > 0 && (
+                                        <div className="space-y-1">
+                                          {/* Environmental / AQI / Asthma Deductions */}
+                                          {route.envPenalty > 0 && (
+                                            <div className="bg-rose-50/80 p-1.5 rounded-lg border border-rose-100">
+                                              <div className="flex justify-between items-center text-rose-700 font-bold text-[9px]">
+                                                <span>🫁 Air Quality & Health Sensitivity</span>
+                                                <span className="font-black">-{safeNum(route.envPenalty, 0)} pts</span>
+                                              </div>
+                                              <div className="mt-0.5 text-[8px] text-rose-600">
+                                                {route.envBreakdown?.isRespiratory
+                                                  ? `Asthma Profile: sensitive to ambient PM2.5 / AQI`
+                                                  : `Elevated AQI exposure along corridor`}
+                                              </div>
+                                            </div>
+                                          )}
 
-                                  {/* Community Hazard Reports */}
-                                  {hazardCnt > 0 && (
-                                    <div className="bg-orange-50/70 p-1.5 rounded-lg border border-orange-100">
-                                      <div className="flex justify-between items-center text-orange-700 font-bold text-[9.5px]">
-                                        <span>⚠️ Live Community Reports</span>
-                                        <span className="font-black">-{safeNum(route.reportPenalty, 0) || route.onRouteReports.reduce((s, r) => s + (safeNum(r._penalty, 0)), 0)} pts</span>
-                                      </div>
-                                      <div className="mt-1 space-y-0.5 text-[8.5px] text-orange-600">
-                                        {route.onRouteReports.slice(0, 2).map(r => (
-                                          <div key={r.id} className="flex justify-between">
-                                            <span>• {r.type || r.hazardType || 'Hazard'} ({timeAgo(r.createdAt || r.timestamp)})</span>
-                                            <span>-{safeNum(r._penalty, 1)}pts</span>
-                                          </div>
-                                        ))}
-                                      </div>
+                                          {/* Road Corridor & Infrastructure */}
+                                          {route.roadInfraPenalty > 0 && (
+                                            <div className="bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                                              <div className="flex justify-between items-center text-slate-700 font-bold text-[9px]">
+                                                <span>🛣️ Road Hierarchy & Lighting Profile</span>
+                                                <span className="font-black">-{safeNum(route.roadInfraPenalty, 0)} pts</span>
+                                              </div>
+                                              <div className="mt-0.5 text-[8px] text-slate-500">
+                                                {route.roadInfraNote || 'Secondary arterial / intersection density'}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Crime Deductions */}
+                                          {route.crimePenalty > 0 && (
+                                            <div className="bg-red-50/80 p-1.5 rounded-lg border border-red-100">
+                                              <div className="flex justify-between items-center text-red-700 font-bold text-[9px]">
+                                                <span>🚨 Crime Hotspots & Night Risk</span>
+                                                <span className="font-black">-{safeNum(route.crimePenalty, 0)} pts</span>
+                                              </div>
+                                              {route.onRouteCrimes?.length > 0 && (
+                                                <div className="mt-0.5 space-y-0.5 text-[8px] text-red-600">
+                                                  {route.onRouteCrimes.map((c, ci) => (
+                                                    <div key={`${c.id || 'c'}_${ci}`} className="flex justify-between">
+                                                      <span>• {c.area || c.name || 'Crime Hotspot'} {c._dist ? `(${c._dist}m)` : ''}</span>
+                                                      <span className="font-bold">-{safeNum(c._penalty, 1)} pts</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          {/* Flood Risk Deductions */}
+                                          {route.floodPenalty > 0 && (
+                                            <div className="bg-blue-50/80 p-1.5 rounded-lg border border-blue-100">
+                                              <div className="flex justify-between items-center text-blue-700 font-bold text-[9px]">
+                                                <span>🌊 Waterlogging & Monsoon Hazard</span>
+                                                <span className="font-black">-{safeNum(route.floodPenalty, 0)} pts</span>
+                                              </div>
+                                              {route.onRouteFlood?.length > 0 && (
+                                                <div className="mt-0.5 space-y-0.5 text-[8px] text-blue-600">
+                                                  {route.onRouteFlood.map((z, zi) => (
+                                                    <div key={`${z.id || 'z'}_${zi}`} className="flex justify-between">
+                                                      <span>• {z.area || z.name || 'Waterlogging Area'} {z._dist ? `(${z._dist}m)` : ''}</span>
+                                                      <span className="font-bold">-{safeNum(z._penalty, 1)} pts</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          {/* Disaster Risk Deductions */}
+                                          {route.disasterPenalty > 0 && (
+                                            <div className="bg-orange-50/80 p-1.5 rounded-lg border border-orange-100">
+                                              <div className="flex justify-between items-center text-orange-700 font-bold text-[9px]">
+                                                <span>⚡ Natural Hazards</span>
+                                                <span className="font-black">-{safeNum(route.disasterPenalty, 0)} pts</span>
+                                              </div>
+                                              {route.onRouteDisasters?.length > 0 && (
+                                                <div className="mt-0.5 space-y-0.5 text-[8px] text-orange-600">
+                                                  {route.onRouteDisasters.map((dz, di) => (
+                                                    <div key={`${dz.id || 'dz'}_${di}`} className="flex justify-between">
+                                                      <span>• {dz.area || dz.name || 'Hazard Zone'} {dz._dist ? `(${dz._dist}m)` : ''}</span>
+                                                      <span className="font-bold">-{safeNum(dz._penalty, 1)} pts</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          {/* Accident Blackspots */}
+                                          {route.accidentPenalty > 0 && (
+                                            <div className="bg-rose-50/80 p-1.5 rounded-lg border border-rose-100">
+                                              <div className="flex justify-between items-center text-rose-700 font-bold text-[9px]">
+                                                <span>🚗 Accident Blackspots</span>
+                                                <span className="font-black">-{safeNum(route.accidentPenalty, 0)} pts</span>
+                                              </div>
+                                              {route.onRouteAccidents?.length > 0 && (
+                                                <div className="mt-0.5 space-y-0.5 text-[8px] text-rose-600">
+                                                  {route.onRouteAccidents.map((acc, ai) => (
+                                                    <div key={`${acc.id || 'acc'}_${ai}`} className="flex justify-between">
+                                                      <span>• {acc.area || acc.name || 'Accident Zone'} {acc._dist ? `(${acc._dist}m)` : ''}</span>
+                                                      <span className="font-bold">-{safeNum(acc._penalty, 1)} pts</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          {/* Traffic Delay Deductions */}
+                                          {route.trafficPenalty > 0 && (
+                                            <div className="bg-amber-50/80 p-1.5 rounded-lg border border-amber-100 flex justify-between items-center text-amber-800 text-[9px] font-bold">
+                                              <span>🚦 Congestion Delay ({route.trafficInfo?.label || 'Traffic slowdown'})</span>
+                                              <span className="font-black text-amber-700">-{safeNum(route.trafficPenalty, 0)} pts</span>
+                                            </div>
+                                          )}
+
+                                          {/* Community Hazard Reports */}
+                                          {route.reportPenalty > 0 && route.onRouteReports?.length > 0 && (
+                                            <div className="bg-orange-50/80 p-1.5 rounded-lg border border-orange-100">
+                                              <div className="flex justify-between items-center text-orange-700 font-bold text-[9px]">
+                                                <span>⚠️ Live Community Reports</span>
+                                                <span className="font-black">-{safeNum(route.reportPenalty, 0)} pts</span>
+                                              </div>
+                                              <div className="mt-0.5 space-y-0.5 text-[8px] text-orange-600">
+                                                {route.onRouteReports.map((r, ri) => (
+                                                  <div key={`${r.id || 'r'}_${ri}`} className="flex justify-between">
+                                                    <span>• {r.type || r.hazardType || 'Hazard'}</span>
+                                                    <span className="font-bold">-{safeNum(r._penalty, 1)} pts</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
