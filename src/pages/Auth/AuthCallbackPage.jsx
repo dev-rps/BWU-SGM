@@ -28,40 +28,21 @@ export default function AuthCallbackPage() {
         const idToken = hashParams.get('id_token');
 
         if (idToken) {
-          // Read nonce from sessionStorage, localStorage, cross-subdomain cookie, or decode from token payload
+          // Read rawNonce from sessionStorage, localStorage, or cross-subdomain cookie
           const cookieMatch = document.cookie.match(/(?:^|;\s*)sg_google_nonce=([^;]*)/);
           const cookieNonce = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
 
-          let tokenNonce = null;
-          try {
-            const parts = idToken.split('.');
-            if (parts.length >= 2) {
-              const base64Url = parts[1];
-              const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-              const jsonStr = decodeURIComponent(
-                atob(base64)
-                  .split('')
-                  .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-                  .join('')
-              );
-              const payload = JSON.parse(jsonStr);
-              tokenNonce = payload.nonce || null;
-            }
-          } catch (e) {
-            console.warn('[AuthCallback] Could not parse nonce from idToken payload:', e);
-          }
-
-          const nonce =
+          const rawNonce =
             sessionStorage.getItem('sg_google_nonce') ||
             localStorage.getItem('sg_google_nonce') ||
             cookieNonce ||
-            tokenNonce ||
             undefined;
 
+          // Supabase GoTrue hashes rawNonce with SHA-256 and compares it against idToken.nonce
           const { data, error: idTokenErr } = await supabase.auth.signInWithIdToken({
             provider: 'google',
             token: idToken,
-            nonce,
+            nonce: rawNonce,
           });
 
           // Clean up all nonce storage

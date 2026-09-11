@@ -49,26 +49,42 @@ export const GOOGLE_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLIENT_ID ||
   '290538642635-b9pml7iqticlug7khtk2gtq8rdeb86a3.apps.googleusercontent.com'
 
+// Cryptographic Nonce generation and SHA-256 hashing for Supabase & Google OIDC
+export const generateRawNonce = () => {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+}
+
+export const sha256Hex = async (str) => {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(str)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hashBuffer), b => b.toString(16).padStart(2, '0')).join('')
+}
+
 // Direct Google Login via your custom domain (safetyguardian.xyz)
 export const googleLogin = async () => {
   const redirectUri = `${window.location.origin}/auth/callback`
-  const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+  const rawNonce = generateRawNonce()
+  const hashedNonce = await sha256Hex(rawNonce)
 
-  // Store in sessionStorage, localStorage, and cross-subdomain cookie (.safetyguardian.xyz)
-  try { sessionStorage.setItem('sg_google_nonce', nonce) } catch (_) {}
-  try { localStorage.setItem('sg_google_nonce', nonce) } catch (_) {}
+  // Store rawNonce in sessionStorage, localStorage, and cross-subdomain cookie (.safetyguardian.xyz)
+  try { sessionStorage.setItem('sg_google_nonce', rawNonce) } catch (_) {}
+  try { localStorage.setItem('sg_google_nonce', rawNonce) } catch (_) {}
   try {
     const hostname = window.location.hostname
     const domainPart = hostname.includes('safetyguardian.xyz') ? '; domain=.safetyguardian.xyz' : ''
-    document.cookie = `sg_google_nonce=${encodeURIComponent(nonce)}; path=/${domainPart}; max-age=600; SameSite=Lax`
+    document.cookie = `sg_google_nonce=${encodeURIComponent(rawNonce)}; path=/${domainPart}; max-age=600; SameSite=Lax`
   } catch (_) {}
 
+  // Send the SHA-256 HASHED nonce to Google; Supabase will verify using rawNonce
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: 'id_token',
     scope: 'openid email profile',
-    nonce: nonce,
+    nonce: hashedNonce,
     prompt: 'select_account',
   })
 
