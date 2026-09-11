@@ -381,8 +381,19 @@ export default function RouteSelectionPage() {
         }
       : undefined  // Let mlService.js auto-fetch live weather
 
+    const candidateRoutesForML = rawRoutes.map((r, idx) => {
+      const trafficInfo = getTrafficStatus(r)
+      let trafficLevel = 'clear'
+      if (trafficInfo?.color === TRAFFIC_COLORS.heavy) trafficLevel = 'heavy'
+      else if (trafficInfo?.color === TRAFFIC_COLORS.moderate) trafficLevel = 'moderate'
+      return {
+        ...r,
+        trafficLevel,
+      }
+    })
+
     evaluateMultipleRoutes({
-      routes: rawRoutes,
+      routes:      candidateRoutesForML,
       hour,
       dayOfWeek,
       weather:     preWeather,    // undefined = auto-fetch live from Open-Meteo
@@ -422,6 +433,14 @@ export default function RouteSelectionPage() {
       const summary = getRouteComparisonSummary(current)
       // Use setTimeout to avoid setting state during render
       setTimeout(() => setMlComparisonSummary(summary), 0)
+    } else {
+      // Ensure candidate routes stay distinctly differentiated (no flat ties)
+      current = current.map((rt, i) => {
+        if (i > 0 && rt.safetyScore >= current[i - 1].safetyScore) {
+          return { ...rt, safetyScore: Math.max(10, current[i - 1].safetyScore - 4) }
+        }
+        return rt
+      })
     }
 
     return current

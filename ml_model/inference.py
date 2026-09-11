@@ -229,6 +229,9 @@ class SafetyInferenceEngine:
         lighting: Optional[str] = None,
         aqi_pm25: Optional[float] = None,
         osm_data: Optional[Dict[str, Any]] = None,
+        traffic_level: Optional[str] = None,
+        distance_m: Optional[float] = None,
+        duration_s: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Evaluates an entire route polyline against the 26-feature ML model."""
 
@@ -338,6 +341,22 @@ class SafetyInferenceEngine:
             osm_data=osm_data or {},
             aqi_pm25=aqi_pm25,
         )
+
+        # ── Dynamic Traffic Adjustment ────────────────────────────────────────
+        if traffic_level == "heavy":
+            route_safety_score = max(10, route_safety_score - 7)
+            route_reasons.insert(0, "🚦 Heavy traffic congestion: higher collision risk & delay (-7 pts)")
+        elif traffic_level == "moderate":
+            route_safety_score = max(10, route_safety_score - 3)
+            route_reasons.insert(0, "🚦 Moderate traffic flow: standard urban congestion (-3 pts)")
+        elif traffic_level == "clear":
+            route_reasons.insert(0, "🚗 Clear traffic flow: smooth corridor travel")
+
+        # Recalibrate risk level if score adjusted
+        if route_safety_score >= 75:   route_risk_level = "Low"
+        elif route_safety_score >= 55: route_risk_level = "Medium"
+        elif route_safety_score >= 40: route_risk_level = "High"
+        else:                          route_risk_level = "Critical"
 
         # ── Segment risk for polyline visual styling ──────────────────────────
         segment_points = [

@@ -110,8 +110,6 @@ function getCandidateBases() {
   if (import.meta.env.DEV) {
     if (!bases.includes(ML_PROXY_BASE))  bases.push(ML_PROXY_BASE)
     if (!bases.includes(ML_DIRECT_BASE)) bases.push(ML_DIRECT_BASE)
-  } else {
-    if (!bases.includes(ML_PROXY_BASE)) bases.push(ML_PROXY_BASE)
   }
   return bases
 }
@@ -284,8 +282,8 @@ export async function evaluateMultipleRoutes({
       name:            r.viaRoads || r.name || `Route ${idx + 1}`,
       waypoints:       r.geometry || [],
       trafficLevel:    r.trafficLevel || 'clear',
-      distanceMeters:  r.distance || 0,
-      durationSeconds: r.duration || 0,
+      distanceMeters:  r.distance || (r.distanceKm ? Math.round(r.distanceKm * 1000) : 0),
+      durationSeconds: r.duration || (r.durationMin ? Math.round(r.durationMin * 60) : 0),
     })),
     hour:         h,
     day_of_week:  dow,
@@ -306,7 +304,7 @@ export async function evaluateMultipleRoutes({
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
-        signal:  AbortSignal.timeout(12000),
+        signal:  AbortSignal.timeout(30000),
       })
 
       if (res.ok) {

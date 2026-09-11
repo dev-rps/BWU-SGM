@@ -567,6 +567,9 @@ def predict_routes(payload: BatchRouteEvaluationRequest):
                 lighting=payload.lighting,
                 aqi_pm25=aq_dict.get("pm25"),
                 osm_data=osm_data,
+                traffic_level=r.trafficLevel,
+                distance_m=r.distanceMeters,
+                duration_s=r.durationSeconds,
             )
             res["route_id"] = r.id
             if r.name:
