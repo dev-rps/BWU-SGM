@@ -1287,7 +1287,7 @@ export default function RouteSelectionPage() {
                                 <div className="flex items-center justify-between gap-2 mb-1">
                                   <div className="flex items-center gap-1 font-black uppercase tracking-wider text-[8.5px]" style={{ color: comparative.trafficRegulation.badgeColor }}>
                                     <span className="material-symbols-outlined text-[12px]">local_police</span>
-                                    <span>Police & Timing Rule</span>
+                                    <span>{comparative.trafficRegulation.town ? `${comparative.trafficRegulation.town} Traffic Timing` : 'Police Timing Rule'}</span>
                                   </div>
                                   <span className={`text-[7.5px] font-black px-1.5 py-0.5 rounded border ${comparative.trafficRegulation.badgeBg}`}>
                                     {comparative.trafficRegulation.badgeLabel}
@@ -1295,11 +1295,27 @@ export default function RouteSelectionPage() {
                                 </div>
                                 <div className="space-y-0.5 text-[8.5px] text-slate-700 leading-tight">
                                   <div className="flex items-baseline gap-1">
-                                    <span className="font-bold text-slate-900">{comparative.trafficRegulation.zoneName}:</span>
-                                    <span>{comparative.trafficRegulation.timingRule}</span>
+                                    <span className="font-extrabold text-slate-900">{comparative.trafficRegulation.zoneName}</span>
                                   </div>
+                                  {comparative.trafficRegulation.accessibleWindow && (
+                                    <div className="flex items-baseline gap-1 text-emerald-800 font-semibold">
+                                      <span className="flex-shrink-0">🟢 Accessible:</span>
+                                      <span className="font-bold">{comparative.trafficRegulation.accessibleWindow}</span>
+                                    </div>
+                                  )}
+                                  {comparative.trafficRegulation.avoidWindow && (
+                                    <div className="flex items-baseline gap-1 text-rose-800 font-semibold">
+                                      <span className="flex-shrink-0">⛔ When to Avoid:</span>
+                                      <span className="font-bold">{comparative.trafficRegulation.avoidWindow}</span>
+                                    </div>
+                                  )}
+                                  {comparative.trafficRegulation.suggestion && (
+                                    <div className="text-[8px] text-slate-600 mt-0.5 font-medium">
+                                      💡 {comparative.trafficRegulation.suggestion}
+                                    </div>
+                                  )}
                                   {comparative.trafficRegulation.policeAdvisory && (
-                                    <div className="flex items-start gap-1 text-rose-700 font-semibold bg-rose-100/60 p-1 rounded mt-0.5">
+                                    <div className="flex items-start gap-1 text-rose-700 font-semibold bg-rose-100/60 p-1 rounded mt-0.5 text-[8px]">
                                       <span className="material-symbols-outlined text-[11px] flex-shrink-0 mt-0.5">policy</span>
                                       <span>{comparative.trafficRegulation.policeAdvisory}</span>
                                     </div>

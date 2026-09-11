@@ -20,6 +20,9 @@ import { useAppStore } from '../../context/store'
 import { HAZARD_TYPES, SEVERITY_COLORS } from '../../constants'
 import { mapProvider } from '../../services/mapProvider'
 import { getCurrentLocation, watchLocation, clearLocationWatch, getInitialLocation } from '../../services/location'
+import { ACCIDENT_BLACKSPOTS } from '../../data/accidentBlackspots'
+import { CRIME_HOTSPOTS } from '../../data/crimeHotspots'
+import { FLOOD_ZONES_STATIC } from '../../data/floodZones'
 
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 
@@ -535,28 +538,120 @@ export default function NavigationPage() {
   }, [stepIdx, liveMetersToStep, currentStep, isVoiceEnabled, speakText])
 
   const hazardNearby = useMemo(() => {
-    const hasReport = onRouteReports.some(r => {
-      const hLat = r._snapLat ?? r.lat
-      const hLng = r._snapLng ?? r.lng
-      if (!hLat || !hLng) return false
-      return haversineMeters(currentLat, currentLng, hLat, hLng) < 300
-    })
-    if (hasReport) return { active: true, message: 'Caution: Safety Hazard reported ahead within 300 meters.' }
+    if (!isFinite(currentLat) || !isFinite(currentLng)) {
+      return { active: false, title: '', message: '', distance: 0, type: '', icon: '' }
+    }
 
-    if (selectedRoute?.bottleneck?.lat && selectedRoute?.bottleneck?.lng) {
-      const distToBottleneck = haversineMeters(currentLat, currentLng, selectedRoute.bottleneck.lat, selectedRoute.bottleneck.lng)
-      if (distToBottleneck < 300) {
-        return { active: true, message: 'Caution: Approaching high-risk bottleneck corridor identified by ML model.' }
+    let closestHazard = null
+    let minDistance = 300 // Alert threshold: 300 meters
+
+    // 1. Check live community reports on route
+    for (const r of onRouteReports) {
+      const lat = r._snapLat ?? r.latitude ?? r.lat
+      const lng = r._snapLng ?? r.longitude ?? r.lng
+      if (!isFinite(lat) || !isFinite(lng)) continue
+      const dist = haversineMeters(currentLat, currentLng, lat, lng)
+      if (dist < minDistance) {
+        minDistance = dist
+        const typeInfo = HAZARD_MAP[r.hazardType || r.type] || { label: r.type || 'Hazard', icon: 'warning' }
+        closestHazard = {
+          active: true,
+          title: `Reported ${typeInfo.label}`,
+          message: `${Math.round(dist)}m ahead${r.description ? ` · ${r.description}` : ''}`,
+          distance: Math.round(dist),
+          type: 'report',
+          icon: typeInfo.icon || 'warning',
+          bg: 'bg-rose-600/95 border-rose-400/50',
+        }
       }
     }
-    return { active: false, message: '' }
+
+    // 2. Check Accident Blackspots on or near route
+    const accidentList = selectedRoute?.onRouteAccidents?.length ? selectedRoute.onRouteAccidents : ACCIDENT_BLACKSPOTS
+    for (const acc of accidentList) {
+      if (!isFinite(acc.lat) || !isFinite(acc.lng)) continue
+      const dist = haversineMeters(currentLat, currentLng, acc.lat, acc.lng)
+      if (dist < minDistance) {
+        minDistance = dist
+        closestHazard = {
+          active: true,
+          title: 'Accident Blackspot',
+          message: `${Math.round(dist)}m ahead · ${acc.title || acc.area || 'High collision risk'}`,
+          distance: Math.round(dist),
+          type: 'accident',
+          icon: 'car_crash',
+          bg: 'bg-rose-600/95 border-rose-400/50',
+        }
+      }
+    }
+
+    // 3. Check Crime Hotspots on or near route
+    const crimeList = selectedRoute?.onRouteCrimes?.length ? selectedRoute.onRouteCrimes : CRIME_HOTSPOTS
+    for (const crime of crimeList) {
+      if (!isFinite(crime.lat) || !isFinite(crime.lng)) continue
+      const dist = haversineMeters(currentLat, currentLng, crime.lat, crime.lng)
+      if (dist < minDistance) {
+        minDistance = dist
+        closestHazard = {
+          active: true,
+          title: 'Crime Risk Hotspot',
+          message: `${Math.round(dist)}m ahead · ${crime.area || 'Exercise caution'}`,
+          distance: Math.round(dist),
+          type: 'crime',
+          icon: 'local_police',
+          bg: 'bg-amber-600/95 border-amber-400/50',
+        }
+      }
+    }
+
+    // 4. Check Flood / Waterlogging Risk
+    const floodList = selectedRoute?.onRouteFlood?.length ? selectedRoute.onRouteFlood : FLOOD_ZONES_STATIC
+    for (const flood of floodList) {
+      if (!isFinite(flood.lat) || !isFinite(flood.lng)) continue
+      const dist = haversineMeters(currentLat, currentLng, flood.lat, flood.lng)
+      if (dist < minDistance) {
+        minDistance = dist
+        closestHazard = {
+          active: true,
+          title: 'Waterlogging Zone',
+          message: `${Math.round(dist)}m ahead · ${flood.area || 'Submerged road risk'}`,
+          distance: Math.round(dist),
+          type: 'flood',
+          icon: 'water',
+          bg: 'bg-blue-600/95 border-blue-400/50',
+        }
+      }
+    }
+
+    // 5. Check ML Bottleneck Danger Zone
+    if (selectedRoute?.bottleneck?.lat && selectedRoute?.bottleneck?.lng) {
+      const dist = haversineMeters(currentLat, currentLng, selectedRoute.bottleneck.lat, selectedRoute.bottleneck.lng)
+      if (dist < minDistance) {
+        minDistance = dist
+        closestHazard = {
+          active: true,
+          title: 'Bottleneck Danger Zone',
+          message: `${Math.round(dist)}m ahead · ML Danger Score ${selectedRoute.bottleneck.safety_score ?? '—'}/100`,
+          distance: Math.round(dist),
+          type: 'bottleneck',
+          icon: 'fmd_bad',
+          bg: 'bg-orange-600/95 border-orange-400/50',
+        }
+      }
+    }
+
+    if (closestHazard) {
+      return closestHazard
+    }
+
+    return { active: false, title: '', message: '', distance: 0, type: '', icon: '' }
   }, [onRouteReports, selectedRoute, currentLat, currentLng])
 
   useEffect(() => {
     if (hazardNearby.active && !lastSpokenHazardRef.current) {
       lastSpokenHazardRef.current = true
       if (isVoiceEnabled) {
-        speakText(hazardNearby.message)
+        speakText(`${hazardNearby.title}: ${hazardNearby.message}`)
       }
     } else if (!hazardNearby.active) {
       lastSpokenHazardRef.current = false
@@ -1298,13 +1393,16 @@ export default function NavigationPage() {
         </div>
       )}
 
-      {/* ════════ HAZARD PROXIMITY ALERT BANNER (<300m) ════════ */}
-      {hazardNearby && (
-        <div className="absolute bottom-[235px] left-4 right-4 z-30 flex items-center gap-3 rounded-2xl px-4 py-3 bg-rose-600/95 text-white shadow-2xl animate-pulse border border-rose-400/50 backdrop-blur-md">
-          <span className="material-symbols-outlined icon-filled text-[26px]">warning</span>
+      {/* ════════ DYNAMIC HAZARD PROXIMITY ALERT (Only visible within <300m, disappears when clear) ════════ */}
+      {hazardNearby?.active && (
+        <div className={`absolute bottom-[235px] left-4 right-4 z-30 flex items-center gap-3 rounded-2xl px-4 py-3 text-white shadow-2xl animate-pulse border backdrop-blur-md transition-all duration-300 ${hazardNearby.bg || 'bg-rose-600/95 border-rose-400/50'}`}>
+          <span className="material-symbols-outlined icon-filled text-[24px] flex-shrink-0">{hazardNearby.icon || 'warning'}</span>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-black uppercase tracking-wide">Hazard Nearby on Route</p>
-            <p className="text-[11px] text-rose-100 truncate">Caution: Active road hazard reported within 300 meters.</p>
+            <p className="text-xs font-black uppercase tracking-wide flex items-center gap-1.5">
+              <span>{hazardNearby.title}</span>
+              <span className="text-[10px] opacity-80 font-normal">({hazardNearby.distance}m)</span>
+            </p>
+            <p className="text-[11px] text-white/95 truncate font-medium">{hazardNearby.message}</p>
           </div>
         </div>
       )}
