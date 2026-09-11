@@ -36,6 +36,9 @@ import MLPlaygroundPage   from './pages/MLPlayground/MLPlaygroundPage';
 import PrivacyPage        from './pages/Legal/PrivacyPage';
 import TermsPage          from './pages/Legal/TermsPage';
 
+// ── Auth Callback ──
+import AuthCallbackPage   from './pages/Auth/AuthCallbackPage';
+
 function PrivateRoute({ children }) {
   const { isLoggedIn, hasPermissions } = useAppStore();
   if (!isLoggedIn)    return <Navigate to="/login"       replace />;
@@ -137,6 +140,7 @@ export default function App() {
         <Route path="/emergency"   element={<EmergencyPage />} />
         <Route path="/privacy"     element={<PrivacyPage />} />
         <Route path="/terms"       element={<TermsPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/dev/model-test" element={<MLPlaygroundPage />} />
 
         <Route
