@@ -36,6 +36,8 @@ import { DISASTER_ZONES, DISASTER_SEVERITY_CONFIG, DISASTER_ROUTE_PROXIMITY_METE
 import { ACCIDENT_BLACKSPOTS, ACCIDENT_SEVERITY_CONFIG, ACCIDENT_ROUTE_PROXIMITY_METERS } from '../data/accidentBlackspots'
 import { getRouteTrafficRegulations } from '../data/trafficRestrictions.js'
 
+const HAZARD_MAP = Object.fromEntries((HAZARD_TYPES || []).map(h => [h.id, h]))
+
 // ─── Safe numerical helper ────────────────────────────────────────────────────────
 export function safeNum(val, fallback = 0) {
   if (typeof val === 'number' && !isNaN(val) && isFinite(val)) return val
