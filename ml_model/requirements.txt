@@ -7,3 +7,5 @@ numpy>=1.26.0
 pandas>=2.2.0
 joblib>=1.4.0
 requests>=2.31.0
+gunicorn>=22.0.0
+
