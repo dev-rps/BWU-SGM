@@ -73,6 +73,43 @@ const OSRM_ENDPOINTS = [
   'https://routing.openstreetmap.de/routed-foot/route/v1'
 ]
 
+/**
+ * Snaps a coordinate (lat, lng) to the nearest vehicle/pedestrian road network point.
+ * Essential when user starts from inside a building, railway colony, courtyard, or footway
+ * that vehicular routing engines cannot directly depart from.
+ */
+export async function findNearestRoadCoordinate(lat, lng, mode = 'driving') {
+  if (!isFinite(lat) || !isFinite(lng)) return { lat, lng, distance: 0, roadName: '', isSnapped: false }
+
+  const endpoints = mode === 'driving'
+    ? ['https://router.project-osrm.org/nearest/v1/driving', 'https://routing.openstreetmap.de/routed-car/nearest/v1/driving']
+    : mode === 'cycling'
+    ? ['https://routing.openstreetmap.de/routed-bike/nearest/v1/bike', 'https://router.project-osrm.org/nearest/v1/bike']
+    : ['https://routing.openstreetmap.de/routed-foot/nearest/v1/foot', 'https://router.project-osrm.org/nearest/v1/foot']
+
+  for (const ep of endpoints) {
+    try {
+      const res = await fetch(`${ep}/${lng},${lat}`, { signal: AbortSignal.timeout(3000) })
+      if (!res.ok) continue
+      const data = await res.json()
+      if (data.code === 'Ok' && data.waypoints?.[0]?.location) {
+        const [snapLng, snapLat] = data.waypoints[0].location
+        const distance = data.waypoints[0].distance || 0
+        const roadName = data.waypoints[0].name || ''
+        return {
+          lat: snapLat,
+          lng: snapLng,
+          distance: Math.round(distance),
+          roadName: roadName.trim(),
+          isSnapped: distance > 8,
+        }
+      }
+    } catch {}
+  }
+
+  return { lat, lng, distance: 0, roadName: '', isSnapped: false }
+}
+
 async function getRouteFromOSRM(fromLat, fromLng, toLat, toLng, mode = 'driving') {
   const coords  = `${fromLng},${fromLat};${toLng},${toLat}`
   const params  = new URLSearchParams({ overview: 'full', geometries: 'geojson', steps: 'true', alternatives: 'true' })
@@ -86,14 +123,14 @@ async function getRouteFromOSRM(fromLat, fromLng, toLat, toLng, mode = 'driving'
   // Try up to 2 endpoints for redundancy
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const base = OSRM_ENDPOINTS[endpointIdx] || OSRM_ENDPOINTS[0]
-      // Fallback to primary if specific mode router fails
-      const currentBase = attempt === 0 ? base : OSRM_ENDPOINTS[0]
+      const currentBase = attempt === 0
+        ? (OSRM_ENDPOINTS[endpointIdx] || OSRM_ENDPOINTS[0])
+        : (mode === 'driving' ? OSRM_ENDPOINTS[1] : OSRM_ENDPOINTS[0])
       const profile = (attempt === 0 && endpointIdx > 0)
         ? (mode === 'cycling' ? 'bike' : mode === 'walking' ? 'foot' : 'car')
         : 'driving'
       
-      const res = await fetch(`${currentBase}/${profile}/${coords}?${params}`)
+      const res = await fetch(`${currentBase}/${profile}/${coords}?${params}`, { signal: AbortSignal.timeout(5000) })
       if (!res.ok) throw new Error(`OSRM error ${res.status}`)
       const data = await res.json()
       if (data.code !== 'Ok' || !data.routes?.length) throw new Error('OSRM no routes')
@@ -221,19 +258,22 @@ async function fetchOSRMViaWaypoint(fromLat, fromLng, wpLat, wpLng, toLat, toLng
   
   let endpoint = OSRM_ENDPOINTS[0]
   let profile = 'driving'
+  let backupBase = OSRM_ENDPOINTS[1]
   if (mode === 'cycling') {
     endpoint = OSRM_ENDPOINTS[2]
     profile = 'bike'
+    backupBase = OSRM_ENDPOINTS[0]
   } else if (mode === 'walking') {
     endpoint = OSRM_ENDPOINTS[3]
     profile = 'foot'
+    backupBase = OSRM_ENDPOINTS[0]
   }
 
-  const bases = [endpoint, OSRM_ENDPOINTS[0]]
+  const bases = [endpoint, backupBase]
   for (const base of bases) {
     try {
       const prof = base.includes('openstreetmap.de') ? (mode === 'cycling' ? 'bike' : mode === 'walking' ? 'foot' : 'car') : 'driving'
-      const res = await fetch(`${base}/${prof}/${coords}?${params}`, { signal: AbortSignal.timeout(2800) })
+      const res = await fetch(`${base}/${prof}/${coords}?${params}`, { signal: AbortSignal.timeout(4000) })
       if (!res.ok) continue
       const data = await res.json()
       if (data.code !== 'Ok' || !data.routes?.length) continue
@@ -341,9 +381,10 @@ function synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, to
   const offsetMeters = variantIdx === 0
     ? 0
     : (isWalk || isBike)
-    ? (variantIdx === 1 ? 320 : 420)
-    : (variantIdx === 1 ? 850 : 1050)
+    ? (variantIdx === 1 ? 280 : 380)
+    : (variantIdx === 1 ? 480 : 680)
   const offsetDeg = offsetMeters / 111000
+  const sign = variantIdx === 2 ? 1 : -1
 
   let sourcePts = baseRoute?.geometry || []
   if (sourcePts.length < 5) {
@@ -536,9 +577,12 @@ export async function ensureThreeDistinctRoutes(candidateRoutes = [], fromLat, f
   const perpLat = -dLng / len
   const perpLng = dLat / len
 
+  const approxDistM = Math.hypot(toLat - fromLat, toLng - fromLng) * 111000
   for (let v = 1; v <= 2 && distinct.length < 3; v++) {
     const baseSign = v === 1 ? -1 : 1
-    const offsetM = (mode === 'walking' || mode === 'cycling') ? 350 : 800
+    const offsetM = (mode === 'walking' || mode === 'cycling')
+      ? 280
+      : Math.min(480, Math.max(220, Math.round(approxDistM * 0.08)))
     const offsetDeg = offsetM / 111000
     
     const midPct = v === 1 ? 0.40 : 0.60
@@ -573,7 +617,11 @@ export async function ensureThreeDistinctRoutes(candidateRoutes = [], fromLat, f
     let newRoute = await fetchOSRMViaWaypoint(fromLat, fromLng, wpLat, wpLng, toLat, toLng, mode)
     
     if (!newRoute || distinct.some(d => areRoutesDuplicate(d, newRoute))) {
-      newRoute = synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, toLng, mode, v)
+      try {
+        newRoute = synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, toLng, mode, v)
+      } catch {
+        newRoute = null
+      }
     }
 
     if (newRoute && !distinct.some(d => areRoutesDuplicate(d, newRoute))) {
@@ -584,8 +632,12 @@ export async function ensureThreeDistinctRoutes(candidateRoutes = [], fromLat, f
   // Fallback to guarantee exactly 3 distinct routes
   while (distinct.length < 3) {
     const v = distinct.length
-    const synth = synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, toLng, mode, v)
-    distinct.push(synth)
+    try {
+      const synth = synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, toLng, mode, v)
+      distinct.push(synth)
+    } catch {
+      break
+    }
   }
 
   return distinct.slice(0, 3).map((r, i) => ({ ...r, index: i }))
@@ -602,7 +654,7 @@ export async function getRoute(fromLat, fromLng, toLat, toLng, mode = 'driving')
       candidateRoutes.push(...googleRoutes)
     }
   } catch (googleErr) {
-    console.warn('[Routing] Google Routes failed:', googleErr.message)
+    // Expected fallback when Google API key not set
   }
 
   // 2. TRY TOMTOM API if not enough routes
@@ -610,11 +662,11 @@ export async function getRoute(fromLat, fromLng, toLat, toLng, mode = 'driving')
     const travelMode = TOMTOM_MODE[mode] || 'car'
     try {
       const [resultA, resultB] = await Promise.allSettled([
-        fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'fastest', 1)).then(r => {
+        fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'fastest', 1), { signal: AbortSignal.timeout(6000) }).then(r => {
           if (!r.ok) throw new Error(`TomTom ${r.status}`)
           return r.json()
         }),
-        fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'shortest', 0)).then(r => {
+        fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'shortest', 0), { signal: AbortSignal.timeout(6000) }).then(r => {
           if (!r.ok) throw new Error(`TomTom ${r.status}`)
           return r.json()
         }),
@@ -648,7 +700,58 @@ export async function getRoute(fromLat, fromLng, toLat, toLng, mode = 'driving')
     }
   }
 
-  // 4. Ensure EXACTLY 3 DISTINCT ROUTES with nearby streets for walk/bike/drive
+  // 4. INTELLIGENT ROAD SNAPPING FALLBACK
+  // If zero routes were found, user start coordinate may be off-road, inside a building,
+  // railway quarter, courtyard, or pedestrian footway where car engines refuse to start.
+  // Snap to the nearest vehicle-accessible road and route from there, prepending the access walk.
+  if (candidateRoutes.length === 0) {
+    try {
+      const snapped = await findNearestRoadCoordinate(fromLat, fromLng, mode)
+      if (snapped && snapped.isSnapped) {
+        console.info(`[Routing] Snapped ${mode} from off-road (${snapped.distance}m to ${snapped.roadName || 'road network'})`)
+
+        const travelMode = TOMTOM_MODE[mode] || 'car'
+        const snappedTomTom = await fetch(buildUrl(snapped.lat, snapped.lng, toLat, toLng, travelMode, 'fastest', 1), { signal: AbortSignal.timeout(5000) })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+
+        const snappedCandidates = []
+        if (snappedTomTom?.routes?.length && !snappedTomTom.detailedError) {
+          snappedCandidates.push(parseRoute(snappedTomTom.routes[0], 0, mode))
+          if (snappedTomTom.routes[1]) {
+            snappedCandidates.push(parseRoute(snappedTomTom.routes[1], 1, mode))
+          }
+        }
+
+        if (!snappedCandidates.length) {
+          const snappedOsrm = await getRouteFromOSRM(snapped.lat, snapped.lng, toLat, toLng, mode).catch(() => [])
+          if (snappedOsrm?.length) snappedCandidates.push(...snappedOsrm)
+        }
+
+        for (const sr of snappedCandidates) {
+          // Prepend original GPS position so user sees the route starting from their exact location
+          sr.geometry = [[fromLat, fromLng], ...sr.geometry]
+          sr.distance += snapped.distance
+          sr.duration += Math.round(snapped.distance / (mode === 'walking' ? 1.3 : mode === 'cycling' ? 4.0 : 5.0))
+          sr.distanceKm = (sr.distance / 1000).toFixed(1)
+          sr.durationMin = Math.max(1, Math.round(sr.duration / 60))
+          sr.steps = [
+            {
+              instruction: `Head ${snapped.distance}m toward ${snapped.roadName || 'main road'} to start ${mode === 'driving' ? 'driving' : mode}`,
+              distance: snapped.distance,
+              icon: 'straight',
+            },
+            ...sr.steps,
+          ]
+          candidateRoutes.push(sr)
+        }
+      }
+    } catch (snapErr) {
+      console.warn('[Routing] Snapping fallback failed:', snapErr.message)
+    }
+  }
+
+  // 5. Ensure EXACTLY 3 DISTINCT ROUTES with nearby streets for walk/bike/drive
   const finalRoutes = await ensureThreeDistinctRoutes(candidateRoutes, fromLat, fromLng, toLat, toLng, mode)
   return finalRoutes.map((r, i) => ({ ...r, index: i }))
 }
