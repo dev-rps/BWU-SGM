@@ -104,8 +104,7 @@ function Toast({ msg, type }) {
   )
 }
 
-/* ─── Illustrations ───────────────────────────────────────────────────────── */
-const BG_IMG = 'https://lh3.googleusercontent.com/aida-public/AB6AXuCK_h2_P4G1G70d1y7oZkL5uS7B5cI0C9E8jD2f-K6L-M8N0O2P-Q4R6S8T-U0V2W4X6Y8Z0A2B4C6D8E0F2G4H6I8'
+const BG_IMG = '/login-bg.jpg'
 
 /* ─── Main Component ──────────────────────────────────────────────────────── */
 export default function LoginPage() {

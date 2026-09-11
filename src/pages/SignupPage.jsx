@@ -93,7 +93,7 @@ const SignUpPage = () => {
               <img 
                 alt="Safety Map Logo" 
                 className="w-full h-full object-contain" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAqSjd8v9SUEFI4A8l2UME9V5cUCVK_b8EdNo-9j6j2UU2XE5wKc24epEgPLixe9D5JvnyBOkZmw_fkY_rKeZgaKWV1f0s35GmO2lD612HdRG-xvYBclGCA7lY3DuvLAnhsSXECBkLKbNS0G0Orjbe0SHFD2kHTWElAIvJA0YZyAC-sMwuYno76FcoDohV8avNKX12QeelkMZ0F-bcagEnAj_1UA2k0LncE5pr2syD6j7d_Uz0gqxIjFip5T01JO9GEj7I" 
+                src="/logo.png" 
               />
             </div>
             <h1 className="font-['Inter'] text-[24px] leading-[30px] md:text-[28px] md:leading-[34px] text-[#191c1e] text-center px-4 font-bold">
