@@ -1,47 +1,42 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { auth, db, googleProvider } from "../firebase/firebase.js";
-import { signInWithPopup } from 'firebase/auth';
+import { useNavigate, Link } from 'react-router-dom';
+import { signup, googleLogin } from '../services/authService';
 
 const SignUpPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [isFullNameFocused, setIsFullNameFocused] = useState(false);
   const [isEmailFocused, setIsEmailFocused] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
+    if (!email || !password || !fullName) return;
 
-  try {
-    const userCredential = await createUserWithEmailAndPassword(
-      auth,
-      email,
-      password
-    );
+    setLoading(true);
+    try {
+      await signup(fullName.trim(), email.trim(), password);
+      alert("Account created successfully! Welcome to Safety Guardian.");
+      navigate("/");
+    } catch (error) {
+      alert(error.message || "Failed to create account. Please check your details.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    await updateProfile(userCredential.user, {
-      displayName: fullName,
-    });
+  const handleGoogleSignup = async () => {
+    try {
+      await googleLogin();
+    } catch (error) {
+      alert(error.message || "Google sign-up failed.");
+    }
+  };
 
-    await setDoc(doc(db, "users", userCredential.user.uid), {
-      uid: userCredential.user.uid,
-      name: fullName,
-      email,
-      createdAt: new Date(),
-    });
-
-    alert("Account created successfully!");
-    navigate("/");
-  } catch (error) {
-    alert(error.message);
-  }
-};
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
@@ -203,6 +198,7 @@ const SignUpPage = () => {
 
               {/* Social Auth */}
               <button 
+                onClick={handleGoogleSignup}
                 className="w-full bg-white text-[#191c1e] font-['Inter'] text-[12px] font-semibold h-12 rounded-xl border border-[#c3c6d7] shadow-sm hover:bg-[#f2f4f6] spring-animate transition-all flex items-center justify-center gap-3" 
                 type="button"
               >
@@ -222,7 +218,7 @@ const SignUpPage = () => {
           {/* Footer Link */}
           <p className="text-center font-['Inter'] text-[14px] text-[#434655]">
             Already have an account? 
-            <a className="text-[#004ac6] font-semibold hover:underline decoration-2 underline-offset-4 ml-1" href="#">Login</a>
+            <Link className="text-[#004ac6] font-semibold hover:underline decoration-2 underline-offset-4 ml-1" to="/login">Login</Link>
           </p>
         </main>
         

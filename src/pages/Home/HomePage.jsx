@@ -1,6 +1,6 @@
-import { collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { db, auth } from "../../firebase/firebase.js";
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { supabase } from '../../supabase/supabase'
+
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useNavigate } from 'react-router-dom'
@@ -265,61 +265,118 @@ export default function HomePage() {
       .catch(() => { setWeatherError('Unable to load weather'); setWeatherLoading(false) })
   }, [userLocation?.lat, userLocation?.lng, locating])
 
-  // ── Firestore: subscribe to community reports ─────────────────────────────
+  // ── Supabase: subscribe to community reports ─────────────────────────────
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, 'reports'),
-      (snapshot) => {
-        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
-        setReports(data)
-      },
-      (err) => console.error('Firestore reports error:', err)
-    )
-    return () => unsub()
+    let isMounted = true
+
+    const loadReports = async () => {
+      const { data, error } = await supabase
+        .from('hazard_reports')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (!error && data && isMounted) {
+        const formatted = data.map(r => ({
+          ...r,
+          id: r.id,
+          lat: r.latitude,
+          lng: r.longitude,
+          type: r.hazard_type,
+          location: r.formatted_address || r.location_name || '',
+          severity: r.severity,
+          title: r.hazard_label,
+          description: r.description,
+          createdAt: r.created_at,
+        }))
+        setReports(formatted)
+      }
+    }
+
+    loadReports()
+
+    const channel = supabase.channel('hazard_reports_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hazard_reports' }, () => {
+        loadReports()
+      })
+      .subscribe()
+
+    return () => {
+      isMounted = false
+      supabase.removeChannel(channel)
+    }
   }, [setReports])
 
-  // ── Firestore: subscribe to live_locations (People Near Me) ──────────────
+  // ── Supabase: subscribe to live_locations (People Near Me) ──────────────
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, 'live_locations'),
-      (snapshot) => {
-        const uid = auth.currentUser?.uid
-        const users = snapshot.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .filter(u => u.id !== uid && u.lat && u.lng)
+    let isMounted = true
+
+    const loadLiveLocations = async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      const { data, error } = await supabase
+        .from('live_locations')
+        .select('*')
+
+      if (!error && data && isMounted) {
+        const users = data
+          .filter(u => u.user_id !== currentUser?.id && u.latitude && u.longitude)
+          .map(u => ({
+            id: u.id,
+            lat: u.latitude,
+            lng: u.longitude,
+            name: u.display_name,
+            avatar: u.avatar_url,
+          }))
         setLiveUsers(users)
-      },
-      (err) => console.warn('[LiveUsers] error:', err)
-    )
-    return () => unsub()
+      }
+    }
+
+    loadLiveLocations()
+    const pollTimer = setInterval(loadLiveLocations, 10000)
+
+    return () => {
+      isMounted = false
+      clearInterval(pollTimer)
+    }
   }, [])
 
-  // ── Publish own GPS to Firestore when Live Friend Tracking is ON ──────────
+  // ── Publish own GPS to Supabase when Live Friend Tracking is ON ──────────
   useEffect(() => {
-    const uid = auth.currentUser?.uid
-    if (!prefs?.liveFriendTracking) {
-      if (uid) deleteDoc(doc(db, 'live_locations', uid)).catch(() => {})
-      return
+    let timer = null
+
+    const publish = async () => {
+      if (!prefs?.liveFriendTracking || !userLocation?.lat || !userLocation?.lng) return
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) return
+
+      const displayName = authUser.user_metadata?.full_name || user?.name || 'Anonymous'
+
+      await supabase.from('live_locations').upsert({
+        user_id: authUser.id,
+        latitude: userLocation.lat,
+        longitude: userLocation.lng,
+        display_name: displayName,
+        avatar_url: user?.avatar || null,
+        updated_at: new Date().toISOString(),
+      })
     }
-    if (!userLocation?.lat || !userLocation?.lng || !uid) return
 
-    const displayName = auth.currentUser?.displayName || user?.name || 'Anonymous'
+    if (prefs?.liveFriendTracking && userLocation?.lat && userLocation?.lng) {
+      publish()
+      timer = setInterval(publish, 10000)
+    } else {
+      supabase.auth.getUser().then(({ data: { user: u } }) => {
+        if (u) supabase.from('live_locations').delete().eq('user_id', u.id)
+      })
+    }
 
-    const publish = () => setDoc(doc(db, 'live_locations', uid), {
-      lat: userLocation.lat,
-      lng: userLocation.lng,
-      name: displayName,
-      avatar: user?.avatar || '',
-      updatedAt: serverTimestamp(),
-    }).catch(() => {})
-
-    publish()
-    const interval = setInterval(publish, 10000)
     return () => {
-      clearInterval(interval)
-      deleteDoc(doc(db, 'live_locations', uid)).catch(() => {})
+      if (timer) clearInterval(timer)
+      supabase.auth.getUser().then(({ data: { user: u } }) => {
+        if (u) supabase.from('live_locations').delete().eq('user_id', u.id)
+      })
     }
-  }, [prefs?.liveFriendTracking, userLocation?.lat, userLocation?.lng, user?.name])
+  }, [prefs?.liveFriendTracking, userLocation?.lat, userLocation?.lng, user?.name, user?.avatar])
+
 
   // ── Search with debounce ──────────────────────────────────────────────────
   const handleSearchChange = (val) => {

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
 import { createSOSEvent, subscribeToSOSEvent, getStatusLabel } from '../../services/sosService'
-import { auth } from '../../firebase/firebase'
+import { supabase } from '../../supabase/supabase'
 import { triggerSOSSmsRedirect } from '../../services/smsRedirect'
 import { getLocationName } from '../../services/reverseGeocode'
 
@@ -202,12 +202,12 @@ export default function EmergencyPage() {
     setSending(true)
     setSendError(null)
     try {
-      const user = auth.currentUser
+      const { data: { user } } = await supabase.auth.getUser()
       const userObj = {
-        uid:   user?.uid   || 'anonymous',
-        name:  user?.displayName || 'Unknown User',
+        uid:   user?.id   || 'anonymous',
+        name:  user?.user_metadata?.full_name || user?.email || 'Unknown User',
         email: user?.email  || '',
-        phone: user?.phoneNumber || '',
+        phone: user?.phone || user?.user_metadata?.phone || '',
       }
       const event = await createSOSEvent({
         user:             userObj,

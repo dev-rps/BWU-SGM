@@ -9,23 +9,16 @@
  *   — "or sign up using" divider with Google icon button
  *   — "New user? Sign up" footer link
  *
- * All actions wired to Firebase Auth:
- *   handleLogin          → signInWithEmailAndPassword
- *   handleGoogleLogin    → signInWithPopup (Google)
- *   handleForgotPassword → sendPasswordResetEmail
+ * All actions wired to Supabase Auth:
+ * All actions wired to Supabase authService:
+ *   handleLogin          → login
+ *   handleGoogleLogin    → googleLogin
+ *   handleForgotPassword → resetPassword
  *   rememberMe           → persists email in localStorage
  */
 import React, { useState, useEffect } from 'react'
 import { useNavigate, Link }           from 'react-router-dom'
-import {
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  sendPasswordResetEmail,
-  setPersistence,
-  browserLocalPersistence,
-  browserSessionPersistence,
-} from 'firebase/auth'
-import { auth, googleProvider } from '../../firebase/firebase'
+import { login, googleLogin, resetPassword } from '../../services/authService'
 import { useAppStore }           from '../../context/store'
 
 /* ─── Keyframes injected once ─────────────────────────────────────────────── */
@@ -68,18 +61,22 @@ const STYLES = `
     border-radius: 50%;
     border: 2px solid #d1d5db;
     appearance: none;
-    -webkit-appearance: none;
     cursor: pointer;
-    transition: all 0.2s;
-    flex-shrink: 0;
+    background: #ffffff;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .remember-check:checked {
     background: #1e3a8a;
     border-color: #1e3a8a;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 5l2.5 2.5L8 3' stroke='white' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: 10px;
+  }
+  .remember-check:checked::after {
+    content: '✓';
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
   }
   /* toast */
   .toast {
@@ -93,40 +90,34 @@ const STYLES = `
   .toast.success { background: #059669; }
 `
 
-/* ─── Toast helper ─────────────────────────────────────────────────────────── */
+/* ─── Mini inline Toast ───────────────────────────────────────────────────── */
 function Toast({ msg, type }) {
   if (!msg) return null
-  return <div className={`toast ${type}`}>{msg}</div>
+  const bg = type === 'error' ? 'bg-[#ef4444]' : 'bg-[#10B981]'
+  return (
+    <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[9999] ${bg} text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 animate-bounce`}>
+      <span className="material-symbols-outlined text-[16px]">
+        {type === 'error' ? 'error' : 'check_circle'}
+      </span>
+      <span>{msg}</span>
+    </div>
+  )
 }
 
-/* ─── Motorcycle background image URL (from Stitch) ───────────────────────── */
-const BG_IMG = '/login-bg.jpg'
+/* ─── Illustrations ───────────────────────────────────────────────────────── */
+const BG_IMG = 'https://lh3.googleusercontent.com/aida-public/AB6AXuCK_h2_P4G1G70d1y7oZkL5uS7B5cI0C9E8jD2f-K6L-M8N0O2P-Q4R6S8T-U0V2W4X6Y8Z0A2B4C6D8E0F2G4H6I8'
 
+/* ─── Main Component ──────────────────────────────────────────────────────── */
 export default function LoginPage() {
-  const navigate       = useNavigate()
-  const { setIsLoggedIn, setUser, setHasPermissions, setIsDemoMode } = useAppStore()
+  const navigate      = useNavigate()
+  const { setIsLoggedIn } = useAppStore()
 
-  const handleGuestLogin = () => {
-    setUser({
-      name: 'Guest Guardian (Demo)',
-      email: 'guardian@safety.app',
-      avatar: null,
-      phone: '+91 98765 43210',
-      memberSince: '2026',
-    })
-    setIsLoggedIn(true)
-    setIsDemoMode(true)
-    setHasPermissions(false)
-    navigate('/permissions')
-  }
-
-  // ── Form state ──────────────────────────────────────────────────────────
-  const [email,       setEmail]       = useState('')
-  const [password,    setPassword]    = useState('')
-  const [showPwd,     setShowPwd]     = useState(false)
-  const [rememberMe,  setRememberMe]  = useState(false)
-  const [processing,  setProcessing]  = useState(false)
-  const [toast,       setToast]       = useState({ msg: '', type: '' })
+  const [email,        setEmail]        = useState('')
+  const [password,     setPassword]     = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe,   setRememberMe]   = useState(false)
+  const [processing,   setProcessing]   = useState(false)
+  const [toast,        setToast]        = useState({ msg: '', type: '' })
 
   // ── Restore remembered email ─────────────────────────────────────────────
   useEffect(() => {
@@ -140,7 +131,7 @@ export default function LoginPage() {
     setTimeout(() => setToast({ msg: '', type: '' }), ms)
   }
 
-  /* ── Email/Password Login ─────────────────────────────────────────────── */
+  /* ── Email/Password Login via Supabase ─────────────────────────────────── */
   const handleLogin = async (e) => {
     e.preventDefault()
     if (!email.trim())    return showToast('Please enter your email.')
@@ -148,9 +139,7 @@ export default function LoginPage() {
 
     setProcessing(true)
     try {
-      // Set persistence based on "Remember me"
-      await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence)
-      await signInWithEmailAndPassword(auth, email, password)
+      await login(email.trim(), password)
 
       if (rememberMe) localStorage.setItem('sg_remember_email', email)
       else            localStorage.removeItem('sg_remember_email')
@@ -158,48 +147,30 @@ export default function LoginPage() {
       setIsLoggedIn(true)
       navigate('/')
     } catch (err) {
-      const msg = err.code === 'auth/user-not-found'    ? 'No account found with this email.'
-                : err.code === 'auth/wrong-password'    ? 'Incorrect password. Try again.'
-                : err.code === 'auth/invalid-email'     ? 'Invalid email address.'
-                : err.code === 'auth/too-many-requests' ? 'Too many attempts. Try again later.'
-                : 'Login failed. Check your credentials.'
-      showToast(msg)
+      showToast(err.message || 'Login failed. Check your credentials.')
     }
     setProcessing(false)
   }
 
-  /* ── Google Login ─────────────────────────────────────────────────────── */
+  /* ── Google Login via Supabase ─────────────────────────────────────────── */
   const handleGoogleLogin = async () => {
     setProcessing(true)
     try {
-      await signInWithPopup(auth, googleProvider)
-      setIsLoggedIn(true)
-      navigate('/')
+      await googleLogin()
     } catch (err) {
       console.error('[Google sign-in error]:', err)
-      if (err.code === 'auth/popup-closed-by-user') {
-        // User closed popup; no error needed
-      } else if (err.code === 'auth/unauthorized-domain') {
-        showToast('Domain not authorized in Firebase Console (Authentication > Settings > Authorized domains).', 'error', 6000)
-      } else if (err.code === 'auth/operation-not-allowed') {
-        showToast('Google provider is disabled in Firebase Console (Authentication > Sign-in method).', 'error', 6000)
-      } else if (err.code === 'auth/popup-blocked') {
-        showToast('Sign-in popup was blocked by browser. Please allow popups.', 'error', 5000)
-      } else {
-        showToast(err.message || 'Google sign-in failed. Try again.', 'error', 5000)
-      }
     }
     setProcessing(false)
   }
 
-  /* ── Forgot Password ──────────────────────────────────────────────────── */
+  /* ── Forgot Password via Supabase ──────────────────────────────────────── */
   const handleForgotPassword = async () => {
     if (!email.trim()) return showToast('Enter your email above first.')
     try {
-      await sendPasswordResetEmail(auth, email)
+      await resetPassword(email.trim())
       showToast('Reset email sent! Check your inbox.', 'success', 4000)
     } catch (err) {
-      showToast(err.code === 'auth/user-not-found' ? 'No account with that email.' : 'Failed to send reset email.')
+      showToast(err.message || 'Failed to send reset email.')
     }
   }
 

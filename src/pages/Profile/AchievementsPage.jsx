@@ -12,7 +12,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
-import { auth } from '../../firebase/firebase'
+import { supabase } from '../../supabase/supabase'
 import { loadMedicalProfile } from '../../services/medicalService'
 import { computeUserBadges, BADGE_TIERS } from '../../services/badgeService'
 
@@ -24,8 +24,8 @@ export default function AchievementsPage() {
 
   useEffect(() => {
     async function load() {
-      const uid = auth?.currentUser?.uid
-      const prof = await loadMedicalProfile(uid)
+      const { data: { user } } = await supabase.auth.getUser()
+      const prof = await loadMedicalProfile(user?.id)
       setMedicalProfile(prof)
     }
     load()

@@ -1,21 +1,11 @@
 /**
- * medicalService.js — Medical Profile Persistence & Sync
+ * src/services/medicalService.js — Medical Profile Persistence & Sync
  *
- * Securely manages user medical profile:
- * - Blood Group, Age, Height, Weight
- * - Medical Conditions (Multi-select + Other)
- * - Allergies (Chips + Other)
- * - Current Medications (Name, Dosage, Frequency, Notes)
- * - Emergency Contacts (Name, Relationship, Phone, Priority)
- * - Doctor Details (Name, Hospital, Phone)
- * - Insurance Info (Provider, Policy Number)
- *
- * Syncs seamlessly with Firestore (users/{uid}/medicalProfile)
- * and mirrors in localStorage for offline & instant retrieval.
+ * Securely manages user medical profile using Supabase Postgres `medical_profiles`
+ * and mirrors in localStorage for instant retrieval and offline continuity.
  */
 
-import { db } from '../firebase/firebase'
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { supabase } from '../supabase/supabase'
 
 const LOCAL_STORAGE_KEY = 'sg_medical_profile_v2'
 
@@ -57,14 +47,35 @@ export async function loadMedicalProfile(uid) {
   // If no UID (guest / logged out), return cached or default
   if (!uid) return cached || { ...DEFAULT_MEDICAL_PROFILE }
 
-  // 2. Fetch from Firestore
+  // 2. Fetch from Supabase `medical_profiles` table
   try {
-    const docRef = doc(db, 'users', uid, 'medical', 'profile')
-    const snap = await getDoc(docRef)
+    const { data, error } = await supabase
+      .from('medical_profiles')
+      .select('*')
+      .eq('user_id', uid)
+      .maybeSingle()
 
-    if (snap.exists()) {
-      const data = snap.data()
-      const merged = { ...DEFAULT_MEDICAL_PROFILE, ...data }
+    if (!error && data) {
+      const merged = {
+        ...DEFAULT_MEDICAL_PROFILE,
+        bloodGroup: data.blood_group || '',
+        age: data.age ? String(data.age) : '',
+        height: data.height_cm ? String(data.height_cm) : '',
+        weight: data.weight_kg ? String(data.weight_kg) : '',
+        conditions: data.conditions || [],
+        otherCondition: data.other_conditions || '',
+        allergies: data.allergies || [],
+        otherAllergy: data.other_allergies || '',
+        medicines: data.medicines || [],
+        emergencyMedicines: data.emergency_medicines || [],
+        doctorName: data.doctor_name || '',
+        doctorHospital: data.doctor_hospital || '',
+        doctorPhone: data.doctor_phone || '',
+        insuranceProvider: data.insurance_provider || '',
+        insurancePolicyNumber: data.insurance_policy_number || '',
+        lastUpdated: data.updated_at || data.created_at,
+      }
+
       // Update local storage
       try {
         localStorage.setItem(`${LOCAL_STORAGE_KEY}_${uid}`, JSON.stringify(merged))
@@ -72,7 +83,7 @@ export async function loadMedicalProfile(uid) {
       return merged
     }
   } catch (err) {
-    console.warn('[MedicalProfile] Firestore fetch error (falling back to cache):', err)
+    console.warn('[MedicalProfile] Supabase fetch error (falling back to cache):', err)
   }
 
   return cached || { ...DEFAULT_MEDICAL_PROFILE }
@@ -97,18 +108,39 @@ export async function saveMedicalProfile(uid, profileData) {
     console.warn('[MedicalProfile] LocalStorage save error:', e)
   }
 
-  // 2. Save to Firestore if user is authenticated
+  // 2. Save to Supabase if user is authenticated
   if (uid) {
     try {
-      const docRef = doc(db, 'users', uid, 'medical', 'profile')
-      await setDoc(docRef, {
-        ...sanitized,
-        updatedAt: serverTimestamp(),
-      }, { merge: true })
+      const row = {
+        user_id: uid,
+        blood_group: profileData.bloodGroup || null,
+        age: profileData.age ? parseInt(profileData.age, 10) : null,
+        height_cm: profileData.height ? parseFloat(profileData.height) : null,
+        weight_kg: profileData.weight ? parseFloat(profileData.weight) : null,
+        conditions: Array.isArray(profileData.conditions) ? profileData.conditions : [],
+        other_conditions: profileData.otherCondition || null,
+        allergies: Array.isArray(profileData.allergies) ? profileData.allergies : [],
+        other_allergies: profileData.otherAllergy || null,
+        medicines: Array.isArray(profileData.medicines) ? profileData.medicines : [],
+        emergency_medicines: Array.isArray(profileData.emergencyMedicines) ? profileData.emergencyMedicines : [],
+        doctor_name: profileData.doctorName || null,
+        doctor_hospital: profileData.doctorHospital || null,
+        doctor_phone: profileData.doctorPhone || null,
+        insurance_provider: profileData.insuranceProvider || null,
+        insurance_policy_number: profileData.insurancePolicyNumber || null,
+        updated_at: new Date().toISOString(),
+      }
+
+      const { error } = await supabase
+        .from('medical_profiles')
+        .upsert(row, { onConflict: 'user_id' })
+
+      if (error) {
+        console.error('[MedicalProfile] Supabase save error:', error)
+      }
       return true
     } catch (err) {
-      console.error('[MedicalProfile] Firestore save error:', err)
-      // Even if firestore fails, local storage succeeded
+      console.error('[MedicalProfile] Supabase save exception:', err)
       return true
     }
   }
@@ -118,8 +150,6 @@ export async function saveMedicalProfile(uid, profileData) {
 
 /**
  * Calculate medical profile completion percentage (0 - 100%)
- * @param {Object} profile 
- * @returns {number}
  */
 export function calculateProfileCompletion(profile) {
   if (!profile) return 0

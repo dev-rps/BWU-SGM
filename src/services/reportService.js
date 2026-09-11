@@ -1,96 +1,97 @@
 /**
- * reportService.js
- * All Firestore + Storage operations for hazard reports.
- *
- * Exports:
- *   submitReport(params)       — write new report to Firestore
- *   uploadReportImage(file, uid) — upload image, return download URL
- *   getReverseGeocode(lat, lng)  — Nominatim reverse geocode → { name, address }
+ * src/services/reportService.js
+ * Supabase operations for community hazard reports and reverse geocoding.
  */
 
-import { addDoc, collection, serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, storage, auth } from '../firebase/firebase'
+import { supabase } from '../supabase/supabase'
 
-// ─── Submit Report ────────────────────────────────────────────────────────────
 /**
- * @param {Object} params
- * @param {{ lat, lng, name, address }} params.location
- * @param {{ id, label, category, icon, color }} params.category
- * @param {string} params.severity  — 'low' | 'medium' | 'high' | 'critical'
- * @param {string} params.description
- * @param {File|null} params.imageFile
- * @param {boolean} params.anonymous
+ * Submit new report to Supabase `hazard_reports`
  */
 export async function submitReport({ location, category, severity, description, imageFile, anonymous }) {
-  const user = auth.currentUser
-  if (!user) throw new Error('User not authenticated')
+  const { data: { user } } = await supabase.auth.getUser()
 
-  // Try image upload; gracefully skip if Storage isn't enabled
+  // Process image if supplied
   let imageUrl = null
   if (imageFile) {
     try {
-      imageUrl = await uploadReportImage(imageFile, user.uid)
+      imageUrl = await uploadReportImage(imageFile, user?.id || 'anon')
     } catch (e) {
       console.warn('[reportService] Image upload failed, submitting without image:', e.message)
     }
   }
 
-  const docData = {
-    // ── Auth info ──────────────────────────────────────────────────────────
-    uid: user.uid,
-    userName:  anonymous ? null : (user.displayName || ''),
-    userEmail: anonymous ? null : (user.email || ''),
-    userPhoto: anonymous ? null : (user.photoURL || null),
+  const payload = {
+    user_id: anonymous ? null : user?.id,
+    user_name: anonymous ? null : (user?.user_metadata?.full_name || user?.email || ''),
+    user_email: anonymous ? null : (user?.email || ''),
+    user_photo: anonymous ? null : (user?.user_metadata?.avatar_url || null),
 
-    // ── Hazard info ────────────────────────────────────────────────────────
-    hazardType:     category.id,
-    hazardLabel:    category.label,
-    hazardCategory: category.category,
+    hazard_type: category.id,
+    hazard_label: category.label,
+    hazard_category: category.category,
     severity,
 
-    // ── Content ────────────────────────────────────────────────────────────
     description: (description || '').slice(0, 500),
-    imageUrl,
+    image_url: imageUrl,
 
-    // ── Location (new schema) ──────────────────────────────────────────────
-    latitude:         location.lat,
-    longitude:        location.lng,
-    locationName:     location.name     || '',
-    formattedAddress: location.address  || '',
+    latitude: location.lat,
+    longitude: location.lng,
+    location_name: location.name || '',
+    formatted_address: location.address || '',
 
-    // ── Legacy fields (backward compat with old Firestore docs) ───────────
-    lat:       location.lat,
-    lng:       location.lng,
-    type:      category.id,
-    location:  location.address || `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`,
-    timestamp: new Date().toISOString(),
-
-    // ── Metadata ───────────────────────────────────────────────────────────
-    anonymous,
-    status:            'active',
-    verificationCount: 0,
-
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+    is_anonymous: !!anonymous,
+    status: 'active',
+    verification_count: 0,
   }
 
-  const docRef = await addDoc(collection(db, 'reports'), docData)
-  return docRef.id
+  const { data, error } = await supabase
+    .from('hazard_reports')
+    .insert(payload)
+    .select('id')
+    .single()
+
+  if (error) {
+    console.error('[reportService] submitReport error:', error)
+    throw error
+  }
+
+  return data?.id
 }
 
-// ─── Image Upload ─────────────────────────────────────────────────────────────
-export async function uploadReportImage(file, uid) {
-  const safeName  = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const filename  = `reports/${uid}/${Date.now()}_${safeName}`
-  const storageRef = ref(storage, filename)
-  const snapshot  = await uploadBytes(storageRef, file)
-  return getDownloadURL(snapshot.ref)
-}
-
-// ─── Reverse Geocode ──────────────────────────────────────────────────────────
 /**
- * Returns { name: string, address: string }
+ * Image Upload — uses Supabase Storage if bucket exists, or falls back to Base64 data URL
+ */
+export async function uploadReportImage(file, uid) {
+  try {
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${uid}/${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('report-images')
+      .upload(fileName, file)
+
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage
+        .from('report-images')
+        .getPublicUrl(fileName)
+      return publicUrl
+    }
+  } catch (err) {
+    console.warn('[reportService] Storage upload failed, converting to DataURL:', err)
+  }
+
+  // Graceful fallback to DataURL so photo is preserved even without bucket configuration
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * Reverse Geocode via OpenStreetMap Nominatim
  */
 export async function getReverseGeocode(lat, lng) {
   try {
@@ -100,15 +101,15 @@ export async function getReverseGeocode(lat, lng) {
     )
     if (!res.ok) throw new Error('Nominatim error')
     const data = await res.json()
-    const addr  = data.address || {}
-    const name  =
-      addr.road        ||
-      addr.suburb      ||
+    const addr = data.address || {}
+    const name =
+      addr.road ||
+      addr.suburb ||
       addr.neighbourhood ||
-      addr.village     ||
-      addr.town        ||
-      addr.city        ||
-      data.name        ||
+      addr.village ||
+      addr.town ||
+      addr.city ||
+      data.name ||
       'Selected Location'
     return {
       name,
@@ -116,34 +117,39 @@ export async function getReverseGeocode(lat, lng) {
     }
   } catch {
     return {
-      name:    'Selected Location',
+      name: 'Selected Location',
       address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
     }
   }
 }
 
-// ─── Vote on Report ───────────────────────────────────────────────────────────
 /**
- * voteType: 'up' | 'down'
- * - Adds UID to the chosen array, removes from the other (toggle).
- * - A second click on the same button removes the vote (un-vote).
+ * Vote on Report using Supabase RPC function `vote_hazard_report`
  */
 export async function voteOnReport(reportId, voteType) {
-  const user = auth.currentUser
-  if (!user) throw new Error('Not authenticated')
+  const { error } = await supabase.rpc('vote_hazard_report', {
+    report_id: reportId,
+    vote_type: voteType,
+  })
 
-  const ref = doc(db, 'reports', reportId)
-  const uid = user.uid
-
-  if (voteType === 'up') {
-    await updateDoc(ref, {
-      upvotes:   arrayUnion(uid),
-      downvotes: arrayRemove(uid),
-    })
-  } else {
-    await updateDoc(ref, {
-      downvotes: arrayUnion(uid),
-      upvotes:   arrayRemove(uid),
-    })
+  if (error) {
+    console.error('[reportService] voteOnReport error:', error)
+    throw error
   }
 }
+
+/**
+ * Delete a report from Supabase `hazard_reports`
+ */
+export async function deleteReport(reportId) {
+  const { error } = await supabase
+    .from('hazard_reports')
+    .delete()
+    .eq('id', reportId)
+
+  if (error) {
+    console.error('[reportService] deleteReport error:', error)
+    throw error
+  }
+}
+

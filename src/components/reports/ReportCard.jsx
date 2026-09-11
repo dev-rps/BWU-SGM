@@ -12,10 +12,9 @@
  *   onPress  — () => void
  */
 
-import { useState } from 'react'
-import { doc, deleteDoc } from 'firebase/firestore'
-import { db, auth } from '../../firebase/firebase'
-import { voteOnReport } from '../../services/reportService'
+import { useState, useEffect } from 'react'
+import { supabase } from '../../supabase/supabase'
+import { voteOnReport, deleteReport } from '../../services/reportService'
 import { HAZARD_TYPES, SEVERITY_LEVELS } from '../../constants'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -33,18 +32,27 @@ function timeAgo(timestamp) {
 
 export default function ReportCard({ report, onPress }) {
   // ── Normalize schema ──────────────────────────────────────────────────────
-  const typeId = report.hazardType  || report.type
+  const typeId = report.hazard_type || report.hazardType || report.type
   const ht     = HAZARD_TYPES.find(h => h.id === typeId) ||
-                 { label: typeId || 'Hazard', icon: 'warning', color: '#737686', basePenalty: 5 }
+                 { label: report.hazard_label || typeId || 'Hazard', icon: 'warning', color: '#737686', basePenalty: 5 }
   const sev    = SEVERITY_LEVELS.find(s => s.id === report.severity)
-  const loc    = report.locationName || report.location || 'Unknown location'
-  const ts     = report.createdAt   || report.timestamp
+  const loc    = report.location_name || report.locationName || report.location || 'Unknown location'
+  const ts     = report.created_at || report.createdAt || report.timestamp
+
+  // ── Auth User ─────────────────────────────────────────────────────────────
+  const [uid, setUid] = useState(null)
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setUid(user.id)
+    })
+  }, [])
 
   // ── Votes ──────────────────────────────────────────────────────────────────
-  const uid        = auth.currentUser?.uid
   const upvotes    = report.upvotes   || []
   const downvotes  = report.downvotes || []
-  const confidence = upvotes.length - downvotes.length
+  const confidence = (report.verification_count !== undefined) 
+    ? report.verification_count 
+    : (upvotes.length - downvotes.length)
   const hasUpvoted   = uid ? upvotes.includes(uid)   : false
   const hasDownvoted = uid ? downvotes.includes(uid) : false
 
@@ -60,13 +68,13 @@ export default function ReportCard({ report, onPress }) {
   }
 
   // ── Owner check ────────────────────────────────────────────────────────────
-  const isOwner = uid && uid === report.uid
+  const isOwner = uid && (uid === report.user_id || uid === report.uid)
 
   // ── Delete ──────────────────────────────────────────────────────────────────
   const handleDelete = async (e) => {
     e.stopPropagation()
     if (!window.confirm('Delete your report? This cannot be undone.')) return
-    try { await deleteDoc(doc(db, 'reports', report.id)) }
+    try { await deleteReport(report.id) }
     catch (err) { console.error('[ReportCard] Delete failed:', err) }
   }
 

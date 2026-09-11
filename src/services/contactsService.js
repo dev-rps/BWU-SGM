@@ -1,43 +1,70 @@
 /**
- * contactsService.js
+ * src/services/contactsService.js
  *
- * Firestore emergency contacts per-user CRUD.
- * Structure: users/{uid} → emergencyContacts: [...array]
- *
- * Exports:
- *   loadContacts(uid)
- *   saveContacts(uid, contacts)
- *   generateId()
+ * Emergency Contacts CRUD backed by Supabase Postgres `emergency_contacts` table.
  */
 
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
-import { db } from '../firebase/firebase'
+import { supabase } from '../supabase/supabase'
 
-const userRef = (uid) => doc(db, 'users', uid)
-
-/** Load the logged-in user's contacts from Firestore. Returns [] if none. */
+/**
+ * Load the logged-in user's emergency contacts. Returns [] if none.
+ */
 export async function loadContacts(uid) {
   if (!uid) return []
   try {
-    const snap = await getDoc(userRef(uid))
-    if (!snap.exists()) return []
-    return snap.data().emergencyContacts || []
+    const { data, error } = await supabase
+      .from('emergency_contacts')
+      .select('*')
+      .eq('user_id', uid)
+      .order('priority', { ascending: true })
+
+    if (error) {
+      console.error('[contactsService] loadContacts error:', error)
+      return []
+    }
+
+    // Format for frontend consumption
+    return (data || []).map(c => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      relationship: c.relationship || '',
+      priority: c.priority || 1,
+      createdAt: c.created_at,
+    }))
   } catch (err) {
-    console.error('[contactsService] loadContacts error:', err)
+    console.error('[contactsService] loadContacts exception:', err)
     return []
   }
 }
 
-/** Persist the entire contacts array to Firestore (overwrites). */
+/**
+ * Persist contacts array to Supabase (synchronizes user contacts).
+ */
 export async function saveContacts(uid, contacts) {
   if (!uid) return
   try {
-    const ref = userRef(uid)
-    const snap = await getDoc(ref)
-    if (snap.exists()) {
-      await updateDoc(ref, { emergencyContacts: contacts })
-    } else {
-      await setDoc(ref, { emergencyContacts: contacts }, { merge: true })
+    // 1. Delete existing contacts for user
+    await supabase
+      .from('emergency_contacts')
+      .delete()
+      .eq('user_id', uid)
+
+    // 2. Insert updated contacts
+    if (contacts && contacts.length > 0) {
+      const rows = contacts.map((c, idx) => ({
+        user_id: uid,
+        name: c.name || 'Emergency Contact',
+        phone: c.phone || '',
+        relationship: c.relationship || '',
+        priority: c.priority !== undefined ? c.priority : (idx + 1),
+      }))
+
+      const { error } = await supabase
+        .from('emergency_contacts')
+        .insert(rows)
+
+      if (error) throw error
     }
   } catch (err) {
     console.error('[contactsService] saveContacts error:', err)
@@ -45,7 +72,7 @@ export async function saveContacts(uid, contacts) {
   }
 }
 
-/** Generate a unique string ID for a new contact. */
+/** Generate a unique string ID for local UI tracking before persist */
 export function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }

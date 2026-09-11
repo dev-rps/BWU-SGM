@@ -7,7 +7,7 @@
  *  2. Voting is optimistic — UI updates instantly, Firestore write happens in background.
  *  3. Desktop sidebar + map layout (25% | 75%)
  *  4. Mobile: map + draggable bottom sheet
- *  5. All backend logic (Firebase, voteOnReport, submitReport) unchanged.
+ *  5. All backend logic (Supabase, voteOnReport, submitReport) unchanged.
  */
 
 import { useState, useMemo, useCallback, useRef } from 'react'
@@ -16,10 +16,10 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import { useNavigate } from 'react-router-dom'
-import { doc, deleteDoc } from 'firebase/firestore'
-import { db, auth } from '../../firebase/firebase'
+import { supabase } from '../../supabase/supabase'
 
 import { useAppStore }      from '../../context/store'
+
 import {
   HAZARD_TYPES, SEVERITY_COLORS, REPORT_FILTERS,
 } from '../../constants'
@@ -82,13 +82,14 @@ function sendSOS(contacts, location) {
 
 // ─── Compact Report Card (with optimistic voting) ────────────────────────────
 function ReportCard({ report, isSelected, onClick }) {
+  const { user } = useAppStore()
   const typeId   = report.hazardType || report.type || 'other'
   const ht       = HAZARD_MAP[typeId] || { label: 'Hazard', icon: 'warning', color: '#737686' }
   const sevColor = SEVERITY_COLORS[report.severity] || '#737686'
   const loc      = report.locationName || report.location || ''
-  const uid      = auth.currentUser?.uid
+  const uid      = user?.uid || user?.id
 
-  // Optimistic vote state — starts from Firestore data, updates locally on click
+  // Optimistic vote state — starts from report data, updates locally on click
   const [localUpvotes,   setLocalUpvotes]   = useState(() => report.upvotes   || [])
   const [localDownvotes, setLocalDownvotes] = useState(() => report.downvotes || [])
   const [voting, setVoting] = useState(false)
@@ -96,7 +97,7 @@ function ReportCard({ report, isSelected, onClick }) {
   const conf    = localUpvotes.length - localDownvotes.length
   const hasUp   = uid ? localUpvotes.includes(uid)   : false
   const hasDown = uid ? localDownvotes.includes(uid) : false
-  const isOwner = uid && uid === report.uid
+  const isOwner = uid && (uid === report.uid || uid === report.user_id)
 
   const handleVote = async (e, type) => {
     e.stopPropagation()
@@ -121,7 +122,7 @@ function ReportCard({ report, isSelected, onClick }) {
       }
     }
 
-    // ── Write to Firestore in background ──
+    // ── Write to database in background ──
     setVoting(true)
     try {
       await voteOnReport(report.id, type)
@@ -138,8 +139,11 @@ function ReportCard({ report, isSelected, onClick }) {
   const handleDelete = async (e) => {
     e.stopPropagation()
     if (!window.confirm(`Delete your "${ht.label}" report?`)) return
-    try { await deleteDoc(doc(db, 'reports', report.id)) }
-    catch (err) { console.error('Delete error:', err) }
+    try {
+      await supabase.from('hazard_reports').delete().eq('id', report.id)
+    } catch (err) {
+      console.error('Delete error:', err)
+    }
   }
 
   return (

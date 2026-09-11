@@ -1,25 +1,13 @@
 /**
- * sosService.js — SOS Event Gateway Service
+ * src/services/sosService.js — SOS Event Gateway Service
  *
  * Responsibilities:
- *  1. Write a complete SOS event to Firestore `sos_events` collection
+ *  1. Write a complete SOS event to Supabase `sos_events` table
  *  2. Provide status update helpers
- *  3. Subscribe to live status changes for UI updates
- *
- * The web app's ONLY job is to create the event.
- * All notifications (WhatsApp, SMS, calls) are handled by the
- * Company Emergency Gateway app running on the dedicated Android phone.
+ *  3. Subscribe to live status changes via Supabase Realtime for UI updates
  */
 
-import {
-  collection,
-  addDoc,
-  doc,
-  updateDoc,
-  onSnapshot,
-  serverTimestamp,
-} from 'firebase/firestore'
-import { db } from '../firebase/firebase'
+import { supabase } from '../supabase/supabase'
 
 // ─── SOS Event Status States ──────────────────────────────────────────────────
 export const SOS_STATUS = {
@@ -33,17 +21,6 @@ export const SOS_STATUS = {
 }
 
 // ─── Create a new SOS event ───────────────────────────────────────────────────
-/**
- * Creates a new SOS event document in Firestore.
- * Includes ALL data the gateway needs — no extra reads required.
- *
- * @param {Object} params
- * @param {Object} params.user             Zustand user object
- * @param {Object} params.userLocation     { lat, lng, accuracy }
- * @param {Array}  params.emergencyContacts Array of contact objects
- * @param {string} params.emergencyType    e.g. 'general' | 'medical' | 'crime' | ...
- * @returns {Promise<{ id: string, ...event }>}
- */
 export async function createSOSEvent({
   user,
   userLocation,
@@ -64,79 +41,97 @@ export async function createSOSEvent({
       name:         c.name         || 'Emergency Contact',
       phone:        c.phone.trim(),
       relationship: c.relationship || '',
-      priority:     i + 1,          // 1 = primary, 2 = secondary, etc.
+      priority:     i + 1,
     }))
 
-  const event = {
-    // ── Identity ──────────────────────────────────────────────────────
-    status:   SOS_STATUS.PENDING,
-    userId:   user?.uid   || 'anonymous',
-    userName: user?.name  || 'Unknown User',
-    userPhone: user?.phone || '',
-    userEmail: user?.email || '',
+  const { data: { user: authUser } } = await supabase.auth.getUser()
+  const userId = authUser?.id || user?.uid || '00000000-0000-0000-0000-000000000000'
 
-    // ── Location ──────────────────────────────────────────────────────
-    latitude:  lat,
-    longitude: lng,
-    accuracy:  userLocation?.accuracy ?? null,
-    mapsLink,
+  const eventPayload = {
+    user_id:           userId,
+    status:            SOS_STATUS.PENDING,
+    user_name:         user?.name  || authUser?.user_metadata?.full_name || 'Unknown User',
+    user_phone:        user?.phone || '',
+    user_email:        user?.email || authUser?.email || '',
 
-    // ── Emergency info ─────────────────────────────────────────────────
-    emergencyType,
-    contacts,        // Full list — gateway uses this directly
+    latitude:          lat || 0,
+    longitude:         lng || 0,
+    accuracy:          userLocation?.accuracy ?? null,
+    maps_link:         mapsLink,
 
-    // ── Timestamps ────────────────────────────────────────────────────
-    createdAt:         serverTimestamp(),
-    processedAt:       null,
-    whatsappSentAt:    null,
-    smsSentAt:         null,
-    callAttemptedAt:   null,
-    completedAt:       null,
+    emergency_type:    emergencyType,
+    contacts_snapshot: contacts,
 
-    // ── Delivery tracking ──────────────────────────────────────────────
-    whatsappStatus: 'pending',   // pending | sent | failed
-    smsStatus:      'pending',   // pending | sent | failed
-    callStatus:     'pending',   // pending | attempted | failed
-
-    // ── Gateway metadata ───────────────────────────────────────────────
-    retryCount:    0,
-    failureReason: null,
-    logs:          [],           // Gateway appends log entries here
-    gatewayId:     null,         // Which gateway processed this event
+    whatsapp_status:   'pending',
+    sms_status:        'pending',
+    call_status:       'pending',
+    retry_count:       0,
+    logs:              [],
   }
 
-  const docRef = await addDoc(collection(db, 'sos_events'), event)
-  console.log('[SOS] Event created:', docRef.id)
-  return { id: docRef.id, ...event }
+  const { data, error } = await supabase
+    .from('sos_events')
+    .insert(eventPayload)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[SOS] Event create error:', error)
+    throw error
+  }
+
+  console.log('[SOS] Event created in Supabase:', data.id)
+  return data
 }
 
 // ─── Update SOS event status ──────────────────────────────────────────────────
 export async function updateSOSStatus(sosId, updates) {
   if (!sosId) return
-  const ref = doc(db, 'sos_events', sosId)
-  await updateDoc(ref, {
-    ...updates,
-    updatedAt: serverTimestamp(),
-  })
+  const { error } = await supabase
+    .from('sos_events')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', sosId)
+
+  if (error) console.error('[SOS] Update status error:', error)
 }
 
-// ─── Subscribe to live status updates (for UI) ────────────────────────────────
-/**
- * Subscribes to real-time updates for a specific SOS event.
- * Returns an unsubscribe function.
- *
- * @param {string}   sosId     Firestore document ID
- * @param {Function} callback  Called with the latest event data
- * @returns {Function} unsubscribe
- */
+// ─── Subscribe to live status updates (via Supabase Realtime) ─────────────────
 export function subscribeToSOSEvent(sosId, callback) {
   if (!sosId) return () => {}
-  const ref = doc(db, 'sos_events', sosId)
-  return onSnapshot(ref, (snap) => {
-    if (snap.exists()) {
-      callback({ id: snap.id, ...snap.data() })
-    }
-  })
+
+  // 1. Initial fetch
+  supabase
+    .from('sos_events')
+    .select('*')
+    .eq('id', sosId)
+    .single()
+    .then(({ data }) => {
+      if (data) callback(data)
+    })
+
+  // 2. Realtime subscription
+  const channel = supabase
+    .channel(`sos_event_${sosId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'sos_events',
+        filter: `id=eq.${sosId}`,
+      },
+      (payload) => {
+        if (payload.new) callback(payload.new)
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
 }
 
 // ─── Status display helpers ───────────────────────────────────────────────────

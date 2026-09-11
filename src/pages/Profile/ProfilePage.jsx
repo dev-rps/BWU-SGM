@@ -16,9 +16,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
-import { auth, db } from '../../firebase/firebase'
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
+import { supabase } from '../../supabase/supabase'
 import { loadContacts, saveContacts, generateId } from '../../services/contactsService'
+
 
 import MedicalProfileSurvey from './MedicalProfileSurvey'
 import { loadMedicalProfile, calculateProfileCompletion } from '../../services/medicalService'
@@ -196,44 +196,44 @@ export default function ProfilePage() {
   const fileInputRef = useRef(null)
   const menuRef      = useRef(null)
 
-  // ── Load contacts + user Firestore profile on mount ──────────────────────
+  // ── Load contacts + user profile on mount ──────────────────────
   useEffect(() => {
-    const uid = auth.currentUser?.uid
-    if (!uid) return
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      const uid = authUser?.id || user?.uid || user?.id
+      if (!uid) return
 
-    // Load Firestore user profile (name override, phone, avatar)
-    getDoc(doc(db, 'users', uid)).then(snap => {
-      if (!snap.exists()) return
-      const data = snap.data()
-      if (data.displayName || data.phone || data.avatarDataUrl) {
-        setUser(prev => ({
-          ...prev,
-          name:   data.displayName || prev.name,
-          phone:  data.phone       || prev.phone,
-          avatar: data.avatarDataUrl || prev.avatar,
-        }))
+      // Load Supabase user profile (name, phone, avatar)
+      supabase.from('profiles').select('*').eq('id', uid).maybeSingle().then(({ data }) => {
+        if (data && (data.full_name || data.phone || data.avatar_url)) {
+          setUser(prev => ({
+            ...prev,
+            name:   data.full_name || prev.name,
+            phone:  data.phone     || prev.phone,
+            avatar: data.avatar_url || prev.avatar,
+          }))
+        }
+      }).catch(() => {})
+
+      // Load contacts if not already loaded
+      if (emergencyContacts.length === 0) {
+        setContactsLoading(true)
+        loadContacts(uid)
+          .then(c => { setEmergencyContacts(c); setContactsLoading(false) })
+          .catch(() => { setContactsError(true); setContactsLoading(false) })
       }
-    }).catch(() => {})
-
-    // Load contacts if not already loaded
-    if (emergencyContacts.length === 0) {
-      setContactsLoading(true)
-      loadContacts(uid)
-        .then(c => { setEmergencyContacts(c); setContactsLoading(false) })
-        .catch(() => { setContactsError(true); setContactsLoading(false) })
-    }
+    })
   }, [])
 
   // ── Load Medical Profile ───────────────────────────────────────────────────
   useEffect(() => {
-    const uid = auth.currentUser?.uid
-    if (!uid) return
-    loadMedicalProfile(uid).then(setMedicalProfile).catch(() => {})
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      const uid = authUser?.id || user?.uid || user?.id
+      if (!uid) return
+      loadMedicalProfile(uid).then(setMedicalProfile).catch(() => {})
+    })
   }, [showMedicalSurvey])
 
   // Close menu on outside click
-  // IMPORTANT: use 'pointerup' not 'mousedown' — mousedown fires BEFORE onClick
-  // which caused the menu to close before navigate() could run.
   useEffect(() => {
     const handler = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -248,20 +248,19 @@ export default function ProfilePage() {
   const handlePhotoSelect = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const uid = auth.currentUser?.uid
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const uid = authUser?.id || user?.uid || user?.id
     if (!uid) return
     setUploadingPhoto(true)
     const reader = new FileReader()
     reader.onload = async (evt) => {
       const dataUrl = evt.target.result
       try {
-        const ref = doc(db, 'users', uid)
-        const snap = await getDoc(ref)
-        if (snap.exists()) {
-          await updateDoc(ref, { avatarDataUrl: dataUrl })
-        } else {
-          await setDoc(ref, { avatarDataUrl: dataUrl }, { merge: true })
-        }
+        await supabase
+          .from('profiles')
+          .update({ avatar_url: dataUrl, updated_at: new Date().toISOString() })
+          .eq('id', uid)
+
         setUser(prev => ({ ...prev, avatar: dataUrl }))
       } catch (err) {
         console.error('Photo upload error:', err)
@@ -275,14 +274,15 @@ export default function ProfilePage() {
 
   // ── Save name ─────────────────────────────────────────────────────────────
   const handleSaveName = async (newName) => {
-    const uid = auth.currentUser?.uid
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const uid = authUser?.id || user?.uid || user?.id
     if (!uid) return
     try {
-      const ref  = doc(db, 'users', uid)
-      const snap = await getDoc(ref)
-      snap.exists()
-        ? await updateDoc(ref, { displayName: newName })
-        : await setDoc(ref, { displayName: newName }, { merge: true })
+      await supabase
+        .from('profiles')
+        .update({ full_name: newName, updated_at: new Date().toISOString() })
+        .eq('id', uid)
+
       setUser(prev => ({ ...prev, name: newName }))
     } catch { alert('Failed to save name.') }
     setEditField(null)
@@ -895,7 +895,7 @@ export default function ProfilePage() {
               </div>
               <div className="flex-1">
                 <p className="text-xs font-semibold text-[#191c1e]">Real-time Hazard Reports</p>
-                <p className="text-xs text-[#737686]">Firebase · OpenStreetMap · GPS</p>
+                <p className="text-xs text-[#737686]">Supabase · OpenStreetMap · GPS</p>
               </div>
             </div>
           </div>

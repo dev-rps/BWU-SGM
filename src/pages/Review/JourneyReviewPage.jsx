@@ -6,8 +6,7 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { db, auth } from '../../firebase/firebase'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { submitJourneyReview } from '../../services/supabaseDataService'
 
 // ─── SVG Face Icons matching the reference UI exactly ────────────────────────
 // Reference: crossed-out face (Danger!), sad face (Bad), slight smile (Good), big smile (Great!)
@@ -132,18 +131,16 @@ export default function JourneyReviewPage() {
     setSubmitting(true)
     const rating = RATINGS.find(r => r.id === selected)
     try {
-      await addDoc(collection(db, 'journeyReviews'), {
-        userId:    auth.currentUser?.uid || 'anonymous',
-        rating:    selected,
-        timestamp: serverTimestamp(),
+      await submitJourneyReview({
+        rating: selected,
       })
     } catch (err) {
-      // Non-critical — Firestore write failed (e.g. offline), but still complete the flow
+      // Non-critical — Supabase write failed (e.g. offline), but still complete the flow
       console.warn('journeyReviews write failed (non-critical):', err.message)
     }
-    // Always show success and navigate — even if Firestore write failed offline
+    // Always show success and navigate — even if write failed offline
     setSuccessMsg(rating?.successMsg || 'Thank you!')
-    setSubmitting(false)  // ← THIS was missing, causing infinite loading
+    setSubmitting(false)
     setSubmitted(true)
   }
 

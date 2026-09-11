@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider } from '../../firebase/firebase';
+import { login, googleLogin } from '../../services/authService';
 import { useAppStore } from '../../context/store';
 
 const LoginPage = () => {
@@ -10,33 +9,32 @@ const LoginPage = () => {
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [email, setEmail] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-const [password, setPassword] = useState("");
+  const [password, setPassword] = useState("");
 
-const navigate = useNavigate(); 
-const { setIsLoggedIn } = useAppStore();
-const handleLogin = async (e) => {
-  e.preventDefault();
+  const navigate = useNavigate(); 
+  const { setIsLoggedIn } = useAppStore();
+  const handleLogin = async (e) => {
+    e.preventDefault();
 
-  setIsProcessing(true);
+    setIsProcessing(true);
 
-  try {
-    await signInWithEmailAndPassword(auth, email, password);
+    try {
+      await login(email, password);
 
-    setIsLoggedIn(true);
+      setIsLoggedIn(true);
 
-    navigate("/");
-  } catch (error) {
-    alert(error.message);
-  }
+      navigate("/");
+    } catch (error) {
+      alert(error.message);
+    }
+
 
   setIsProcessing(false);
 };
 const handleGoogleLogin = async () => {
   try {
-    await signInWithPopup(auth, googleProvider);
-
+    await googleLogin();
     setIsLoggedIn(true);
-
     navigate("/");
   } catch (error) {
     alert(error.message);

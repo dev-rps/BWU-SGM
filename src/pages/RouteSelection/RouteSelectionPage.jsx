@@ -25,7 +25,7 @@ import {
   buildTrafficSegments, getTrafficStatus, TRAFFIC_COLORS,
   getTrafficTileUrl, getIncidentTileUrl,
 } from '../../services/tomtomRouting'
-import { auth } from '../../firebase/firebase'
+import { supabase } from '../../supabase/supabase'
 import {
   calculateRouteSafetyScores, getScoreLabel, deduplicateRoutes,
   getScoreReasons, getRouteAnchorPoint, applyEnvironmentalPenalties,
@@ -225,11 +225,13 @@ export default function RouteSelectionPage() {
 
   // ── Load user's saved Medical Profile (Asthma / Allergy detection) ─────────
   useEffect(() => {
-    const uid = auth?.currentUser?.uid
-    if (!uid) return
-    loadMedicalProfile(uid)
-      .then(profile => setMedicalProfile(profile))
-      .catch(() => setMedicalProfile(null))
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const uid = user?.id
+      if (!uid) return
+      loadMedicalProfile(uid)
+        .then(profile => setMedicalProfile(profile))
+        .catch(() => setMedicalProfile(null))
+    })
   }, [])
 
   useEffect(() => {

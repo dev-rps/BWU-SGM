@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useEffect, useCallback } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebase/firebase';
+import { supabase } from './supabase/supabase';
 
 import { useAppStore } from './context/store';
 import { loadContacts } from './services/contactsService';
@@ -58,17 +57,28 @@ export default function App() {
   const { setIsLoggedIn, setUser, setEmergencyContacts } = useAppStore();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    // 1. Initial session check
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const user = session?.user;
       if (user) {
+        // Load profile from Supabase
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
+
         setUser({
-          name:        user.displayName || '',
-          email:       user.email       || '',
-          avatar:      user.photoURL    || null,
-          phone:       user.phoneNumber || '',
-          memberSince: new Date(user.metadata.creationTime).getFullYear().toString(),
+          uid:         user.id,
+          id:          user.id,
+          name:        profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || '',
+          email:       user.email || '',
+          avatar:      profile?.avatar_url || user.user_metadata?.avatar_url || null,
+          phone:       profile?.phone || user.user_metadata?.phone || '',
+          memberSince: profile?.member_since || new Date(user.created_at).getFullYear().toString(),
         });
-        // Load this user's contacts from Firestore (never show another user's contacts)
-        const contacts = await loadContacts(user.uid);
+
+        const contacts = await loadContacts(user.id);
         setEmergencyContacts(contacts);
         setIsLoggedIn(true);
       } else {
@@ -77,7 +87,38 @@ export default function App() {
         setUser({ name: '', email: '', avatar: null, phone: '', memberSince: '' });
       }
     });
-    return () => unsubscribe();
+
+    // 2. Auth state subscription
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const user = session?.user;
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        setUser({
+          uid:         user.id,
+          id:          user.id,
+          name:        profile?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || '',
+          email:       user.email || '',
+          avatar:      profile?.avatar_url || user.user_metadata?.avatar_url || null,
+          phone:       profile?.phone || user.user_metadata?.phone || '',
+          memberSince: profile?.member_since || new Date(user.created_at).getFullYear().toString(),
+        });
+
+        const contacts = await loadContacts(user.id);
+        setEmergencyContacts(contacts);
+        setIsLoggedIn(true);
+      } else {
+        setIsLoggedIn(false);
+        setEmergencyContacts([]);
+        setUser({ name: '', email: '', avatar: null, phone: '', memberSince: '' });
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [setIsLoggedIn, setUser, setEmergencyContacts]);
 
   return (

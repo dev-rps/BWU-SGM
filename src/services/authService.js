@@ -1,35 +1,74 @@
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  signOut,
-} from "firebase/auth";
+/**
+ * src/services/authService.js
+ * Supabase Authentication & Profile Synchronization Service
+ */
 
-import { doc, setDoc } from "firebase/firestore";
-import { auth, db, googleProvider } from "../firebase/firebase";
+import { supabase } from '../supabase/supabase'
 
 // Signup
 export const signup = async (name, email, password) => {
-  const result = await createUserWithEmailAndPassword(auth, email, password);
-
-  await setDoc(doc(db, "users", result.user.uid), {
-    uid: result.user.uid,
-    name,
+  const { data, error } = await supabase.auth.signUp({
     email,
-    createdAt: new Date(),
-  });
+    password,
+    options: {
+      data: {
+        full_name: name,
+        name: name,
+      },
+    },
+  })
 
-  return result.user;
-};
+  if (error) throw error
+
+  // The Postgres trigger `on_auth_user_created` automatically initializes `public.profiles`.
+  // Also ensure profile fields are synced immediately:
+  if (data.user) {
+    await supabase.from('profiles').upsert({
+      id: data.user.id,
+      full_name: name,
+      email: email,
+      updated_at: new Date().toISOString(),
+    })
+  }
+
+  return data.user
+}
 
 // Login
-export const login = (email, password) =>
-  signInWithEmailAndPassword(auth, email, password);
+export const login = async (email, password) => {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
 
-// Google Login
-export const googleLogin = () =>
-  signInWithPopup(auth, googleProvider);
+  if (error) throw error
+  return data.user
+}
+
+// Google Login via OAuth
+export const googleLogin = async () => {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin,
+    },
+  })
+
+  if (error) throw error
+  return data
+}
 
 // Logout
-export const logout = () =>
-  signOut(auth);
+export const logout = async () => {
+  const { error } = await supabase.auth.signOut()
+  if (error) throw error
+}
+
+// Password Reset
+export const resetPassword = async (email) => {
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/login`,
+  })
+  if (error) throw error
+  return data
+}

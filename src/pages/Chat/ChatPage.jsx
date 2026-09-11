@@ -21,8 +21,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
-import { auth, db } from '../../firebase/firebase'
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { supabase } from '../../supabase/supabase'
 
 import {
   detectEmergency,
@@ -546,16 +545,21 @@ export default function ChatPage() {
         callNumber('108')
       }
 
-      const uid = auth?.currentUser?.uid
-      if (uid && places.length > 0) {
-        setDoc(doc(db, 'users', uid, 'medicalEmergencies', `${Date.now()}`), {
-          medicine,
-          condition,
-          lat,
-          lng,
-          nearestFacility: places[0]?.name || null,
-          timestamp: serverTimestamp(),
-        }).catch(() => {})
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user && places.length > 0) {
+        supabase
+          .from('sos_events')
+          .insert({
+            user_id: user.id,
+            status: 'pending',
+            emergency_type: 'medical',
+            latitude: lat,
+            longitude: lng,
+            medical_summary: `${condition || 'Medical Need'}${medicine ? ` - Medicine: ${medicine}` : ''} - Nearest: ${places[0]?.name || 'Unknown'}`,
+            user_name: user.user_metadata?.full_name || user.email || 'Guardian User',
+          })
+          .then(() => {})
+          .catch(() => {})
       }
     } catch (err) {
       console.warn('[handleMedicalEmergency auto-dial error]:', err)
