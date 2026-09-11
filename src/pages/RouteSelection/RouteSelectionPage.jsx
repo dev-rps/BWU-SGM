@@ -29,7 +29,10 @@ import { auth } from '../../firebase/firebase'
 import {
   calculateRouteSafetyScores, getScoreLabel, deduplicateRoutes,
   getScoreReasons, getRouteAnchorPoint, applyEnvironmentalPenalties,
+  mergeMLPredictionsIntoRoutes, getRouteComparisonSummary,
 } from '../../services/safetyScore'
+
+import { evaluateMultipleRoutes } from '../../services/mlService'
 import {
   fetchEnvironmentalData, getEnvironmentalWeights, computeEnvironmentalPenalty,
   getEnvironmentalReasons, getAqiLabel, getUvLabel, getPollenLabel,
@@ -337,11 +340,91 @@ export default function RouteSelectionPage() {
     fetchEnvData()
   }, [routesWithScores, medicalProfile])
 
-  // ── Routes with Environmental & AQI Penalties Applied ──────────────────────
+  // ── ML Batch Evaluation Trigger ──────────────────────────────────────────
+  const [mlResults,           setMlResults]           = useState([])
+  const [mlEvaluating,        setMlEvaluating]        = useState(false)
+  const [mlLiveWeather,       setMlLiveWeather]       = useState(null)
+  const [mlComparisonSummary, setMlComparisonSummary] = useState('')
+
+  useEffect(() => {
+    if (!rawRoutes.length) {
+      setMlResults([])
+      setMlLiveWeather(null)
+      setMlComparisonSummary('')
+      return
+    }
+
+    let active = true
+    setMlEvaluating(true)
+
+    const now        = new Date()
+    const hour       = now.getHours()
+    const dayOfWeek  = now.getDay()
+
+    // ── Use cached AQI data from environmentalService if available ──────────
+    // routeEnvData[0] holds the env data for the first route's midpoint
+    const cachedEnv   = routeEnvData[0] || null
+    const airQuality  = cachedEnv?.pm25 != null
+      ? { pm25: cachedEnv.pm25, no2: cachedEnv.no2 ?? null }
+      : null
+
+    // Don't pass static weather — mlService.js will fetch live Open-Meteo
+    // Only pass weather if we already have it from envData to avoid duplicate fetch
+    const preWeather = cachedEnv?.weather_code != null
+      ? {
+          weather_code:  cachedEnv.weather_code,
+          temperature:   cachedEnv.temperature,
+          visibility:    cachedEnv.visibility,
+          precipitation: cachedEnv.precipitation ?? 0,
+        }
+      : undefined  // Let mlService.js auto-fetch live weather
+
+    evaluateMultipleRoutes({
+      routes: rawRoutes,
+      hour,
+      dayOfWeek,
+      weather:     preWeather,    // undefined = auto-fetch live from Open-Meteo
+      airQuality,                 // Pass PM2.5 from environmentalService cache
+    })
+      .then(res => {
+        if (!active) return
+        if (res.success && res.routes && res.routes.length > 0) {
+          setMlResults(res.routes)
+          if (res.liveWeather) setMlLiveWeather(res.liveWeather)
+        }
+      })
+      .catch(err => {
+        console.warn('[RouteSelection] ML batch evaluation fallback:', err?.message || err)
+      })
+      .finally(() => {
+        if (active) setMlEvaluating(false)
+      })
+
+    return () => { active = false }
+  }, [rawRoutes])
+
+  // ── Routes with Environmental & AQI Penalties + ML Predictions Applied ─────
   const displayedRoutes = useMemo(() => {
-    if (!routesWithScores.length || !envPenalties.length) return routesWithScores
-    return applyEnvironmentalPenalties(routesWithScores, envPenalties)
-  }, [routesWithScores, envPenalties])
+    let current = routesWithScores
+    if (!current.length) return []
+
+    // 1. Apply environmental penalties (AQI, UV, pollen, medical profile)
+    if (envPenalties.length > 0) {
+      current = applyEnvironmentalPenalties(current, envPenalties)
+    }
+
+    // 2. Merge high-precision 26-feature ML predictions (overrides heuristic scores)
+    if (mlResults.length > 0) {
+      current = mergeMLPredictionsIntoRoutes(current, mlResults)
+      // Generate comparison summary for the top route card
+      const summary = getRouteComparisonSummary(current)
+      // Use setTimeout to avoid setting state during render
+      setTimeout(() => setMlComparisonSummary(summary), 0)
+    }
+
+    return current
+  }, [routesWithScores, envPenalties, mlResults])
+
 
   useEffect(() => {
     if (!destination) { navigate('/search'); return }
@@ -352,11 +435,13 @@ export default function RouteSelectionPage() {
     setLoading(true)
     setRouteError(false)
     setRawRoutes([])
+    setMlResults([])
     try {
       const fetched = await getRoute(startLoc.lat, startLoc.lng, destLoc.lat, destLoc.lng, mode)
       setRawRoutes(fetched)
       setRoutes(fetched)
       setSelectedRouteIdx(0)
+      useAppStore.getState().setSelectedRouteIdx(0)
       setFitTrigger(prev => prev + 1)
     } catch (err) {
       console.warn('[RouteSelection] All routing engines failed/timed out.', err)
@@ -374,6 +459,7 @@ export default function RouteSelectionPage() {
 
   const handleSelectRoute = (idx) => {
     setSelectedRouteIdx(idx)
+    useAppStore.getState().setSelectedRouteIdx(idx)
     setFitTrigger(prev => prev + 1)
   }
 
@@ -384,6 +470,7 @@ export default function RouteSelectionPage() {
   const proceedToNavigation = () => {
     if (displayedRoutes && displayedRoutes.length > 0) {
       setRoutes(displayedRoutes)
+      useAppStore.getState().setSelectedRouteIdx(selectedRouteIdx)
     }
     setIsNavigating(true)
     navigate('/navigate')
@@ -541,6 +628,43 @@ export default function RouteSelectionPage() {
               </Circle>
             )
           })}
+
+          {/* ════════ ML BOTTLENECK DANGER MARKER (pulsing red) ════════ */}
+          {selectedRoute?.bottleneck?.lat && selectedRoute?.bottleneck?.lng && (
+            <Circle
+              center={[selectedRoute.bottleneck.lat, selectedRoute.bottleneck.lng]}
+              radius={60}
+              pathOptions={{
+                color: '#EF4444',
+                fillColor: '#EF4444',
+                fillOpacity: 0.35,
+                weight: 2.5,
+                opacity: 0.85,
+                dashArray: '4 4',
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: 180 }}>
+                  <p style={{ fontWeight: 900, fontSize: 11, color: '#EF4444' }}>
+                    ⚠️ ML-Detected Danger Zone
+                  </p>
+                  <p style={{ fontSize: 10.5, fontWeight: 700, color: '#1e293b', marginTop: 3 }}>
+                    Bottleneck Safety Score: {selectedRoute.bottleneck.safety_score ?? '—'}/100
+                  </p>
+                  {selectedRoute.bottleneck.hazards?.accident?.name &&
+                    selectedRoute.bottleneck.hazards.accident.name !== 'None' && (
+                    <p style={{ fontSize: 9.5, color: '#475569', marginTop: 4 }}>
+                      Nearest: {selectedRoute.bottleneck.hazards.accident.name}
+                      {' '}({Math.round(selectedRoute.bottleneck.hazards.accident.distance_m || 0)}m)
+                    </p>
+                  )}
+                  <p style={{ fontSize: 8.5, color: '#94a3b8', marginTop: 4 }}>
+                    Source: Safety Guardian 26-feature ML Model
+                  </p>
+                </div>
+              </Popup>
+            </Circle>
+          )}
 
           {/* Map Camera Controller */}
           <MapController
@@ -926,6 +1050,29 @@ export default function RouteSelectionPage() {
                   </div>
                 )}
 
+                {!loading && mlEvaluating && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200/80 text-indigo-700 text-[10px] font-semibold animate-pulse mb-1">
+                    <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
+                    <span>Analyzing 26 safety signals: AQI · road type · hazards · live weather…</span>
+                  </div>
+                )}
+
+                {/* ML Live Weather Source Badge */}
+                {!mlEvaluating && mlLiveWeather && mlResults.length > 0 && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-sky-50/80 border border-sky-200/60 text-sky-700 text-[9.5px] font-semibold mb-1 flex-wrap gap-y-0.5">
+                    <span className="material-symbols-outlined text-[12px]">partly_cloudy_day</span>
+                    <span>Live weather: WMO {mlLiveWeather.weather_code ?? '—'} · {mlLiveWeather.temperature?.toFixed(1)}°C · vis {((mlLiveWeather.visibility || 10000) / 1000).toFixed(1)}km · precip {mlLiveWeather.precipitation?.toFixed(1) ?? 0}mm</span>
+                  </div>
+                )}
+
+                {/* ML Comparison Summary Banner */}
+                {!mlEvaluating && mlComparisonSummary && (
+                  <div className="flex items-start gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50/80 border border-emerald-200/60 text-emerald-800 text-[9.5px] font-semibold mb-1">
+                    <span className="material-symbols-outlined text-[12px] text-emerald-500 flex-shrink-0 mt-0.5">verified</span>
+                    <span>{mlComparisonSummary}</span>
+                  </div>
+                )}
+
                 {displayedRoutes.map((route, idx) => {
                   const isSelected = selectedRouteIdx === idx
                   const color = getRouteColor(route, idx)
@@ -959,7 +1106,28 @@ export default function RouteSelectionPage() {
                                 ★ Top Pick
                               </span>
                             )}
-                            {route.envData?.aqi !== null && route.envData?.aqi !== undefined && (
+                            {route.mlEvaluated && (
+                              <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-800 flex items-center gap-0.5">
+                                <span>⚡ ML</span>
+                                <span className="font-extrabold">{route.riskLevel || 'Analyzed'}</span>
+                              </span>
+                            )}
+                            {/* ML server-side PM2.5 badge (from OpenAQ via FastAPI) */}
+                            {route.mlAqiPm25 != null && (
+                              <span
+                                className="text-[8.5px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
+                                style={{
+                                  backgroundColor: route.mlAqiPm25 <= 12 ? '#dcfce7' : route.mlAqiPm25 <= 35.4 ? '#fef3c7' : route.mlAqiPm25 <= 55.4 ? '#fed7aa' : '#fee2e2',
+                                  color: route.mlAqiPm25 <= 12 ? '#166534' : route.mlAqiPm25 <= 35.4 ? '#92400e' : route.mlAqiPm25 <= 55.4 ? '#9a3412' : '#991b1b',
+                                }}
+                                title={`Live PM2.5 from ${route.mlAqiSource || 'OpenAQ'}`}
+                              >
+                                <span>💨</span>
+                                <span>PM2.5 {Math.round(route.mlAqiPm25)}</span>
+                              </span>
+                            )}
+                            {/* Env AQI badge (from environmentalService — European AQI index) */}
+                            {route.mlAqiPm25 == null && route.envData?.aqi !== null && route.envData?.aqi !== undefined && (
                               <span
                                 className="text-[8.5px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
                                 style={{
@@ -980,6 +1148,7 @@ export default function RouteSelectionPage() {
                             <span className="text-[11.5px] font-bold text-slate-800 truncate">
                               {route.viaRoads}
                             </span>
+
                           </div>
 
                           {/* Row 2: Duration, Distance & Numerical Trade-off */}
@@ -1059,6 +1228,68 @@ export default function RouteSelectionPage() {
                                 ))}
                               </div>
                             </div>
+
+                            {/* ML Bottleneck Analysis */}
+                            {route.bottleneck && (
+                              <div className="pt-2 border-t border-slate-100">
+                                <p className="font-black text-slate-800 uppercase tracking-wider text-[9px] mb-1">⚡ ML Corridor Bottleneck Check</p>
+                                <div className="bg-amber-50 p-2 rounded-lg border border-amber-200">
+                                  <div className="flex justify-between items-center text-amber-800 font-bold text-[9.5px]">
+                                    <span>Bottleneck Segment Score</span>
+                                    <span className="font-black">{route.bottleneck.safety_score}/100</span>
+                                  </div>
+                                  {route.bottleneck.hazards && (
+                                    <div className="mt-1 text-[8.5px] text-amber-700 space-y-0.5">
+                                      {route.bottleneck.hazards.accident?.name !== 'None' && (
+                                        <div>🚗 Nearby: {route.bottleneck.hazards.accident.name} ({Math.round(route.bottleneck.hazards.accident.distance_m)}m)</div>
+                                      )}
+                                      {route.bottleneck.hazards.crime?.name !== 'None' && (
+                                        <div>🚨 Nearby: {route.bottleneck.hazards.crime.name} ({Math.round(route.bottleneck.hazards.crime.distance_m)}m)</div>
+                                      )}
+                                      {route.bottleneck.hazards.flood?.name !== 'None' && (
+                                        <div>🌊 Waterlogging: {route.bottleneck.hazards.flood.name} ({Math.round(route.bottleneck.hazards.flood.distance_m)}m)</div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ML Model Confidence Bars — Low / Medium / High probabilities */}
+                            {route.mlEvaluated && route.probabilities && Object.keys(route.probabilities).length > 0 && (
+                              <div className="pt-2 border-t border-slate-100">
+                                <p className="font-black text-slate-800 uppercase tracking-wider text-[9px] mb-1.5">
+                                  🤖 ML Model Confidence (26-Feature)
+                                </p>
+                                <div className="space-y-1">
+                                  {[
+                                    { key: 'Low',    label: 'Low Risk',    color: '#10B981' },
+                                    { key: 'Medium', label: 'Medium Risk', color: '#F59E0B' },
+                                    { key: 'High',   label: 'High Risk',   color: '#EF4444' },
+                                  ].map(({ key, label, color }) => {
+                                    const prob = route.probabilities[key] || 0
+                                    const pct  = Math.round(prob * 100)
+                                    return (
+                                      <div key={key} className="flex items-center gap-1.5">
+                                        <span className="text-[8px] font-bold text-slate-500 w-16 flex-shrink-0">{label}</span>
+                                        <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                          <div
+                                            className="h-full rounded-full transition-all duration-500"
+                                            style={{ width: `${pct}%`, backgroundColor: color }}
+                                          />
+                                        </div>
+                                        <span className="text-[8.5px] font-black w-7 text-right flex-shrink-0" style={{ color }}>{pct}%</span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                                {route.mlAqiSource && (
+                                  <p className="text-[7.5px] text-slate-400 mt-1 font-semibold">
+                                    AQI: {route.mlAqiSource} · Model v3.0 · 80/20 corridor/bottleneck weighting
+                                  </p>
+                                )}
+                              </div>
+                            )}
 
                             {/* Point Deductions & Risk Factors */}
                             {(route.crimePenalty > 0 || route.floodPenalty > 0 || route.disasterPenalty > 0 || route.accidentPenalty > 0 || route.trafficPenalty > 0 || route.envPenalty > 0 || hazardCnt > 0) && (

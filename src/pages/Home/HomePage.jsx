@@ -88,6 +88,7 @@ export default function HomePage() {
     setUserLocation,
     nearbyPlaces,
     setNearbyPlaces,
+    routes,
     safetyScore,
     setSafetyScore,
     setDestination,
@@ -691,11 +692,20 @@ export default function HomePage() {
                   </button>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { label: 'Safest',   score: Math.min(100, safetyScore + 10), color: '#10B981', time: '18 min', dist: '5.1 km' },
-                    { label: 'Balanced', score: safetyScore,                     color: '#004ac6', time: '14 min', dist: '4.2 km' },
-                    { label: 'Fastest',  score: Math.max(40, safetyScore - 12),  color: '#F59E0B', time: '10 min', dist: '3.8 km' },
-                  ].map(r => (
+                  {((routes && routes.length > 0)
+                    ? routes.slice(0, 3).map((r, i) => ({
+                        label: r.rankLabel || (i === 0 ? 'Safest' : i === 1 ? 'Balanced' : 'Fastest'),
+                        score: r.safetyScore || 75,
+                        color: r.rankColor || (i === 0 ? '#10B981' : i === 1 ? '#004ac6' : '#F59E0B'),
+                        time: r.durationMin ? `${r.durationMin} min` : '—',
+                        dist: r.distanceKm ? `${r.distanceKm} km` : '—',
+                      }))
+                    : [
+                        { label: 'Safest',   score: Math.min(100, Math.round(safetyScore * 1.05)), color: '#10B981', time: 'Corridor A', dist: 'Lowest Risk' },
+                        { label: 'Balanced', score: safetyScore,                                   color: '#004ac6', time: 'Corridor B', dist: 'Optimal' },
+                        { label: 'Fastest',  score: Math.max(10, Math.round(safetyScore * 0.90)),  color: '#F59E0B', time: 'Corridor C', dist: 'Direct' },
+                      ]
+                  ).map(r => (
                     <div key={r.label} className="rounded-xl p-2 text-center border border-[#f0f0f0]" style={{ background: r.color + '08' }}>
                       <p className="text-[8px] font-black text-[#737686] uppercase tracking-wider">{r.label}</p>
                       <p className="text-xl font-black" style={{ color: r.color }}>{r.score}</p>

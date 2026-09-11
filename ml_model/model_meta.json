@@ -1,7 +1,8 @@
 {
-  "version": "2.0.0",
+  "version": "3.0.0",
   "algorithm_classifier": "RandomForestClassifier",
   "algorithm_regressor": "GradientBoostingRegressor",
+  "n_features": 26,
   "feature_columns": [
     "crime_min_dist_km",
     "crime_density_500m",
@@ -23,32 +24,40 @@
     "temperature",
     "visibility_km",
     "weather_severity",
+    "precipitation_risk",
+    "aqi_pm25",
+    "air_quality_severity",
     "lighting_score",
-    "precipitation_risk"
+    "police_proximity_km",
+    "road_hierarchy_rank"
   ],
   "feature_importances": {
-    "crime_min_dist_km": 0.133,
-    "in_flood_zone": 0.124,
-    "flood_min_dist_km": 0.1093,
-    "crime_weighted_risk": 0.0806,
-    "lighting_score": 0.0703,
-    "temperature": 0.0596,
-    "accident_min_dist_km": 0.0452,
-    "weather_severity": 0.0449,
-    "crime_density_500m": 0.044,
-    "visibility_km": 0.0423,
-    "precipitation_risk": 0.0375,
-    "disaster_min_dist_km": 0.0365,
-    "in_disaster_zone": 0.0342,
-    "hour_cos": 0.0305,
-    "accident_weighted_risk": 0.024,
-    "hour_sin": 0.0229,
-    "accident_density_500m": 0.0156,
-    "day_sin": 0.0139,
-    "is_night": 0.0119,
-    "day_cos": 0.011,
-    "is_weekend": 0.0046,
-    "is_rush_hour": 0.0041
+    "crime_min_dist_km": 0.111,
+    "visibility_km": 0.1053,
+    "in_flood_zone": 0.0878,
+    "precipitation_risk": 0.0803,
+    "weather_severity": 0.0771,
+    "lighting_score": 0.0697,
+    "flood_min_dist_km": 0.0682,
+    "crime_weighted_risk": 0.0526,
+    "crime_density_500m": 0.0437,
+    "temperature": 0.0348,
+    "road_hierarchy_rank": 0.0309,
+    "police_proximity_km": 0.0308,
+    "in_disaster_zone": 0.0297,
+    "disaster_min_dist_km": 0.0296,
+    "accident_min_dist_km": 0.0282,
+    "aqi_pm25": 0.0254,
+    "hour_cos": 0.0211,
+    "hour_sin": 0.0138,
+    "accident_weighted_risk": 0.0124,
+    "day_sin": 0.0114,
+    "is_night": 0.0098,
+    "day_cos": 0.0075,
+    "accident_density_500m": 0.0071,
+    "air_quality_severity": 0.0068,
+    "is_weekend": 0.0026,
+    "is_rush_hour": 0.0024
   },
   "classes": [
     "High",
@@ -56,9 +65,15 @@
     "Medium"
   ],
   "metrics": {
-    "regressor_rmse": 1.97,
-    "regressor_r2": 0.9706
+    "regressor_rmse": 2.21,
+    "regressor_r2": 0.9719
   },
-  "training_samples": 5000,
-  "trained_at": "2026-09-04T16:35:55Z"
+  "training_samples": 8000,
+  "trained_at": "2026-09-11T06:57:30Z",
+  "data_sources": {
+    "weather": "Open-Meteo (WMO codes) + historical simulation",
+    "air_quality": "OpenAQ v3 / Open-Meteo AQ simulation",
+    "road_infra": "OSM Overpass simulation (road rank, police, lighting)",
+    "spatial_hazards": "BallTree BallTree (MoRTH + crime + flood + disaster)"
+  }
 }

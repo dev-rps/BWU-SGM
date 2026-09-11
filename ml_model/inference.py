@@ -3,9 +3,16 @@ inference.py — High-Performance Spatial-Temporal Route & Point Inference Engin
 
 Evaluates route polyline payloads against trained ML models with BallTree spatial queries,
 segment bottleneck detection, and explainable AI insights.
+
+v3.0.0 Changes:
+  - Route score weighting: 80% mean + 20% worst-point (was 60/40 — bottleneck over-dominated)
+  - Improved _generate_explainability_reasons: factual, quantified strings with hazard names/distances
+  - predict_route and predict_point accept live AQI and OSM infrastructure data
+  - 26-feature vector support with graceful backward compatibility
 """
 
 import os
+import math
 try:
     import joblib
 except ImportError:
@@ -14,58 +21,108 @@ import numpy as np
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional
 
-from ml_model.data_pipeline import HazardManager
-from ml_model.feature_engineering import (
-    FEATURE_COLUMNS,
-    extract_point_features,
-    point_features_to_vector
-)
+try:
+    from ml_model.data_pipeline import HazardManager
+    from ml_model.feature_engineering import (
+        FEATURE_COLUMNS,
+        WMO_WEATHER_CODE_MAP,
+        extract_point_features,
+        point_features_to_vector,
+    )
+except ImportError:
+    from data_pipeline import HazardManager
+    from feature_engineering import (
+        FEATURE_COLUMNS,
+        WMO_WEATHER_CODE_MAP,
+        extract_point_features,
+        point_features_to_vector,
+    )
+
+
+# ── AQI label helpers ─────────────────────────────────────────────────────────
+def _pm25_label(pm25: Optional[float]) -> str:
+    if pm25 is None:
+        return "Unknown"
+    if pm25 <= 12:    return "Good"
+    if pm25 <= 35.4:  return "Moderate"
+    if pm25 <= 55.4:  return "Unhealthy (sensitive)"
+    if pm25 <= 150.4: return "Unhealthy"
+    if pm25 <= 250.4: return "Very Unhealthy"
+    return "Hazardous"
+
+
+def _wmo_description(code: Optional[int]) -> str:
+    _WMO_LABELS = {
+        0:  "Clear sky",
+        1:  "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+        45: "Fog", 48: "Rime fog",
+        51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
+        61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
+        80: "Rain showers", 81: "Moderate showers", 82: "Violent showers",
+        95: "Thunderstorm", 96: "Thunderstorm + hail", 99: "Thunderstorm + heavy hail",
+    }
+    if code is None:
+        return "Unknown"
+    return _WMO_LABELS.get(code, f"WMO code {code}")
+
+
+def _road_rank_label(rank: float) -> str:
+    if rank >= 1.0:   return "Expressway / National Highway"
+    if rank >= 0.85:  return "Major Arterial / Primary Road"
+    if rank >= 0.65:  return "Secondary / District Road"
+    if rank >= 0.45:  return "Tertiary / Town Connector"
+    if rank >= 0.25:  return "Residential / Local Road"
+    return "Track / Path (isolated)"
+
 
 class SafetyInferenceEngine:
-    _instance: Optional['SafetyInferenceEngine'] = None
+    _instance: Optional["SafetyInferenceEngine"] = None
 
     def __init__(self, model_path: Optional[str] = None):
         if model_path is None:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
+            base_dir   = os.path.dirname(os.path.abspath(__file__))
             model_path = os.path.join(base_dir, "model.pkl")
-        self.model_path = model_path
+        self.model_path     = model_path
         self.hazard_manager = HazardManager.get_instance()
         self.load_model()
 
     @classmethod
-    def get_instance(cls) -> 'SafetyInferenceEngine':
+    def get_instance(cls) -> "SafetyInferenceEngine":
         if cls._instance is None:
             cls._instance = SafetyInferenceEngine()
         return cls._instance
 
     def load_model(self):
         if not os.path.exists(self.model_path):
-            raise FileNotFoundError(f"Model file not found at {self.model_path}. Run train.py first.")
+            raise FileNotFoundError(
+                f"Model file not found at {self.model_path}. Run train.py first."
+            )
         bundle = joblib.load(self.model_path)
-        self.classifier = bundle["classifier"]
-        self.regressor = bundle["regressor"]
+        self.classifier   = bundle["classifier"]
+        self.regressor    = bundle["regressor"]
         self.feature_names = bundle.get("feature_names", FEATURE_COLUMNS)
-        self.classes = bundle.get("classes", ["High", "Low", "Medium"])
+        self.classes       = bundle.get("classes", ["High", "Low", "Medium"])
+        print(f"[Engine] Loaded model with {len(self.feature_names)} features: {self.feature_names[:5]}...")
 
     def _normalize_coord(self, pt: Any) -> Optional[Tuple[float, float]]:
         """Extracts (lat, lng) with robust heuristic handling of [lng, lat] inversion."""
         if pt is None:
             return None
-        lat, lng = None, None
         if isinstance(pt, (list, tuple)) and len(pt) >= 2:
             v0, v1 = float(pt[0]), float(pt[1])
-            # In India, Lng is ~68-97, Lat is ~8-37
-            if abs(v0) > abs(v1) and abs(v0) > 45.0:
+            # In India: Lng ~68–97, Lat ~8–37. If first value is longitude-range, swap.
+            if abs(v0) > 45.0 and abs(v1) <= 45.0:
                 lng, lat = v0, v1
             else:
                 lat, lng = v0, v1
         elif isinstance(pt, dict):
-            lat = float(pt.get("lat") or pt.get("latitude"))
-            lng = float(pt.get("lng") or pt.get("lon") or pt.get("longitude"))
+            lat = float(pt.get("lat") or pt.get("latitude") or 0)
+            lng = float(pt.get("lng") or pt.get("lon") or pt.get("longitude") or 0)
+        else:
+            return None
 
-        if lat is not None and lng is not None:
-            if -90 <= lat <= 90 and -180 <= lng <= 180:
-                return lat, lng
+        if -90 <= lat <= 90 and -180 <= lng <= 180:
+            return lat, lng
         return None
 
     def predict_point(
@@ -75,53 +132,92 @@ class SafetyInferenceEngine:
         hour: int = 12,
         day_of_week: int = 0,
         weather: Optional[Dict[str, Any]] = None,
-        lighting: Optional[str] = None
+        lighting: Optional[str] = None,
+        aqi_pm25: Optional[float] = None,
+        osm_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Evaluates a single geospatial coordinate point."""
+        """Evaluates a single geospatial coordinate point with the 26-feature model."""
+        osm_data   = osm_data or {}
+        police_km  = osm_data.get("police_proximity_km")
+        road_rank  = osm_data.get("road_hierarchy_rank")
+
+        # Derive lighting from OSM if not provided by client
+        effective_lighting = lighting
+        if not effective_lighting and "lighting_score" in osm_data:
+            osm_ls = float(osm_data["lighting_score"])
+            if osm_ls >= 2.5:
+                effective_lighting = "well_lit"
+            elif osm_ls >= 1.0:
+                effective_lighting = "poorly_lit"
+            else:
+                effective_lighting = "dark"
+
         feats = extract_point_features(
             lat=lat,
             lng=lng,
             hour=hour,
             day_of_week=day_of_week,
             weather_dict=weather or {},
-            lighting_status=lighting,
-            hazard_manager=self.hazard_manager
+            lighting_status=effective_lighting,
+            hazard_manager=self.hazard_manager,
+            aqi_pm25=aqi_pm25,
+            police_proximity_km=police_km,
+            road_hierarchy_rank=road_rank,
         )
-        vec = point_features_to_vector(feats).reshape(1, -1)
+
+        # Align feature vector to trained model's feature order
+        vec = self._align_feature_vector(feats).reshape(1, -1)
 
         # Predict continuous score and discrete class
-        score = float(self.regressor.predict(vec)[0])
-        score = max(10, min(100, round(score)))
+        score  = float(self.regressor.predict(vec)[0])
+        score  = max(10, min(100, round(score)))
 
-        probas = self.classifier.predict_proba(vec)[0]
+        probas    = self.classifier.predict_proba(vec)[0]
         prob_dict = {
             cls_name: round(float(p), 4)
             for cls_name, p in zip(self.classes, probas)
         }
 
-        # Determine calibrated Risk Level
-        if score >= 75:
-            risk_level = "Low"
-        elif score >= 55:
-            risk_level = "Medium"
-        elif score >= 40:
-            risk_level = "High"
-        else:
-            risk_level = "Critical"
+        # Calibrated risk level from score
+        if score >= 75:   risk_level = "Low"
+        elif score >= 55: risk_level = "Medium"
+        elif score >= 40: risk_level = "High"
+        else:             risk_level = "Critical"
 
         nearest_hazards = self.hazard_manager.query_all_nearest(lat, lng)
-
-        reasons = self._generate_explainability_reasons(feats, nearest_hazards, score)
+        reasons = self._generate_explainability_reasons(
+            feats, nearest_hazards, score, weather or {}, osm_data
+        )
 
         return {
-            "safety_score": int(score),
-            "risk_score": round(100.0 - score, 1),
-            "risk_level": risk_level,
-            "probabilities": prob_dict,
+            "safety_score":   int(score),
+            "risk_score":     round(100.0 - score, 1),
+            "risk_level":     risk_level,
+            "probabilities":  prob_dict,
             "nearest_hazards": nearest_hazards,
-            "reasons": reasons,
-            "features": feats
+            "reasons":        reasons,
+            "features":       feats,
         }
+
+    def _align_feature_vector(self, feats: Dict[str, float]) -> np.ndarray:
+        """
+        Aligns a feature dict to the trained model's feature_names order.
+        Handles backward compatibility between 22-feature and 26-feature models.
+        """
+        vec = []
+        for col in self.feature_names:
+            if col in feats:
+                vec.append(feats[col])
+            else:
+                # New feature not in old model: use safe neutral default
+                defaults = {
+                    "aqi_pm25":             45.0,
+                    "air_quality_severity":  0.5,
+                    "police_proximity_km":   2.0,
+                    "road_hierarchy_rank":   0.65,
+                }
+                vec.append(defaults.get(col, 0.0))
+        return np.array(vec, dtype=np.float32)
 
     def predict_route(
         self,
@@ -130,9 +226,12 @@ class SafetyInferenceEngine:
         hour: Optional[int] = None,
         day_of_week: Optional[int] = None,
         weather: Optional[Dict[str, Any]] = None,
-        lighting: Optional[str] = None
+        lighting: Optional[str] = None,
+        aqi_pm25: Optional[float] = None,
+        osm_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Evaluates an entire route polyline payload."""
+        """Evaluates an entire route polyline against the 26-feature ML model."""
+
         # Parse time context
         if hour is None or day_of_week is None:
             dt = datetime.now()
@@ -141,8 +240,8 @@ class SafetyInferenceEngine:
                     dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                 except Exception:
                     pass
-            hour = dt.hour if hour is None else hour
-            day_of_week = dt.weekday() if day_of_week is None else day_of_week
+            hour        = dt.hour        if hour is None else hour
+            day_of_week = dt.weekday()   if day_of_week is None else day_of_week
 
         # Normalize and filter coordinates
         cleaned_pts: List[Tuple[float, float]] = []
@@ -153,168 +252,319 @@ class SafetyInferenceEngine:
 
         if not cleaned_pts:
             return {
-                "error": "No valid coordinates in route payload",
+                "error":        "No valid coordinates in route payload",
                 "safety_score": 70,
-                "risk_score": 30.0,
-                "risk_level": "Medium",
+                "risk_score":   30.0,
+                "risk_level":   "Medium",
                 "probabilities": {"Low": 0.33, "Medium": 0.34, "High": 0.33},
-                "reasons": ["Default safety profile used: no valid coordinates received."]
+                "reasons":      ["Default safety profile used: no valid coordinates received."]
             }
 
-        # Intelligent Downsampling for real-time latency
-        # Target ~25 checkpoints along route
+        # ── Intelligent Downsampling — target ~25 checkpoints ─────────────────
         total_pts = len(cleaned_pts)
         if total_pts <= 25:
             sampled_pts = cleaned_pts
         else:
-            step = max(1, total_pts // 25)
+            step        = max(1, total_pts // 25)
             sampled_pts = [cleaned_pts[i] for i in range(0, total_pts, step)]
             if cleaned_pts[-1] not in sampled_pts:
                 sampled_pts.append(cleaned_pts[-1])
 
-        # Evaluate each sampled waypoint
+        # ── Evaluate each checkpoint ──────────────────────────────────────────
         sample_results = []
-        min_score = 101
-        bottleneck_pt = sampled_pts[0]
+        min_score      = 101
+        bottleneck_pt  = sampled_pts[0]
         bottleneck_hazards = None
 
         for pt in sampled_pts:
             res = self.predict_point(
-                lat=pt[0],
-                lng=pt[1],
-                hour=hour,
-                day_of_week=day_of_week,
-                weather=weather,
-                lighting=lighting
+                lat=pt[0], lng=pt[1],
+                hour=hour, day_of_week=day_of_week,
+                weather=weather, lighting=lighting,
+                aqi_pm25=aqi_pm25, osm_data=osm_data,
             )
             res["lat"] = pt[0]
             res["lng"] = pt[1]
             sample_results.append(res)
 
             if res["safety_score"] < min_score:
-                min_score = res["safety_score"]
-                bottleneck_pt = pt
+                min_score          = res["safety_score"]
+                bottleneck_pt      = pt
                 bottleneck_hazards = res["nearest_hazards"]
 
-        # Aggregate metrics across route
-        all_scores = [r["safety_score"] for r in sample_results]
-        # Route safety score is weighted: 60% mean, 40% worst bottleneck point
-        mean_score = float(np.mean(all_scores))
-        route_safety_score = round(mean_score * 0.60 + min_score * 0.40)
+        # ── Aggregate: 80% mean + 20% worst-point (was 60/40) ─────────────────
+        # Rationale: A single dangerous checkpoint should flag the route but not
+        # catastrophically tank the score. 80/20 gives a representative corridor
+        # safety average while still penalizing genuine danger zones.
+        all_scores        = [r["safety_score"] for r in sample_results]
+        mean_score        = float(np.mean(all_scores))
+        route_safety_score = round(mean_score * 0.80 + min_score * 0.20)
         route_safety_score = max(10, min(100, route_safety_score))
 
-        # Average class probabilities
-        avg_probs = {}
-        for cls_name in self.classes:
-            avg_probs[cls_name] = round(float(np.mean([r["probabilities"].get(cls_name, 0.0) for r in sample_results])), 4)
+        # ── Average class probabilities ───────────────────────────────────────
+        avg_probs = {
+            cls_name: round(float(np.mean(
+                [r["probabilities"].get(cls_name, 0.0) for r in sample_results]
+            )), 4)
+            for cls_name in self.classes
+        }
 
-        # Risk Level
-        if route_safety_score >= 75:
-            route_risk_level = "Low"
-        elif route_safety_score >= 55:
-            route_risk_level = "Medium"
-        elif route_safety_score >= 40:
-            route_risk_level = "High"
-        else:
-            route_risk_level = "Critical"
+        # ── Risk level ────────────────────────────────────────────────────────
+        if route_safety_score >= 75:   route_risk_level = "Low"
+        elif route_safety_score >= 55: route_risk_level = "Medium"
+        elif route_safety_score >= 40: route_risk_level = "High"
+        else:                          route_risk_level = "Critical"
 
-        # Global nearest hazards across the entire route
-        global_nearest: Dict[str, Any] = {"crime": None, "accident": None, "flood": None, "disaster": None}
-        min_dists = {"crime": float("inf"), "accident": float("inf"), "flood": float("inf"), "disaster": float("inf")}
+        # ── Global nearest hazards across entire route ────────────────────────
+        global_nearest = {"crime": None, "accident": None, "flood": None, "disaster": None}
+        min_dists      = {k: float("inf") for k in global_nearest}
 
         for r in sample_results:
             nh = r["nearest_hazards"]
-            for cat in ["crime", "accident", "flood", "disaster"]:
+            for cat in global_nearest:
                 d = nh[cat].get("distance_m")
                 if d is not None and d < min_dists[cat]:
-                    min_dists[cat] = d
+                    min_dists[cat]    = d
                     global_nearest[cat] = nh[cat]
 
-        # Route-level explanatory reasons
-        route_reasons = []
-        if min_dists["accident"] < 250:
-            acc = global_nearest["accident"]
-            route_reasons.append(f"Accident Blackspot on path: {acc['name']} ({round(min_dists['accident'])}m)")
-        if min_dists["crime"] < 200:
-            cr = global_nearest["crime"]
-            route_reasons.append(f"Documented Crime Hotspot nearby: {cr['name']} ({round(min_dists['crime'])}m)")
-        if min_dists["flood"] < 500:
-            fl = global_nearest["flood"]
-            route_reasons.append(f"Flood / Waterlogging Risk Zone: {fl['name']}")
-        if min_dists["disaster"] < 600:
-            ds = global_nearest["disaster"]
-            route_reasons.append(f"Natural Hazard Zone: {ds['name']}")
+        # ── Route-level factual explanatory reasons ───────────────────────────
+        route_reasons = self._generate_route_reasons(
+            sample_results=sample_results,
+            global_nearest=global_nearest,
+            min_dists=min_dists,
+            route_safety_score=route_safety_score,
+            hour=hour,
+            weather=weather or {},
+            osm_data=osm_data or {},
+            aqi_pm25=aqi_pm25,
+        )
 
-        # Weather / Lighting reasons
-        w_sev = sample_results[0]["features"].get("weather_severity", 0.0)
-        if w_sev >= 3.0:
-            route_reasons.append("Severe rain/storm conditions: reduced road traction and braking safety.")
-        elif w_sev >= 2.0:
-            route_reasons.append("Fog / low visibility conditions detected.")
-
-        if hour < 6 or hour >= 20:
-            route_reasons.append("Night-time travel window: crime amplification and reduced surveillance active.")
-        else:
-            route_reasons.append("Daylight travel window: active pedestrian movement and standard visibility.")
-
-        if route_safety_score >= 85:
-            route_reasons.insert(0, "High overall safety index: optimal corridor with low hazard intersection.")
-
-        # Segment risks for polyline visual styling
+        # ── Segment risk for polyline visual styling ──────────────────────────
         segment_points = [
             {
-                "lat": r["lat"],
-                "lng": r["lng"],
-                "score": r["safety_score"],
-                "risk_level": r["risk_level"]
+                "lat":        r["lat"],
+                "lng":        r["lng"],
+                "score":      r["safety_score"],
+                "risk_level": r["risk_level"],
             }
             for r in sample_results
         ]
 
         return {
-            "safety_score": int(route_safety_score),
-            "risk_score": round(100.0 - route_safety_score, 1),
-            "risk_level": route_risk_level,
-            "probabilities": avg_probs,
+            "safety_score":       int(route_safety_score),
+            "risk_score":         round(100.0 - route_safety_score, 1),
+            "risk_level":         route_risk_level,
+            "probabilities":      avg_probs,
             "bottleneck": {
-                "lat": bottleneck_pt[0],
-                "lng": bottleneck_pt[1],
+                "lat":         bottleneck_pt[0],
+                "lng":         bottleneck_pt[1],
                 "safety_score": min_score,
-                "hazards": bottleneck_hazards
+                "hazards":     bottleneck_hazards,
             },
-            "nearest_hazards": global_nearest,
-            "reasons": route_reasons,
+            "nearest_hazards":    global_nearest,
+            "reasons":            route_reasons,
             "waypoints_evaluated": len(sampled_pts),
-            "segments": segment_points,
-            "model_version": "2.0.0-geospatial-balltree"
+            "segments":           segment_points,
+            "model_version":      "3.0.0-26feature-live-data",
         }
+
+    def _generate_route_reasons(
+        self,
+        sample_results: List[Dict],
+        global_nearest: Dict,
+        min_dists: Dict,
+        route_safety_score: int,
+        hour: int,
+        weather: Dict,
+        osm_data: Dict,
+        aqi_pm25: Optional[float],
+    ) -> List[str]:
+        """
+        Generates factual, quantified route-level explanation reasons.
+        Reasons are ordered by impact: spatial hazards first, then environmental, then temporal.
+        """
+        reasons = []
+
+        # ── Spatial Hazards ───────────────────────────────────────────────────
+        if min_dists["accident"] < 300:
+            acc = global_nearest["accident"]
+            name = acc.get("name", "Accident Blackspot")
+            dist = round(min_dists["accident"])
+            sev  = acc.get("severity", "high")
+            reasons.append(
+                f"🚗 Accident blackspot on route: {name} ({dist}m, {sev} severity) — "
+                f"reduced road traction expected"
+            )
+
+        if min_dists["crime"] < 250:
+            cr   = global_nearest["crime"]
+            name = cr.get("name", "Crime Hotspot")
+            dist = round(min_dists["crime"])
+            sev  = cr.get("severity", "medium")
+            reasons.append(
+                f"🚨 Crime hotspot within {dist}m: {name} ({sev} severity) — "
+                f"heightened vigilance advised"
+            )
+
+        if min_dists["flood"] < 600:
+            fl   = global_nearest["flood"]
+            name = fl.get("name", "Flood Zone")
+            reasons.append(
+                f"🌊 Flood / waterlogging zone: {name} — "
+                f"road submersion risk, check live conditions"
+            )
+
+        if min_dists["disaster"] < 700:
+            ds   = global_nearest["disaster"]
+            name = ds.get("name", "Disaster Zone")
+            reasons.append(f"⚠️ Natural hazard zone on route: {name}")
+
+        # ── Air Quality ───────────────────────────────────────────────────────
+        if aqi_pm25 is not None:
+            label = _pm25_label(aqi_pm25)
+            if aqi_pm25 > 55.4:
+                reasons.append(
+                    f"💨 Air quality: PM2.5 = {round(aqi_pm25, 1)} μg/m³ ({label}) — "
+                    f"N95 mask recommended for this corridor"
+                )
+            elif aqi_pm25 > 35.4:
+                reasons.append(
+                    f"💨 Moderate air quality: PM2.5 = {round(aqi_pm25, 1)} μg/m³ ({label})"
+                )
+
+        # ── Weather ───────────────────────────────────────────────────────────
+        w_code = weather.get("weather_code")
+        w_sev  = sample_results[0]["features"].get("weather_severity", 0.0) if sample_results else 0.0
+        if w_code is not None:
+            desc = _wmo_description(int(w_code))
+            if w_sev >= 4.0:
+                reasons.append(
+                    f"⛈️ Severe weather: {desc} — critical skid risk and near-zero visibility"
+                )
+            elif w_sev >= 3.5:
+                reasons.append(
+                    f"🌧️ Heavy rain showers ({desc}) — compound flood risk, skid-prone"
+                )
+            elif w_sev >= 2.8:
+                reasons.append(
+                    f"🌧️ Rainfall detected ({desc}) — reduced road traction and braking distance"
+                )
+            elif w_sev >= 2.5:
+                reasons.append(
+                    f"🌫️ Fog / low-visibility conditions ({desc}) — accident risk amplified"
+                )
+        elif w_sev >= 3.0:
+            reasons.append("🌧️ Severe rain / storm conditions — reduced road traction and braking safety")
+        elif w_sev >= 2.0:
+            reasons.append("🌫️ Fog or low-visibility conditions detected")
+
+        vis_km = sample_results[0]["features"].get("visibility_km", 10.0) if sample_results else 10.0
+        if vis_km < 2.0:
+            reasons.append(
+                f"👁️ Visibility: {round(vis_km, 1)} km — critically reduced, high collision risk"
+            )
+
+        # ── Road Infrastructure ────────────────────────────────────────────────
+        road_rank = osm_data.get("road_hierarchy_rank")
+        if road_rank is not None:
+            label = _road_rank_label(float(road_rank))
+            if float(road_rank) <= 0.35:
+                reasons.append(
+                    f"🛣️ Road type: {label} — isolated corridor, no median barrier or patrol coverage"
+                )
+
+        l_score = osm_data.get("lighting_score")
+        if l_score is not None and float(l_score) < 1.0:
+            reasons.append("🔦 Unlit road section — high isolation risk, no ambient lighting")
+        elif l_score is not None and float(l_score) < 1.5:
+            reasons.append("🔦 Poorly lit corridor — increased personal safety risk at night")
+
+        police_km = osm_data.get("police_proximity_km")
+        if police_km is not None and float(police_km) > 5.0:
+            reasons.append(
+                f"🚔 No police station within {round(float(police_km), 1)} km — "
+                f"limited emergency response coverage"
+            )
+
+        # ── Temporal ──────────────────────────────────────────────────────────
+        if hour < 6 or hour >= 20:
+            reasons.append(
+                "🌙 Night-time travel (20:00–05:59): crime risk elevated, "
+                "reduced bystander presence and surveillance coverage"
+            )
+        else:
+            if 8 <= hour <= 10 or 17 <= hour <= 20:
+                reasons.append(
+                    "🚦 Rush hour window: increased traffic density and accident exposure"
+                )
+
+        # ── Overall summary ───────────────────────────────────────────────────
+        if route_safety_score >= 85 and not reasons:
+            reasons.append(
+                "✅ High safety corridor: low hazard proximity, good lighting, "
+                "adequate police coverage, favorable weather"
+            )
+        elif route_safety_score >= 85:
+            reasons.insert(0, "✅ Overall safe corridor despite minor risk factors above")
+        elif not reasons:
+            reasons.append("Corridor evaluated — no immediate high-severity hazards detected")
+
+        return reasons
 
     def _generate_explainability_reasons(
         self,
         feats: Dict[str, float],
         hazards: Dict[str, Any],
-        score: float
+        score: float,
+        weather: Dict,
+        osm_data: Dict,
     ) -> List[str]:
+        """Point-level explainability reasons with factual, quantified strings."""
         reasons = []
+
         if hazards["accident"].get("distance_m") is not None and hazards["accident"]["distance_m"] <= 250:
-            reasons.append(f"Accident Blackspot within {round(hazards['accident']['distance_m'])}m: {hazards['accident']['name']}")
+            d    = round(hazards["accident"]["distance_m"])
+            name = hazards["accident"].get("name", "Accident Blackspot")
+            sev  = hazards["accident"].get("severity", "high")
+            reasons.append(f"🚗 Accident blackspot {d}m away: {name} ({sev})")
 
         if hazards["crime"].get("distance_m") is not None and hazards["crime"]["distance_m"] <= 250:
-            reasons.append(f"Crime Hotspot within {round(hazards['crime']['distance_m'])}m: {hazards['crime']['name']}")
+            d    = round(hazards["crime"]["distance_m"])
+            name = hazards["crime"].get("name", "Crime Hotspot")
+            sev  = hazards["crime"].get("severity", "medium")
+            reasons.append(f"🚨 Crime hotspot {d}m: {name} ({sev} severity)")
 
         if feats.get("in_flood_zone", 0.0) > 0.5:
-            reasons.append(f"Inside recorded Flood Inundation Zone: {hazards['flood']['name']}")
+            name = hazards["flood"].get("name", "Flood Zone")
+            reasons.append(f"🌊 Inside flood inundation zone: {name}")
 
         if feats.get("in_disaster_zone", 0.0) > 0.5:
-            reasons.append(f"Inside Natural Disaster Zone: {hazards['disaster']['name']}")
+            name = hazards["disaster"].get("name", "Disaster Zone")
+            reasons.append(f"⚠️ Inside natural disaster zone: {name}")
+
+        pm25 = feats.get("aqi_pm25")
+        if pm25 and pm25 > 55.4:
+            reasons.append(f"💨 PM2.5: {round(pm25, 1)} μg/m³ ({_pm25_label(pm25)})")
+
+        if feats.get("weather_severity", 0.0) >= 4.0:
+            reasons.append("⛈️ Thunderstorm / critical weather — extreme accident risk")
+        elif feats.get("weather_severity", 0.0) >= 2.8:
+            w_code = weather.get("weather_code")
+            desc   = _wmo_description(int(w_code)) if w_code else "Rain"
+            reasons.append(f"🌧️ {desc} — slippery surfaces, skid risk")
 
         if feats.get("is_night", 0.0) > 0.5:
-            reasons.append("Night-time corridor: elevated caution advised")
+            l = feats.get("lighting_score", 2.0)
+            if l < 1.0:
+                reasons.append("🌙 Night + unlit road — critical isolation risk")
+            elif l < 1.5:
+                reasons.append("🌙 Night-time corridor: elevated caution advised")
 
-        if feats.get("weather_severity", 0.0) >= 3.0:
-            reasons.append("Severe weather: slippery road surfaces")
+        road_rank = feats.get("road_hierarchy_rank", 0.65)
+        if road_rank <= 0.35:
+            reasons.append(f"🛣️ {_road_rank_label(road_rank)} — low patrol coverage")
 
         if not reasons:
-            reasons.append("Clear corridor with no immediate hazard proximity")
+            reasons.append("✅ Clear corridor — no immediate hazard proximity")
 
         return reasons

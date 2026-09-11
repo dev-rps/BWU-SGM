@@ -1,5 +1,5 @@
 /**
- * safetyScore.js — Community-powered route safety engine
+ * safetyScore.js — Community-powered + ML-enhanced route safety engine
  *
  * Algorithm overview:
  *   1. For every report in Firestore, calculate its minimum distance to
@@ -9,14 +9,20 @@
  *   3. Penalty = hazardType.basePenalty × severityLevel.multiplier
  *   4. Routes start at BASE_SCORE. Score = BASE_SCORE - Σ penalties (min 10).
  *   5. Routes are re-sorted: highest score = new "Safest Route".
+ *   6. ML engine predictions (26-feature model) override heuristic scores when available.
+ *      ML reasons include live AQI, WMO weather codes, OSM road type, police proximity.
  *
  * Exports:
  *   calculateRouteSafetyScores(routes, nearbyPlaces, reports, crimeHotspots, floodZones, disasterZones, accidentZones)
  *     → same routes[] with safetyScore added + onRouteReports[] attached
+ *   mergeMLPredictionsIntoRoutes(routes, mlResults)
+ *     → routes ranked strictly by ML safety score with factual reasons
  *   applyEnvironmentalPenalties(routes, envPenalties)
  *     → updates safety score based on AQI, Pollen, UV, and user Medical Profile
  *   calculateSafetyScore({ nearbyPlaces, reports })
  *     → single number for home-screen safety badge
+ *   getRouteComparisonSummary(routes)
+ *     → human-readable one-line explanation of why top route was chosen
  *   getScoreLabel(score)
  *     → { label, color, bg, text }
  *   getRouteType(idx)
@@ -37,12 +43,6 @@ const MIN_SCORE               = 10   // Floor — route score never goes below 1
 const MAX_SCORE               = 100  // Ceiling
 const MONSOON_FLOOD_MULTIPLIER = 1.4  // Flood penalty 40% higher during June-October
 
-/**
- * ROUTE_VARIANCE: small per-route offsets that make demo routes feel distinct
- * even with no reports. Applied to the ORIGINAL route index (route 0 = longer/safer,
- * route 1 = balanced, route 2 = shorter/faster).
- */
-const ROUTE_VARIANCE = [+4, 0, -8]
 
 /**
  * RANK_CONFIGS: appearance for rank 0 (safest), 1 (middle), 2 (least safe / fastest).
@@ -170,36 +170,10 @@ export function calculateRouteSafetyScores(
   const scoredRoutes = routes.map((route, routeIndex) => {
     const geometry = route.geometry  // [[lat, lng], ...]
     if (!geometry || geometry.length < 2) {
-      return { ...route, safetyScore: 75 + (ROUTE_VARIANCE[routeIndex] || 0), onRouteReports: [] }
+      return { ...route, safetyScore: 75, onRouteReports: [] }
     }
 
     let score = BASE_SCORE
-    score += (ROUTE_VARIANCE[routeIndex] || 0)
-
-    // ── Route Geometry Fingerprint: ensures scores differ per destination ─────
-    if (geometry && geometry.length >= 2) {
-      try {
-        const midPt   = geometry[Math.floor(geometry.length / 2)]
-        const startPt = geometry[0]
-        const endPt   = geometry[geometry.length - 1]
-        if (
-          midPt && startPt && endPt &&
-          isFinite(midPt[0])   && isFinite(midPt[1]) &&
-          isFinite(startPt[0]) && isFinite(startPt[1]) &&
-          isFinite(endPt[0])   && isFinite(endPt[1])
-        ) {
-          const fpSeed = (
-            (Math.round(Math.abs(endPt[0])   * 1000) % 9999) * 7919 +
-            (Math.round(Math.abs(endPt[1])   * 1000) % 9999) * 6271 +
-            (Math.round(Math.abs(midPt[0])   * 1000) % 9999) * 4987 +
-            (Math.round(Math.abs(midPt[1])   * 1000) % 9999) * 3571 +
-            routeIndex * 1009
-          )
-          const fpOffset = (Math.abs(fpSeed) % 15) - 9
-          score += fpOffset
-        }
-      } catch (_) { /* fingerprint errors are non-fatal */ }
-    }
 
     const onRouteReports   = []
     const onRouteCrimes    = []
@@ -344,15 +318,135 @@ export function calculateRouteSafetyScores(
     }
   })
 
-  // Enforce score distinction if tied
-  for (let i = 1; i < rankedRoutes.length; i++) {
-    const prev = rankedRoutes[i - 1].safetyScore
-    if (prev - rankedRoutes[i].safetyScore < 4) {
-      rankedRoutes[i] = { ...rankedRoutes[i], safetyScore: Math.max(MIN_SCORE, prev - 4) }
+  return rankedRoutes
+}
+
+/**
+ * Merges high-precision predictions from the Python ML Geospatial Engine into candidate routes.
+ * Exposes AQI data, WMO weather code, road type, and police proximity from ML response.
+ *
+ * @param {Array<object>} routes    - Array of candidate routes
+ * @param {Array<object>} mlResults - Array of ML inference result objects from /predict/routes
+ * @returns {Array<object>} Routes ranked strictly by ML safety score
+ */
+export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
+  if (!routes || !routes.length) return []
+  if (!mlResults || !mlResults.length) return routes
+
+  // Map ML predictions by route_id or by array index
+  const mlMap = new Map()
+  mlResults.forEach((ml, idx) => {
+    if (ml.route_id !== undefined && ml.route_id !== null) {
+      mlMap.set(String(ml.route_id), ml)
     }
+    mlMap.set(idx, ml)
+  })
+
+  const merged = routes.map((route, idx) => {
+    const ml = mlMap.get(String(route.index)) || mlMap.get(idx)
+    if (!ml) return route
+
+    const mlScore       = Math.max(MIN_SCORE, Math.min(MAX_SCORE, Math.round(ml.safety_score)))
+    const customReasons = Array.isArray(ml.reasons) ? ml.reasons : []
+
+    // Extract live data context from ML response (server-fetched)
+    const liveSources  = ml.live_data_sources || {}
+    const mlAqiPm25    = liveSources.pm25    ?? null
+    const mlWeatherCode = liveSources.weather_code ?? null
+    const mlAqiSource  = liveSources.aqi_source ?? null
+
+    // Extract road/infra context from bottleneck segment features
+    const btk         = ml.bottleneck || {}
+    const segments    = ml.segments   || []
+
+    return {
+      ...route,
+      safetyScore:      mlScore,
+      mlSafetyScore:    mlScore,
+      riskScore:        ml.risk_score ?? (100 - mlScore),
+      riskLevel:        ml.risk_level || (mlScore >= 75 ? 'Low' : mlScore >= 55 ? 'Medium' : 'High'),
+      probabilities:    ml.probabilities  || {},
+      bottleneck:       ml.bottleneck     || null,
+      nearestHazards:   ml.nearest_hazards || {},
+      mlReasons:        customReasons,
+      mlSegments:       segments,
+      mlEvaluated:      true,
+      // Live data from server-side enrichment
+      mlAqiPm25,
+      mlWeatherCode,
+      mlAqiSource,
+      mlDataSources:    liveSources,
+    }
+  })
+
+  // Order strictly by ML Safety Score descending
+  const sorted = [...merged].sort((a, b) => (b.safetyScore || 0) - (a.safetyScore || 0))
+
+  return sorted.map((route, idx) => {
+    const cfg         = RANK_CONFIGS[Math.min(idx, RANK_CONFIGS.length - 1)]
+    const isRec       = idx === 0
+    const minDur      = Math.min(...sorted.map(r => r.durationMin || 999))
+    const timeDiffMin = Math.max(0, (route.durationMin || 0) - minDur)
+
+    const tradeOffText = timeDiffMin === 0
+      ? 'Shortest travel time'
+      : `+${timeDiffMin} min vs fastest`
+
+    const safetySegments = route.mlSegments && route.mlSegments.length > 0
+      ? route.mlSegments
+      : buildSafetySegments(route.geometry, route.onRouteReports, route.onRouteCrimes)
+
+    return {
+      ...route,
+      rankLabel:     cfg.label,
+      rankColor:     cfg.color,
+      isRecommended: isRec,
+      recommended:   isRec,
+      timeDiffMin,
+      tradeOffText,
+      safetySegments,
+    }
+  })
+}
+
+/**
+ * Generates a human-readable one-line explanation of why the top-ranked route was chosen.
+ * Useful for surfacing in route cards and notifications.
+ *
+ * @param {Array<object>} routes - Ranked routes (index 0 = safest)
+ * @returns {string} Comparison summary
+ */
+export function getRouteComparisonSummary(routes) {
+  if (!routes || routes.length < 2) return ''
+
+  const best  = routes[0]
+  const worst = routes[routes.length - 1]
+  const scoreDiff = (best.safetyScore || 0) - (worst.safetyScore || 0)
+
+  const parts = []
+
+  if (scoreDiff >= 20) {
+    parts.push(`${scoreDiff} point safer than the least-safe option`)
+  } else if (scoreDiff >= 10) {
+    parts.push(`${scoreDiff} pts safer than alternate route`)
   }
 
-  return rankedRoutes
+  // Highlight the top ML reason if available
+  const topReason = (best.mlReasons || [])[0]
+  if (topReason) {
+    // Strip emoji and trim for compact display
+    const clean = topReason.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}]/gu, '').trim()
+    if (clean.length > 0) parts.push(clean.slice(0, 80))
+  }
+
+  if (best.mlAqiPm25 !== null && best.mlAqiPm25 !== undefined) {
+    const label = best.mlAqiPm25 <= 35.4 ? 'Good AQI' : best.mlAqiPm25 <= 55.4 ? 'Moderate AQI' : 'Poor AQI'
+    parts.push(`${label} (PM2.5: ${Math.round(best.mlAqiPm25)} μg/m³)`)
+  }
+
+  return parts.length > 0
+    ? `Recommended: ${parts.join(' · ')}`
+    : 'Recommended based on lowest hazard density'
 }
 
 // ─── Build geometry-aware safety segments ────────────────────────────────────
@@ -421,67 +515,90 @@ export function deduplicateRoutes(routes) {
 }
 
 // ─── Score explanation reasons ─────────────────────────────────────────────────
+/**
+ * Builds the ordered list of safety score explanation reasons for a route card.
+ * Priority order:
+ *   1. ML factual reasons (live AQI, WMO weather, road type, hazard distances)
+ *   2. Community user reports (with penalty deduction shown)
+ *   3. Heuristic zone-based reasons (crime, flood, disaster, accident penalties)
+ *   4. Environmental (AQI, UV, pollen from environmentalService)
+ *   5. Risk reasons (safety risk service)
+ *   6. Fallback descriptive reasons (score-tier based)
+ */
 export function getScoreReasons(score, rankLabel, envReasons = [], riskReasons = [], route = null) {
-  let reasons = []
-  if (score >= 88) {
-    reasons = [
-      'Lower traffic congestion',
-      'Fewer community hazard reports',
-      'Better road lighting',
-      'Higher activity zone',
-      'Wider roads with better visibility',
-    ]
-  } else if (score >= 75) {
-    reasons = [
-      'Moderate traffic levels',
-      'Good road conditions',
-      'Some community reports nearby',
-      'Reasonably lit area',
-      'Accessible emergency services',
-    ]
-  } else if (score >= 60) {
-    reasons = [
-      'Elevated traffic congestion',
-      'Multiple community hazard reports',
-      'Some isolated stretches',
-      'Variable road quality',
-      'Fewer nearby services',
-    ]
-  } else {
-    reasons = [
-      'High hazard density on route',
-      'Poor road conditions reported',
-      'Isolated or poorly lit stretches',
-      'Multiple community warnings',
-      'Limited emergency access',
-    ]
-  }
-  if (rankLabel === 'FASTEST' || rankLabel === 'LEAST SAFE') reasons = ['Shortest travel time', ...reasons]
-  if (rankLabel === 'SAFEST')   reasons = ['Best overall safety profile', ...reasons]
+  const reasons = []
 
-  // Append factual deduction reasons if route object provided
   if (route) {
+    // ── Priority 1: ML factual reasons (server 26-feature model) ──────────────
+    if (Array.isArray(route.mlReasons) && route.mlReasons.length > 0) {
+      reasons.push(...route.mlReasons)
+    }
+
+    // ── Priority 2: Community user reports ────────────────────────────────────
     if (route.onRouteReports && route.onRouteReports.length > 0) {
       route.onRouteReports.forEach(r => {
         const typeName = HAZARD_MAP[r.hazardType || r.type]?.label || r.title || r.type || 'Community Hazard'
-        const desc = r.description ? ` (${r.description})` : ''
-        reasons.unshift(`⚠️ -${r._penalty || 6} pts: User Report — ${typeName}${desc}`)
+        const desc = r.description ? ` — "${r.description}"` : ''
+        reasons.unshift(`⚠️ User Report: ${typeName}${desc} (-${r._penalty || 6} pts)`)
       })
     }
-    if ((route.crimePenalty || 0) > 0) reasons.push(`Crime zones on this route (-${route.crimePenalty} pts)`)
-    if ((route.floodPenalty || 0) > 0) reasons.push(`Flood / waterlogging risk (-${route.floodPenalty} pts)`)
-    if ((route.disasterPenalty || 0) > 0) reasons.push(`Natural hazard zones on route (-${route.disasterPenalty} pts)`)
-    if ((route.accidentPenalty || 0) > 0) reasons.push(`Road accident blackspots near route (-${route.accidentPenalty} pts)`)
+
+    // ── Priority 3: Heuristic zone penalties ──────────────────────────────────
+    if ((route.crimePenalty || 0) > 0)
+      reasons.push(`🚨 Crime zones on route corridor (-${route.crimePenalty} pts)`)
+    if ((route.accidentPenalty || 0) > 0)
+      reasons.push(`🚗 Road accident blackspots near route (-${route.accidentPenalty} pts)`)
+    if ((route.floodPenalty || 0) > 0)
+      reasons.push(`🌊 Flood / waterlogging risk (-${route.floodPenalty} pts)`)
+    if ((route.disasterPenalty || 0) > 0)
+      reasons.push(`⚠️ Natural hazard zones on route (-${route.disasterPenalty} pts)`)
+
+    // ── Priority 4: Environmental / AQI penalties ─────────────────────────────
     if ((route.envPenalty || 0) > 0) {
       if (route.envBreakdown?.isRespiratory) {
-        reasons.push(`Air quality (AQI) impact with Asthma profile (-${route.envPenalty} pts)`)
+        reasons.push(`💨 Air quality impact (Asthma profile) (-${route.envPenalty} pts)`)
       } else {
-        reasons.push(`Air quality (AQI) modifier (-${route.envPenalty} pts)`)
+        reasons.push(`💨 Air quality (AQI) modifier (-${route.envPenalty} pts)`)
       }
     }
   }
+
+  // ── Priority 5: Risk service reasons ──────────────────────────────────────
   if (riskReasons.length > 0) reasons.push(...riskReasons)
-  if (envReasons.length > 0) reasons.push(...envReasons)
+  if (envReasons.length > 0)  reasons.push(...envReasons)
+
+  // ── Priority 6: Fallback tier-based descriptive reasons ──────────────────
+  if (reasons.length === 0) {
+    if (score >= 88) {
+      reasons.push(
+        '✅ Low hazard proximity — safe corridor',
+        '🔦 Good road lighting and visibility',
+        '🏙️ High-activity zone with police coverage',
+        '🛣️ Wide roads with clear sightlines',
+      )
+    } else if (score >= 75) {
+      reasons.push(
+        'Moderate traffic — generally safe corridor',
+        'Reasonably lit — standard pedestrian activity',
+        'Some community reports in area',
+      )
+    } else if (score >= 60) {
+      reasons.push(
+        'Elevated hazard density — proceed with caution',
+        'Some isolated or poorly lit stretches',
+        'Variable road quality reported',
+      )
+    } else {
+      reasons.push(
+        '🚨 High hazard density — avoid if possible',
+        '🔦 Poorly lit isolated sections',
+        'Multiple community warnings active',
+        'Limited emergency access',
+      )
+    }
+  }
+
+  if (rankLabel === 'LEAST SAFE') reasons.unshift('⚡ Shortest travel time (lower safety)')
 
   return reasons
 }

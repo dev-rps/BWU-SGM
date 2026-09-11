@@ -491,11 +491,17 @@ export default function NavigationPage() {
 
   const handleMomoBriefing = () => {
     const safetyScore = selectedRoute?.safetyScore || 88
-    const hazardMsg = onRouteReports.length > 0
+    let hazardMsg = onRouteReports.length > 0
       ? `Notice: ${onRouteReports.length} road hazard reported on route.`
       : 'All road corridors ahead are safe and clear.'
 
-    const msg = `Momo here! In ${liveStepDistanceText}, ${currentStep.instruction}. ${fmtDist(distRemainingMeters)} remaining, ETA ${arrivalTime}. Safety score is ${safetyScore}. ${hazardMsg}`
+    if (selectedRoute?.bottleneck?.hazards?.accident?.name && selectedRoute.bottleneck.hazards.accident.name !== 'None') {
+      hazardMsg += ` Watch for accident blackspot near ${selectedRoute.bottleneck.hazards.accident.name}.`
+    } else if (selectedRoute?.mlReasons?.length > 0) {
+      hazardMsg += ` Note: ${selectedRoute.mlReasons[0]}.`
+    }
+
+    const msg = `Momo here! In ${liveStepDistanceText}, ${currentStep.instruction}. ${fmtDist(distRemainingMeters)} remaining, ETA ${arrivalTime}. Route safety score is ${safetyScore}. ${hazardMsg}`
     setMomoToast(`In ${liveStepDistanceText}, ${currentStep.instruction} • ${fmtDist(distRemainingMeters)} to destination`)
     setTimeout(() => setMomoToast(null), 5500)
     speakText(msg, true)
@@ -529,21 +535,30 @@ export default function NavigationPage() {
   }, [stepIdx, liveMetersToStep, currentStep, isVoiceEnabled, speakText])
 
   const hazardNearby = useMemo(() => {
-    return onRouteReports.some(r => {
+    const hasReport = onRouteReports.some(r => {
       const hLat = r._snapLat ?? r.lat
       const hLng = r._snapLng ?? r.lng
       if (!hLat || !hLng) return false
       return haversineMeters(currentLat, currentLng, hLat, hLng) < 300
     })
-  }, [onRouteReports, currentLat, currentLng])
+    if (hasReport) return { active: true, message: 'Caution: Safety Hazard reported ahead within 300 meters.' }
+
+    if (selectedRoute?.bottleneck?.lat && selectedRoute?.bottleneck?.lng) {
+      const distToBottleneck = haversineMeters(currentLat, currentLng, selectedRoute.bottleneck.lat, selectedRoute.bottleneck.lng)
+      if (distToBottleneck < 300) {
+        return { active: true, message: 'Caution: Approaching high-risk bottleneck corridor identified by ML model.' }
+      }
+    }
+    return { active: false, message: '' }
+  }, [onRouteReports, selectedRoute, currentLat, currentLng])
 
   useEffect(() => {
-    if (hazardNearby && !lastSpokenHazardRef.current) {
+    if (hazardNearby.active && !lastSpokenHazardRef.current) {
       lastSpokenHazardRef.current = true
       if (isVoiceEnabled) {
-        speakText('Caution: Safety Hazard reported ahead within 300 meters.')
+        speakText(hazardNearby.message)
       }
-    } else if (!hazardNearby) {
+    } else if (!hazardNearby.active) {
       lastSpokenHazardRef.current = false
     }
   }, [hazardNearby, isVoiceEnabled, speakText])

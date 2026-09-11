@@ -45,3 +45,5 @@ __pycache__/
 venv/
 ENV/
 env/
+*_backup_*.pkl
+ml_model/*_backup_*.pkl
