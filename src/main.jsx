@@ -25,9 +25,16 @@ class ErrorBoundary extends React.Component {
             <span className="material-symbols-outlined text-rose-400 text-3xl">error</span>
           </div>
           <h1 className="text-xl font-black mb-2">Something went wrong</h1>
-          <p className="text-xs text-slate-400 max-w-sm mb-6">
+          <p className="text-xs text-slate-400 max-w-sm mb-4">
             Safety Guardian encountered an issue loading this view.
           </p>
+          {this.state.error && (
+            <div className="max-w-md w-full mb-6 p-3 rounded-xl bg-rose-950/40 border border-rose-800/50 text-left">
+              <p className="text-[11px] font-mono text-rose-300 break-words">
+                {this.state.error.message || String(this.state.error)}
+              </p>
+            </div>
+          )}
           <button
             onClick={() => {
               window.location.href = '/'

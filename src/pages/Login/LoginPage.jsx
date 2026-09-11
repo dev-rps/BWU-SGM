@@ -110,7 +110,7 @@ const BG_IMG = 'https://lh3.googleusercontent.com/aida-public/AB6AXuCK_h2_P4G1G7
 /* ─── Main Component ──────────────────────────────────────────────────────── */
 export default function LoginPage() {
   const navigate      = useNavigate()
-  const { setIsLoggedIn } = useAppStore()
+  const { setIsLoggedIn, setIsDemoMode, setUser } = useAppStore()
 
   const [email,        setEmail]        = useState('')
   const [password,     setPassword]     = useState('')
@@ -172,6 +172,20 @@ export default function LoginPage() {
     } catch (err) {
       showToast(err.message || 'Failed to send reset email.')
     }
+  }
+
+  /* ── Demo / Guest Login ─────────────────────────────────────────────────── */
+  const handleGuestLogin = () => {
+    setIsDemoMode(true)
+    setIsLoggedIn(true)
+    setUser({
+      name: 'Guest Guardian',
+      email: 'guest@safetyguardian.app',
+      avatar: null,
+      phone: '',
+      memberSince: new Date().getFullYear().toString(),
+    })
+    navigate('/')
   }
 
   /* ── Render ───────────────────────────────────────────────────────────── */
@@ -260,7 +274,7 @@ export default function LoginPage() {
               <input
                 className="pill-input"
                 id="password"
-                type={showPwd ? 'text' : 'password'}
+                type={showPassword ? 'text' : 'password'}
                 placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -271,7 +285,7 @@ export default function LoginPage() {
               {/* Eye toggle */}
               <button
                 type="button"
-                onClick={() => setShowPwd(v => !v)}
+                onClick={() => setShowPassword(v => !v)}
                 style={{
                   position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
                   background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280',
@@ -279,7 +293,7 @@ export default function LoginPage() {
                 }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
-                  {showPwd ? 'visibility_off' : 'visibility'}
+                  {showPassword ? 'visibility_off' : 'visibility'}
                 </span>
               </button>
             </div>
