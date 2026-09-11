@@ -16,6 +16,7 @@ import L from 'leaflet'
 import { useAppStore } from '../../context/store'
 import { searchPlaces } from '../../services/nominatim'
 import { getReverseGeocode } from '../../services/reportService'
+import { mapProvider } from '../../services/mapProvider'
 
 // Fix Leaflet icon paths (already done in app but safe to repeat per component)
 delete L.Icon.Default.prototype._getIconUrl
@@ -54,6 +55,18 @@ function MapFlyTo({ target }) {
   return null
 }
 
+// ─── Inner: Invalidate size after modal opens ─────────────────────────────────
+function MapResizeHandler() {
+  const map = useMap()
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      map.invalidateSize()
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [map])
+  return null
+}
+
 // ─── Tabs config ─────────────────────────────────────────────────────────────
 const TABS = [
   { id: 'gps',    icon: 'my_location',  label: 'GPS' },
@@ -70,6 +83,13 @@ export default function LocationPicker({ onLocationSelect }) {
   const [flyTarget,    setFlyTarget]    = useState(null)
   const [locationInfo, setLocationInfo] = useState(null)
   const [loadingGeo,   setLoadingGeo]   = useState(false)
+  const [tileUrl,      setTileUrl]      = useState(mapProvider.getStatus().tileUrl)
+
+  useEffect(() => {
+    return mapProvider.subscribe(status => {
+      setTileUrl(status.tileUrl)
+    })
+  }, [])
 
   // Search tab state
   const [searchQuery,   setSearchQuery]   = useState('')
@@ -236,7 +256,16 @@ export default function LocationPicker({ onLocationSelect }) {
           zoomControl={false}
           attributionControl={false}
         >
-          <TileLayer url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" />
+          <TileLayer
+            url={tileUrl}
+            subdomains="0123"
+            maxZoom={20}
+            attribution="&copy; Google Maps"
+            eventHandlers={{
+              tileerror: () => mapProvider.recordTileError('google'),
+            }}
+          />
+          <MapResizeHandler />
           <MapFlyTo target={flyTarget} />
           <MapClickHandler enabled={tab === 'pin'} onMapClick={handleMapClick} />
           {markerPos && (

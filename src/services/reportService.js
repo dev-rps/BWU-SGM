@@ -90,10 +90,32 @@ export async function uploadReportImage(file, uid) {
   })
 }
 
+import { getTomTomKey } from './apiKeys'
+
 /**
- * Reverse Geocode via OpenStreetMap Nominatim
+ * Reverse Geocode via TomTom (with OpenStreetMap Nominatim fallback)
  */
 export async function getReverseGeocode(lat, lng) {
+  // 1. Try TomTom Reverse Geocode (high accuracy & fast)
+  try {
+    const key = getTomTomKey()
+    if (key) {
+      const res = await fetch(`https://api.tomtom.com/search/2/reverseGeocode/${lat},${lng}.json?key=${key}`)
+      if (res.ok) {
+        const data = await res.json()
+        const match = data.addresses?.[0]?.address
+        if (match) {
+          const name = match.streetName || match.freeformAddress?.split(',')?.[0] || 'Selected Spot'
+          const address = match.freeformAddress || `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+          return { name, address }
+        }
+      }
+    }
+  } catch (_) {
+    // Fall back to Nominatim
+  }
+
+  // 2. Fallback to OpenStreetMap Nominatim
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`,

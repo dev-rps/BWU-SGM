@@ -29,7 +29,7 @@ import { supabase } from '../../supabase/supabase'
 import {
   calculateRouteSafetyScores, getScoreLabel, deduplicateRoutes,
   getScoreReasons, getScoreComparativeBreakdown, getRouteAnchorPoint, applyEnvironmentalPenalties,
-  mergeMLPredictionsIntoRoutes, getRouteComparisonSummary,
+  mergeMLPredictionsIntoRoutes, getRouteComparisonSummary, safeNum,
 } from '../../services/safetyScore'
 
 import { evaluateMultipleRoutes } from '../../services/mlService'
@@ -95,7 +95,8 @@ function createRouteMapBadge(route, isSelected, mode, index = 0) {
   const rankColor = getRouteColor(route, index)
   const isRec = route.isRecommended || index === 0
   const durationText = fmtDuration(route.durationMin)
-  const distText = `${route.distanceKm} km`
+  const distKmVal = safeNum(route.distanceKm, 0)
+  const distText = distKmVal > 0 ? `${distKmVal.toFixed(1)} km` : ''
   const viaText = route.viaRoads ? `<div style="font-size:7.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:115px;font-weight:700;">${route.viaRoads}</div>` : ''
 
   const recHtml = isRec ? '<div style="font-size:7.5px;font-weight:900;color:#10B981;letter-spacing:0.4px;text-transform:uppercase;">★ Top Recommended</div>' : ''
@@ -164,26 +165,37 @@ const TRANSPORT_MODES = [
 ]
 
 function timeAgo(ts) {
-  if (!ts) return ''
-  const d    = ts?.toDate ? ts.toDate() : new Date(ts)
-  const mins = Math.floor((Date.now() - d.getTime()) / 60000)
-  if (mins < 1)  return 'Just now'
-  if (mins < 60) return `${mins}m ago`
-  return `${Math.floor(mins / 60)}h ago`
+  if (!ts) return 'Recent'
+  try {
+    const d    = ts?.toDate ? ts.toDate() : new Date(ts)
+    const t    = d.getTime()
+    if (!t || isNaN(t)) return 'Recent'
+    const mins = Math.floor((Date.now() - t) / 60000)
+    if (isNaN(mins) || mins < 1)  return 'Just now'
+    if (mins < 60) return `${mins}m ago`
+    const hrs  = Math.floor(mins / 60)
+    if (isNaN(hrs)) return 'Recent'
+    return `${hrs}h ago`
+  } catch {
+    return 'Recent'
+  }
 }
 
 function fmtDuration(totalMin) {
-  if (!totalMin && totalMin !== 0) return '—'
-  const m = Math.round(totalMin)
-  if (m < 60) return `${m} min`
-  const h   = Math.floor(m / 60)
-  const rem = m % 60
+  const m = safeNum(totalMin, 0)
+  if (m <= 0) return '—'
+  const rounded = Math.round(m)
+  if (rounded < 60) return `${rounded} min`
+  const h   = Math.floor(rounded / 60)
+  const rem = rounded % 60
   return rem === 0 ? `${h}h` : `${h}h ${rem}min`
 }
 
 function getArrivalTimeStr(durationMin) {
-  if (!durationMin) return ''
-  const d = new Date(Date.now() + durationMin * 60 * 1000)
+  const m = safeNum(durationMin, 0)
+  if (m <= 0) return ''
+  const d = new Date(Date.now() + m * 60 * 1000)
+  if (isNaN(d.getTime())) return ''
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
@@ -438,7 +450,14 @@ export default function RouteSelectionPage() {
       // Ensure candidate routes stay distinctly differentiated (no flat ties)
       current = current.map((rt, i) => {
         if (i > 0 && rt.safetyScore >= current[i - 1].safetyScore) {
-          return { ...rt, safetyScore: Math.max(10, current[i - 1].safetyScore - 4) }
+          const targetScore = Math.max(10, current[i - 1].safetyScore - 3)
+          const gap = (rt.safetyScore || 0) - targetScore
+          return {
+            ...rt,
+            safetyScore: targetScore,
+            roadInfraPenalty: (rt.roadInfraPenalty || 0) + Math.max(gap, 3),
+            roadInfraNote: rt.roadInfraNote || 'Corridor density & road infrastructure caution',
+          }
         }
         return rt
       })
@@ -1005,7 +1024,9 @@ export default function RouteSelectionPage() {
                   <span className="text-xs font-black text-slate-900 truncate">
                     {selectedRoute.rankLabel} · {fmtDuration(selectedRoute.durationMin)}
                   </span>
-                  <span className="text-[9px] font-bold text-slate-500">({selectedRoute.distanceKm} km)</span>
+                  <span className="text-[9px] font-bold text-slate-500">
+                    {safeNum(selectedRoute.distanceKm, 0) > 0 ? `(${safeNum(selectedRoute.distanceKm, 0).toFixed(1)} km)` : ''}
+                  </span>
                 </div>
                 <p className="text-[10px] text-slate-500 font-semibold truncate mt-0.5">
                   {selectedRoute.viaRoads} · <strong className="text-emerald-700 font-black">🛡️ {selectedRoute.safetyScore || 75}/100</strong>
@@ -1193,7 +1214,7 @@ export default function RouteSelectionPage() {
                           {/* Row 2: Duration, Distance & Numerical Trade-off */}
                           <div className="flex items-baseline gap-2 mt-1.5">
                             <span className="text-base font-black text-slate-900 leading-none">{fmtDuration(route.durationMin)}</span>
-                            <span className="text-xs font-bold text-slate-500">{route.distanceKm} km</span>
+                            <span className="text-xs font-bold text-slate-500">{safeNum(route.distanceKm, 0) > 0 ? `${safeNum(route.distanceKm, 0).toFixed(1)} km` : '—'}</span>
                             <span className="text-[10px] text-slate-500 font-semibold">· {route.tradeOffText}</span>
                           </div>
                         </div>
@@ -1331,18 +1352,18 @@ export default function RouteSelectionPage() {
                                 <div className="bg-amber-50 p-2 rounded-lg border border-amber-200">
                                   <div className="flex justify-between items-center text-amber-800 font-bold text-[9.5px]">
                                     <span>Bottleneck Segment Score</span>
-                                    <span className="font-black">{route.bottleneck.safety_score}/100</span>
+                                    <span className="font-black">{safeNum(route.bottleneck.safety_score, 70)}/100</span>
                                   </div>
                                   {route.bottleneck.hazards && (
                                     <div className="mt-1 text-[8.5px] text-amber-700 space-y-0.5">
-                                      {route.bottleneck.hazards.accident?.name !== 'None' && (
-                                        <div>🚗 Nearby: {route.bottleneck.hazards.accident.name} ({Math.round(route.bottleneck.hazards.accident.distance_m)}m)</div>
+                                      {route.bottleneck.hazards.accident?.name && route.bottleneck.hazards.accident.name !== 'None' && (
+                                        <div>🚗 Nearby: {route.bottleneck.hazards.accident.name} {isFinite(route.bottleneck.hazards.accident.distance_m) ? `(${Math.round(route.bottleneck.hazards.accident.distance_m)}m)` : ''}</div>
                                       )}
-                                      {route.bottleneck.hazards.crime?.name !== 'None' && (
-                                        <div>🚨 Nearby: {route.bottleneck.hazards.crime.name} ({Math.round(route.bottleneck.hazards.crime.distance_m)}m)</div>
+                                      {route.bottleneck.hazards.crime?.name && route.bottleneck.hazards.crime.name !== 'None' && (
+                                        <div>🚨 Nearby: {route.bottleneck.hazards.crime.name} {isFinite(route.bottleneck.hazards.crime.distance_m) ? `(${Math.round(route.bottleneck.hazards.crime.distance_m)}m)` : ''}</div>
                                       )}
-                                      {route.bottleneck.hazards.flood?.name !== 'None' && (
-                                        <div>🌊 Waterlogging: {route.bottleneck.hazards.flood.name} ({Math.round(route.bottleneck.hazards.flood.distance_m)}m)</div>
+                                      {route.bottleneck.hazards.flood?.name && route.bottleneck.hazards.flood.name !== 'None' && (
+                                        <div>🌊 Waterlogging: {route.bottleneck.hazards.flood.name} {isFinite(route.bottleneck.hazards.flood.distance_m) ? `(${Math.round(route.bottleneck.hazards.flood.distance_m)}m)` : ''}</div>
                                       )}
                                     </div>
                                   )}
@@ -1362,7 +1383,7 @@ export default function RouteSelectionPage() {
                                     { key: 'Medium', label: 'Medium Risk', color: '#F59E0B' },
                                     { key: 'High',   label: 'High Risk',   color: '#EF4444' },
                                   ].map(({ key, label, color }) => {
-                                    const prob = route.probabilities[key] || 0
+                                    const prob = safeNum(route.probabilities?.[key], 0)
                                     const pct  = Math.round(prob * 100)
                                     return (
                                       <div key={key} className="flex items-center gap-1.5">
@@ -1387,124 +1408,156 @@ export default function RouteSelectionPage() {
                             )}
 
                             {/* Point Deductions & Risk Factors */}
-                            {(route.crimePenalty > 0 || route.floodPenalty > 0 || route.disasterPenalty > 0 || route.accidentPenalty > 0 || route.trafficPenalty > 0 || route.envPenalty > 0 || hazardCnt > 0) && (
-                              <div className="pt-2 border-t border-slate-100 space-y-1">
-                                <p className="font-black text-slate-800 uppercase tracking-wider text-[8.5px]">⚠️ Points Deducted</p>
+                            {(() => {
+                              const totalDeductions =
+                                safeNum(route.crimePenalty, 0) +
+                                safeNum(route.floodPenalty, 0) +
+                                safeNum(route.disasterPenalty, 0) +
+                                safeNum(route.accidentPenalty, 0) +
+                                safeNum(route.trafficPenalty, 0) +
+                                safeNum(route.envPenalty, 0) +
+                                safeNum(route.roadInfraPenalty, 0) +
+                                safeNum(route.reportPenalty, 0)
 
-                                {/* Environmental / AQI / Asthma Deductions */}
-                                {route.envPenalty > 0 && (
-                                  <div className="bg-rose-50/70 p-1.5 rounded-lg border border-rose-100">
-                                    <div className="flex justify-between items-center text-rose-700 font-bold text-[9px]">
-                                      <span>🫁 Air Quality / Asthma</span>
-                                      <span className="font-black">-{route.envPenalty} pts</span>
-                                    </div>
-                                    <div className="mt-0.5 text-[8px] text-rose-600">
-                                      {route.envBreakdown?.isRespiratory
-                                        ? `Asthma Profile: sensitive to AQI ${route.envData?.aqi || 'levels'}`
-                                        : `Elevated AQI ${route.envData?.aqi || ''}`}
-                                    </div>
-                                  </div>
-                                )}
+                              if (totalDeductions <= 0 && hazardCnt <= 0) return null
 
-                                {/* Crime Deductions */}
-                                {route.onRouteCrimes?.length > 0 && (
-                                  <div className="bg-red-50/70 p-1.5 rounded-lg border border-red-100">
-                                    <div className="flex justify-between items-center text-red-700 font-bold text-[9px]">
-                                      <span>🚨 Crime Hotspots</span>
-                                      <span className="font-black">-{route.crimePenalty} pts</span>
-                                    </div>
-                                    <div className="mt-0.5 space-y-0.5 text-[8px] text-red-600">
-                                      {route.onRouteCrimes.slice(0, 2).map(c => (
-                                        <div key={c.id} className="flex justify-between">
-                                          <span>• {c.area}</span>
-                                          <span>-{c._penalty}pts</span>
-                                        </div>
-                                      ))}
-                                    </div>
+                              return (
+                                <div className="pt-2 border-t border-slate-100 space-y-1">
+                                  <div className="flex justify-between items-center">
+                                    <p className="font-black text-slate-800 uppercase tracking-wider text-[8.5px]">⚠️ Points Deducted</p>
+                                    <span className="text-[8px] font-black text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                      Total: -{totalDeductions} pts (100 - {totalDeductions} = {route.safetyScore})
+                                    </span>
                                   </div>
-                                )}
 
-                                {/* Flood Risk Deductions */}
-                                {route.onRouteFlood?.length > 0 && (
-                                  <div className="bg-blue-50/70 p-1.5 rounded-lg border border-blue-100">
-                                    <div className="flex justify-between items-center text-blue-700 font-bold text-[9px]">
-                                      <span>🌊 Waterlogging Risk</span>
-                                      <span className="font-black">-{route.floodPenalty} pts</span>
+                                  {/* Environmental / AQI / Asthma Deductions */}
+                                  {route.envPenalty > 0 && (
+                                    <div className="bg-rose-50/70 p-1.5 rounded-lg border border-rose-100">
+                                      <div className="flex justify-between items-center text-rose-700 font-bold text-[9px]">
+                                        <span>🫁 Air Quality / Asthma</span>
+                                        <span className="font-black">-{safeNum(route.envPenalty, 0)} pts</span>
+                                      </div>
+                                      <div className="mt-0.5 text-[8px] text-rose-600">
+                                        {route.envBreakdown?.isRespiratory
+                                          ? `Asthma Profile: sensitive to AQI ${route.envData?.aqi || 'levels'}`
+                                          : `Elevated AQI ${route.envData?.aqi || ''}`}
+                                      </div>
                                     </div>
-                                    <div className="mt-0.5 space-y-0.5 text-[8px] text-blue-600">
-                                      {route.onRouteFlood.slice(0, 2).map(z => (
-                                        <div key={z.id} className="flex justify-between">
-                                          <span>• {z.area}</span>
-                                          <span>-{z._penalty}pts</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
+                                  )}
 
-                                {/* Disaster Risk Deductions */}
-                                {route.onRouteDisasters?.length > 0 && (
-                                  <div className="bg-orange-50/70 p-1.5 rounded-lg border border-orange-100">
-                                    <div className="flex justify-between items-center text-orange-700 font-bold text-[9px]">
-                                      <span>⚡ Natural Hazards</span>
-                                      <span className="font-black">-{route.disasterPenalty} pts</span>
+                                  {/* Road Corridor & Infrastructure */}
+                                  {route.roadInfraPenalty > 0 && (
+                                    <div className="bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                                      <div className="flex justify-between items-center text-slate-700 font-bold text-[9px]">
+                                        <span>🛣️ Road Corridor & Infrastructure</span>
+                                        <span className="font-black">-{safeNum(route.roadInfraPenalty, 0)} pts</span>
+                                      </div>
+                                      <div className="mt-0.5 text-[8px] text-slate-500">
+                                        {route.roadInfraNote || 'Secondary arterial / intersection density'}
+                                      </div>
                                     </div>
-                                    <div className="mt-0.5 space-y-0.5 text-[8px] text-orange-600">
-                                      {route.onRouteDisasters.slice(0, 2).map(dz => (
-                                        <div key={dz.id} className="flex justify-between">
-                                          <span>• {dz.area}</span>
-                                          <span>-{dz._penalty}pts</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
+                                  )}
 
-                                {/* Accident Blackspots */}
-                                {route.onRouteAccidents?.length > 0 && (
-                                  <div className="bg-rose-50/70 p-1.5 rounded-lg border border-rose-100">
-                                    <div className="flex justify-between items-center text-rose-700 font-bold text-[9px]">
-                                      <span>🚗 Accident Blackspots</span>
-                                      <span className="font-black">-{route.accidentPenalty} pts</span>
+                                  {/* Crime Deductions */}
+                                  {route.onRouteCrimes?.length > 0 && (
+                                    <div className="bg-red-50/70 p-1.5 rounded-lg border border-red-100">
+                                      <div className="flex justify-between items-center text-red-700 font-bold text-[9px]">
+                                        <span>🚨 Crime Hotspots</span>
+                                        <span className="font-black">-{safeNum(route.crimePenalty, 0)} pts</span>
+                                      </div>
+                                      <div className="mt-0.5 space-y-0.5 text-[8px] text-red-600">
+                                        {route.onRouteCrimes.slice(0, 2).map(c => (
+                                          <div key={c.id} className="flex justify-between">
+                                            <span>• {c.area}</span>
+                                            <span>-{safeNum(c._penalty, 1)}pts</span>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
-                                    <div className="mt-0.5 space-y-0.5 text-[8px] text-rose-600">
-                                      {route.onRouteAccidents.slice(0, 2).map(acc => (
-                                        <div key={acc.id} className="flex justify-between">
-                                          <span>• {acc.area}</span>
-                                          <span>-{acc._penalty}pts</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
+                                  )}
 
-                                {/* Traffic Delay Deductions */}
-                                {route.trafficPenalty > 0 && (
-                                  <div className="bg-amber-50/70 p-1.5 rounded-lg border border-amber-100 flex justify-between items-center text-amber-800 text-[9.5px] font-bold">
-                                    <span>🚦 Congestion Delay ({route.trafficInfo?.label || 'Traffic slowdown'})</span>
-                                    <span className="font-black text-amber-700">-{route.trafficPenalty} pts</span>
-                                  </div>
-                                )}
+                                  {/* Flood Risk Deductions */}
+                                  {route.onRouteFlood?.length > 0 && (
+                                    <div className="bg-blue-50/70 p-1.5 rounded-lg border border-blue-100">
+                                      <div className="flex justify-between items-center text-blue-700 font-bold text-[9px]">
+                                        <span>🌊 Waterlogging Risk</span>
+                                        <span className="font-black">-{safeNum(route.floodPenalty, 0)} pts</span>
+                                      </div>
+                                      <div className="mt-0.5 space-y-0.5 text-[8px] text-blue-600">
+                                        {route.onRouteFlood.slice(0, 2).map(z => (
+                                          <div key={z.id} className="flex justify-between">
+                                            <span>• {z.area}</span>
+                                            <span>-{safeNum(z._penalty, 1)}pts</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
 
-                                {/* Community Hazard Reports */}
-                                {hazardCnt > 0 && (
-                                  <div className="bg-orange-50/70 p-1.5 rounded-lg border border-orange-100">
-                                    <div className="flex justify-between items-center text-orange-700 font-bold text-[9.5px]">
-                                      <span>⚠️ Live Community Reports</span>
-                                      <span className="font-black">-{route.onRouteReports.reduce((s, r) => s + (r._penalty || 0), 0)} pts</span>
+                                  {/* Disaster Risk Deductions */}
+                                  {route.onRouteDisasters?.length > 0 && (
+                                    <div className="bg-orange-50/70 p-1.5 rounded-lg border border-orange-100">
+                                      <div className="flex justify-between items-center text-orange-700 font-bold text-[9px]">
+                                        <span>⚡ Natural Hazards</span>
+                                        <span className="font-black">-{safeNum(route.disasterPenalty, 0)} pts</span>
+                                      </div>
+                                      <div className="mt-0.5 space-y-0.5 text-[8px] text-orange-600">
+                                        {route.onRouteDisasters.slice(0, 2).map(dz => (
+                                          <div key={dz.id} className="flex justify-between">
+                                            <span>• {dz.area}</span>
+                                            <span>-{safeNum(dz._penalty, 1)}pts</span>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
-                                    <div className="mt-1 space-y-0.5 text-[8.5px] text-orange-600">
-                                      {route.onRouteReports.slice(0, 2).map(r => (
-                                        <div key={r.id} className="flex justify-between">
-                                          <span>• {r.type || r.hazardType || 'Hazard'} ({timeAgo(r.createdAt || r.timestamp)})</span>
-                                          <span>-{r._penalty}pts</span>
-                                        </div>
-                                      ))}
+                                  )}
+
+                                  {/* Accident Blackspots */}
+                                  {route.onRouteAccidents?.length > 0 && (
+                                    <div className="bg-rose-50/70 p-1.5 rounded-lg border border-rose-100">
+                                      <div className="flex justify-between items-center text-rose-700 font-bold text-[9px]">
+                                        <span>🚗 Accident Blackspots</span>
+                                        <span className="font-black">-{safeNum(route.accidentPenalty, 0)} pts</span>
+                                      </div>
+                                      <div className="mt-0.5 space-y-0.5 text-[8px] text-rose-600">
+                                        {route.onRouteAccidents.slice(0, 2).map(acc => (
+                                          <div key={acc.id} className="flex justify-between">
+                                            <span>• {acc.area}</span>
+                                            <span>-{safeNum(acc._penalty, 1)}pts</span>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                                  )}
+
+                                  {/* Traffic Delay Deductions */}
+                                  {route.trafficPenalty > 0 && (
+                                    <div className="bg-amber-50/70 p-1.5 rounded-lg border border-amber-100 flex justify-between items-center text-amber-800 text-[9.5px] font-bold">
+                                      <span>🚦 Congestion Delay ({route.trafficInfo?.label || 'Traffic slowdown'})</span>
+                                      <span className="font-black text-amber-700">-{safeNum(route.trafficPenalty, 0)} pts</span>
+                                    </div>
+                                  )}
+
+                                  {/* Community Hazard Reports */}
+                                  {hazardCnt > 0 && (
+                                    <div className="bg-orange-50/70 p-1.5 rounded-lg border border-orange-100">
+                                      <div className="flex justify-between items-center text-orange-700 font-bold text-[9.5px]">
+                                        <span>⚠️ Live Community Reports</span>
+                                        <span className="font-black">-{safeNum(route.reportPenalty, 0) || route.onRouteReports.reduce((s, r) => s + (safeNum(r._penalty, 0)), 0)} pts</span>
+                                      </div>
+                                      <div className="mt-1 space-y-0.5 text-[8.5px] text-orange-600">
+                                        {route.onRouteReports.slice(0, 2).map(r => (
+                                          <div key={r.id} className="flex justify-between">
+                                            <span>• {r.type || r.hazardType || 'Hazard'} ({timeAgo(r.createdAt || r.timestamp)})</span>
+                                            <span>-{safeNum(r._penalty, 1)}pts</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </div>
                         )}
                       </div>

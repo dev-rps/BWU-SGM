@@ -158,8 +158,9 @@ export default function LoginPage() {
       await googleLogin()
     } catch (err) {
       console.error('[Google sign-in error]:', err)
+      showToast(err.message || 'Google sign-in failed. Please try again.')
+      setProcessing(false)
     }
-    setProcessing(false)
   }
 
   /* ── Forgot Password via Supabase ──────────────────────────────────────── */

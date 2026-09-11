@@ -65,7 +65,9 @@ export async function searchPlaces(query) {
 
 export async function reverseGeocode(lat, lng) {
   try {
-    const params = new URLSearchParams({ key: TOMTOM_KEY })
+    const key = getTomTomKey()
+    if (!key) throw new Error('No TomTom Key')
+    const params = new URLSearchParams({ key })
     const res = await fetch(`${TOMTOM_BASE}/reverseGeocode/${lat},${lng}.json?${params}`)
     if (!res.ok) throw new Error('TomTom reverse error')
     const data = await res.json()

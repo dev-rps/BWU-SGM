@@ -10,7 +10,7 @@
  *  5. All backend logic (Supabase, voteOnReport, submitReport) unchanged.
  */
 
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   MapContainer, TileLayer, Marker, Popup, useMapEvents,
 } from 'react-leaflet'
@@ -19,6 +19,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabase/supabase'
 
 import { useAppStore }      from '../../context/store'
+import { mapProvider, GOOGLE_TILE_LEAFLET_URL } from '../../services/mapProvider'
 
 import {
   HAZARD_TYPES, SEVERITY_COLORS, REPORT_FILTERS,
@@ -296,6 +297,13 @@ export default function ReportsPage() {
   const [selectedId,   setSelectedId]   = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
   const [sidebarOpen,  setSidebarOpen]  = useState(true)
+  const [tileUrl,      setTileUrl]      = useState(mapProvider.getStatus().tileUrl)
+
+  useEffect(() => {
+    return mapProvider.subscribe(status => {
+      setTileUrl(status.tileUrl)
+    })
+  }, [])
 
   // Mobile bottom sheet
   const [sheetState,   setSheetState]   = useState('half') // 'peek'|'half'|'full'
@@ -523,7 +531,15 @@ export default function ReportsPage() {
         {/* Map */}
         <div className="flex-1 relative">
           <MapContainer center={mapCenter} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false} attributionControl={false}>
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="© OpenStreetMap" />
+            <TileLayer
+              url={tileUrl}
+              subdomains="0123"
+              maxZoom={20}
+              attribution="&copy; Google Maps"
+              eventHandlers={{
+                tileerror: () => mapProvider.recordTileError('google'),
+              }}
+            />
             <BoundsTracker onChange={setMapBounds} />
             <MapMarkers validReports={validReports} mapCenter={mapCenter} selectedId={selectedId} onSelectId={setSelectedId} />
           </MapContainer>
@@ -551,7 +567,15 @@ export default function ReportsPage() {
         {/* Map fills remaining height above sheet */}
         <div className="flex-1 relative">
           <MapContainer center={mapCenter} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false} attributionControl={false}>
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <TileLayer
+              url={tileUrl}
+              subdomains="0123"
+              maxZoom={20}
+              attribution="&copy; Google Maps"
+              eventHandlers={{
+                tileerror: () => mapProvider.recordTileError('google'),
+              }}
+            />
             <BoundsTracker onChange={setMapBounds} />
             <MapMarkers validReports={validReports} mapCenter={mapCenter} selectedId={selectedId} onSelectId={setSelectedId} />
           </MapContainer>

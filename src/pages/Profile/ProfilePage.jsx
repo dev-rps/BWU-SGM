@@ -276,7 +276,11 @@ export default function ProfilePage() {
   const handleSaveName = async (newName) => {
     const { data: { user: authUser } } = await supabase.auth.getUser()
     const uid = authUser?.id || user?.uid || user?.id
-    if (!uid) return
+    if (!uid || uid === 'demo-user') {
+      setUser(prev => ({ ...prev, name: newName }))
+      setEditField(null)
+      return
+    }
     try {
       await supabase
         .from('profiles')
@@ -290,14 +294,19 @@ export default function ProfilePage() {
 
   // ── Save phone ────────────────────────────────────────────────────────────
   const handleSavePhone = async (newPhone) => {
-    const uid = auth.currentUser?.uid
-    if (!uid) return
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const uid = authUser?.id || user?.uid || user?.id
+    if (!uid || uid === 'demo-user') {
+      setUser(prev => ({ ...prev, phone: newPhone }))
+      setEditField(null)
+      return
+    }
     try {
-      const ref  = doc(db, 'users', uid)
-      const snap = await getDoc(ref)
-      snap.exists()
-        ? await updateDoc(ref, { phone: newPhone })
-        : await setDoc(ref, { phone: newPhone }, { merge: true })
+      await supabase
+        .from('profiles')
+        .update({ phone: newPhone, updated_at: new Date().toISOString() })
+        .eq('id', uid)
+
       setUser(prev => ({ ...prev, phone: newPhone }))
     } catch { alert('Failed to save phone.') }
     setEditField(null)
@@ -305,11 +314,13 @@ export default function ProfilePage() {
 
   // ── Persist contacts ──────────────────────────────────────────────────────
   const persist = async (updated) => {
-    const uid = auth.currentUser?.uid
-    if (!uid) return
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const uid = authUser?.id || user?.uid || user?.id || 'demo-user'
     setSaving(true)
     try {
-      await saveContacts(uid, updated)
+      if (uid && uid !== 'demo-user') {
+        await saveContacts(uid, updated)
+      }
       setEmergencyContacts(updated)
     } catch { alert('Failed to save. Try again.') }
     finally { setSaving(false) }
@@ -376,8 +387,8 @@ export default function ProfilePage() {
   }
 
   // ── Stats derived ─────────────────────────────────────────────────────────
-  const uid              = auth.currentUser?.uid
-  const myReports        = reports.filter(r => r.uid === uid)
+  const currentUid       = user?.uid || user?.id || 'demo-user'
+  const myReports        = reports.filter(r => (r.uid && r.uid === currentUid) || (r.user_id && r.user_id === currentUid))
   const reportsSubmitted = myReports.length
   const reportsVerified  = myReports.filter(r => (r.upvotes?.length || 0) > 0).length
   const communityImpact  = myReports.reduce((sum, r) => sum + ((r.upvotes?.length || 0) - (r.downvotes?.length || 0)), 0)
@@ -422,7 +433,7 @@ export default function ProfilePage() {
       {showMedicalSurvey && (
         <MedicalProfileSurvey
           isOpen={showMedicalSurvey}
-          uid={auth.currentUser?.uid || ''}
+          uid={user?.uid || user?.id || 'demo-user'}
           userName={user?.name || 'Citizen'}
           onClose={() => setShowMedicalSurvey(false)}
         />
