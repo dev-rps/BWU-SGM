@@ -28,7 +28,7 @@ import {
 import { supabase } from '../../supabase/supabase'
 import {
   calculateRouteSafetyScores, getScoreLabel, deduplicateRoutes,
-  getScoreReasons, getRouteAnchorPoint, applyEnvironmentalPenalties,
+  getScoreReasons, getScoreComparativeBreakdown, getRouteAnchorPoint, applyEnvironmentalPenalties,
   mergeMLPredictionsIntoRoutes, getRouteComparisonSummary,
 } from '../../services/safetyScore'
 
@@ -114,12 +114,13 @@ function createRouteMapBadge(route, isSelected, mode, index = 0) {
   })
 }
 
-// ─── Map Camera Controller with Closer Zoom Framing ──────────────────────────
+// ─── Map Camera Controller: Preserves User Zoom Level on Route Selection ──────
 function MapController({ selectedGeometry, startLoc, destLoc, fitTrigger, recenterTrigger, sheetState }) {
   const map = useMap()
 
+  // Only fit bounds on initial route fetch or when user clicks the "fit route" button (fitTrigger > 0)
   useEffect(() => {
-    if (!map) return
+    if (!map || !fitTrigger) return
     let points = selectedGeometry && selectedGeometry.length > 1
       ? selectedGeometry
       : (destLoc && isFinite(destLoc.lat) && isFinite(destLoc.lng) && startLoc && isFinite(startLoc.lat) && isFinite(startLoc.lng)
@@ -142,7 +143,7 @@ function MapController({ selectedGeometry, startLoc, destLoc, fitTrigger, recent
         }
       }
     }
-  }, [selectedGeometry, destLoc, startLoc?.lat, startLoc?.lng, fitTrigger, sheetState, map])
+  }, [fitTrigger, map])
 
   useEffect(() => {
     if (!map || !recenterTrigger || !startLoc || !isFinite(startLoc.lat) || !isFinite(startLoc.lng)) return
@@ -481,7 +482,7 @@ export default function RouteSelectionPage() {
   const handleSelectRoute = (idx) => {
     setSelectedRouteIdx(idx)
     useAppStore.getState().setSelectedRouteIdx(idx)
-    setFitTrigger(prev => prev + 1)
+    // Intentionally do NOT call setFitTrigger here so the user's zoom & center on the map are preserved!
   }
 
   const handleStartJourney = () => {
@@ -1100,6 +1101,13 @@ export default function RouteSelectionPage() {
                   const isExpanded = expandedCardIdx === idx || (sheetState === 'expanded' && isSelected)
                   const scoreInfo = getScoreLabel(route.safetyScore || 75)
                   const hazardCnt = route.onRouteReports?.length || 0
+                  const comparative = getScoreComparativeBreakdown(
+                    route.safetyScore || 75,
+                    route.rankLabel,
+                    route.envReasons || [],
+                    route.riskReasons || [],
+                    route,
+                  )
 
                   return (
                     <div
@@ -1125,6 +1133,16 @@ export default function RouteSelectionPage() {
                             {route.isRecommended && (
                               <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
                                 ★ Top Pick
+                              </span>
+                            )}
+                            {/* Route Timing & Police Regulation Badge */}
+                            {route.trafficRegulation && (
+                              <span
+                                className={`text-[8.5px] font-black px-1.5 py-0.5 rounded-md border flex items-center gap-1 ${route.trafficRegulation.badgeBg}`}
+                                title={route.trafficRegulation.timingRule}
+                              >
+                                <span>{route.trafficRegulation.isNightWindowActive ? '🌙' : route.trafficRegulation.isOneWayNow ? '⛔' : '⚡'}</span>
+                                <span>{route.trafficRegulation.badgeLabel}</span>
                               </span>
                             )}
                             {route.mlEvaluated && (
@@ -1231,24 +1249,73 @@ export default function RouteSelectionPage() {
                         {/* FULL RESTORED SAFETY BREAKDOWN */}
                         {isExpanded && (
                           <div className="mt-2 rounded-xl bg-white p-2.5 border border-slate-200/90 shadow-sm space-y-2 text-[10px]">
-                            {/* Score Reasons Checklist */}
-                            <div>
-                              <p className="font-black text-slate-800 uppercase tracking-wider text-[9px] mb-1">✓ Safety Advantages & Profile</p>
-                              <div className="space-y-1 text-slate-600">
-                                {getScoreReasons(
-                                  route.safetyScore || 75,
-                                  route.rankLabel,
-                                  route.envReasons || [],
-                                  route.riskReasons || [],
-                                  route,
-                                ).map((r, ri) => (
-                                  <div key={ri} className="flex items-start gap-1.5">
+                            {/* 1. What's Good (Comparative Safety Advantages) */}
+                            <div className="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200/80">
+                              <p className="font-black text-emerald-950 uppercase tracking-wider text-[9px] mb-1.5 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-emerald-600 text-[13px]">verified</span>
+                                <span>Safety Advantages (What's Good)</span>
+                              </p>
+                              <div className="space-y-1 text-emerald-900">
+                                {comparative.advantages.map((adv, ai) => (
+                                  <div key={ai} className="flex items-start gap-1.5 text-[9.5px]">
                                     <span className="text-emerald-600 font-black flex-shrink-0">✓</span>
-                                    <span>{r}</span>
+                                    <span>{adv}</span>
                                   </div>
                                 ))}
                               </div>
                             </div>
+
+                            {/* 2. What to Watch Out For (Trade-offs & Hazards) */}
+                            <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/80">
+                              <p className="font-black text-amber-950 uppercase tracking-wider text-[9px] mb-1.5 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-amber-600 text-[13px]">warning</span>
+                                <span>What to Watch Out For (Trade-Offs)</span>
+                              </p>
+                              <div className="space-y-1 text-amber-900">
+                                {comparative.tradeOffs.map((tro, ti) => (
+                                  <div key={ti} className="flex items-start gap-1.5 text-[9.5px]">
+                                    <span className="text-amber-600 font-black flex-shrink-0">⚠️</span>
+                                    <span>{tro}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* 3. Traffic Police & Corridor Timing Intelligence */}
+                            {comparative.trafficRegulation && (
+                              <div className={`p-2.5 rounded-xl border ${comparative.trafficRegulation.isOneWayNow ? 'bg-rose-50/80 border-rose-200' : 'bg-slate-50/90 border-slate-200'}`}>
+                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                  <div className="flex items-center gap-1 font-black uppercase tracking-wider text-[9px]" style={{ color: comparative.trafficRegulation.badgeColor }}>
+                                    <span className="material-symbols-outlined text-[13px]">local_police</span>
+                                    <span>Route Timing & Police Regulations</span>
+                                  </div>
+                                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border ${comparative.trafficRegulation.badgeBg}`}>
+                                    {comparative.trafficRegulation.badgeLabel}
+                                  </span>
+                                </div>
+                                <div className="space-y-1 text-[9px] text-slate-700">
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="font-bold text-slate-900">Corridor:</span>
+                                    <span className="font-extrabold text-slate-800">{comparative.trafficRegulation.zoneName}</span>
+                                  </div>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="font-bold text-slate-900">Rule:</span>
+                                    <span>{comparative.trafficRegulation.timingRule}</span>
+                                  </div>
+                                  {comparative.trafficRegulation.policeAdvisory && (
+                                    <div className="flex items-start gap-1 text-rose-700 font-semibold bg-rose-100/60 p-1.5 rounded-lg mt-1">
+                                      <span className="material-symbols-outlined text-[12px] flex-shrink-0 mt-0.5">policy</span>
+                                      <span>{comparative.trafficRegulation.policeAdvisory}</span>
+                                    </div>
+                                  )}
+                                  {comparative.trafficRegulation.heavyVehicleInfo && (
+                                    <div className="text-[8px] text-slate-500 font-medium">
+                                      🚚 {comparative.trafficRegulation.heavyVehicleInfo}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
 
                             {/* ML Bottleneck Analysis */}
                             {route.bottleneck && (

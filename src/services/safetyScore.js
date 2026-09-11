@@ -34,6 +34,7 @@ import { CRIME_SEVERITY_CONFIG, CRIME_ROUTE_PROXIMITY_METERS } from '../data/cri
 import { FLOOD_SEVERITY_CONFIG, FLOOD_ROUTE_PROXIMITY_METERS, isMonsoonSeason } from '../data/floodZones'
 import { DISASTER_ZONES, DISASTER_SEVERITY_CONFIG, DISASTER_ROUTE_PROXIMITY_METERS } from '../data/disasterZones'
 import { ACCIDENT_BLACKSPOTS, ACCIDENT_SEVERITY_CONFIG, ACCIDENT_ROUTE_PROXIMITY_METERS } from '../data/accidentBlackspots'
+import { getRouteTrafficRegulations } from '../data/trafficRestrictions.js'
 
 // ─── Config ─────────────────────────────────────────────────────────────────────────
 const BASE_SCORE              = 96  // Routes start at 96, deductions bring down to realistic range
@@ -341,6 +342,7 @@ export function calculateRouteSafetyScores(
     }
 
     const safetySegments = buildSafetySegments(route.geometry, route.onRouteReports, route.onRouteCrimes)
+    const trafficRegulation = getRouteTrafficRegulations(route)
 
     return {
       ...route,
@@ -351,6 +353,7 @@ export function calculateRouteSafetyScores(
       timeDiffMin,
       tradeOffText,
       safetySegments,
+      trafficRegulation,
     }
   })
 
@@ -441,6 +444,7 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
     const safetySegments = route.mlSegments && route.mlSegments.length > 0
       ? route.mlSegments
       : buildSafetySegments(route.geometry, route.onRouteReports, route.onRouteCrimes)
+    const trafficRegulation = route.trafficRegulation || getRouteTrafficRegulations(route)
 
     return {
       ...route,
@@ -451,6 +455,7 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
       timeDiffMin,
       tradeOffText,
       safetySegments,
+      trafficRegulation,
     }
   })
 }
@@ -557,6 +562,120 @@ export function deduplicateRoutes(routes) {
     if (!isDuplicate) kept.push(route)
   }
   return kept.length >= 3 ? kept : routes
+}
+
+// ─── Comparative Score & Safety Breakdown ──────────────────────────────────────
+/**
+ * Returns a structured comparative safety breakdown:
+ * - advantages: What's Good about this route compared to alternatives
+ * - tradeOffs: What's Not Good / Watch Out (Trade-offs & risks)
+ * - trafficRegulation: Traffic police direction, one-way/two-way status, and timing windows
+ * - factualDeductions: Point deductions (user reports, crimes, flood, accident)
+ * - environmental: AQI, UV, Pollen
+ * - allReasons: Combined list of all items for backward compatibility
+ */
+export function getScoreComparativeBreakdown(score, rankLabel, envReasons = [], riskReasons = [], route = null) {
+  const advantages = []
+  const tradeOffs = []
+  const factualDeductions = []
+  const environmental = []
+
+  // 1. Primary Comparative Trade-off Profile
+  if (rankLabel === 'SAFEST') {
+    advantages.push('Best overall safety profile with lowest hazard exposure')
+    advantages.push('Wider arterial roadways with clear sightlines & active lighting')
+    advantages.push('Higher police surveillance and fast emergency service access')
+    advantages.push('Smooth traffic flow — minimal intersection gridlock')
+
+    if (route?.timeDiffMin > 0) {
+      tradeOffs.push(`+${route.timeDiffMin} min longer commute vs fastest shortcut`)
+    } else {
+      tradeOffs.push('Standard commute pace along main arterial bypass')
+    }
+  } else if (rankLabel === 'BALANCED') {
+    advantages.push('Optimal balance of safety and travel duration')
+    advantages.push('Direct arterial bypass with standard street lighting')
+    advantages.push('Regular pedestrian activity and accessible police posts')
+    advantages.push('Decent road surface quality along secondary corridor')
+
+    tradeOffs.push('Moderate traffic density during peak morning/evening rush hours')
+    tradeOffs.push('Intersects busier commercial junctions with periodic lane merging')
+    tradeOffs.push('Secondary emergency response coverage compared to main highway')
+  } else {
+    // LEAST SAFE / FASTEST
+    advantages.push('Shortest travel time (fastest direct commute)')
+    advantages.push('Lowest overall distance traveled (direct shortcut)')
+    advantages.push('Quickest estimated arrival time')
+
+    tradeOffs.push('Elevated collision exposure and higher urban congestion')
+    tradeOffs.push('Passes closer to crowded hubs or high-activity theft/crime zones')
+    tradeOffs.push('Narrower street corridors with reduced braking sightlines')
+    tradeOffs.push('Check local street direction: daytime one-way enforcement active')
+  }
+
+  // 2. Factual hazard deductions & active conditions
+  if (route) {
+    if (Array.isArray(route.mlReasons) && route.mlReasons.length > 0) {
+      route.mlReasons.forEach(r => {
+        if (r.includes('Low') || r.includes('safe') || r.includes('High safety') || r.includes('Clear traffic')) {
+          if (!advantages.includes(r)) advantages.push(r)
+        } else {
+          if (!tradeOffs.includes(r)) tradeOffs.push(r)
+        }
+      })
+    }
+
+    if (route.onRouteReports && route.onRouteReports.length > 0) {
+      route.onRouteReports.forEach(r => {
+        const typeName = HAZARD_MAP[r.hazardType || r.type]?.label || r.title || r.type || 'Community Hazard'
+        const desc = r.description ? ` (${r.description})` : ''
+        factualDeductions.push(`⚠️ -${r._penalty || 6} pts: User Report — ${typeName}${desc}`)
+      })
+    }
+
+    if ((route.crimePenalty || 0) > 0)
+      factualDeductions.push(`🚨 Crime zones on route corridor (-${route.crimePenalty} pts)`)
+    if ((route.accidentPenalty || 0) > 0)
+      factualDeductions.push(`🚗 Road accident blackspots near route (-${route.accidentPenalty} pts)`)
+    if ((route.floodPenalty || 0) > 0)
+      factualDeductions.push(`🌊 Flood / waterlogging risk (-${route.floodPenalty} pts)`)
+    if ((route.disasterPenalty || 0) > 0)
+      factualDeductions.push(`⚠️ Natural hazard zones on route (-${route.disasterPenalty} pts)`)
+    if ((route.envPenalty || 0) > 0) {
+      if (route.envBreakdown?.isRespiratory) {
+        factualDeductions.push(`Air quality (AQI) impact with Asthma profile (-${route.envPenalty} pts)`)
+      } else {
+        factualDeductions.push(`Air quality (AQI) modifier (-${route.envPenalty} pts)`)
+      }
+    }
+  }
+
+  // 3. Environmental
+  if (riskReasons.length > 0) {
+    riskReasons.forEach(rr => { if (!environmental.includes(rr)) environmental.push(rr) })
+  }
+  if (envReasons.length > 0) {
+    envReasons.forEach(er => { if (!environmental.includes(er)) environmental.push(er) })
+  }
+
+  // 4. Traffic police regulations
+  const trafficRegulation = route?.trafficRegulation || (route ? getRouteTrafficRegulations(route) : null)
+
+  const allReasons = [
+    ...advantages,
+    ...tradeOffs,
+    ...factualDeductions,
+    ...environmental,
+  ]
+
+  return {
+    advantages,
+    tradeOffs,
+    factualDeductions,
+    environmental,
+    trafficRegulation,
+    allReasons,
+  }
 }
 
 // ─── Score explanation reasons ─────────────────────────────────────────────────
