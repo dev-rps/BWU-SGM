@@ -1239,7 +1239,7 @@ export default function RouteSelectionPage() {
                         >
                           <span className="flex items-center gap-1">
                             <span className="material-symbols-outlined text-[13px]" style={{ color }}>analytics</span>
-                            <span>{isExpanded ? 'Hide Safety Breakdown' : 'Why this score & safety breakdown?'}</span>
+                            <span>{isExpanded ? 'Hide Details' : 'Why this score?'}</span>
                           </span>
                           <span className="material-symbols-outlined text-[14px]">
                             {isExpanded ? 'expand_less' : 'expand_more'}
@@ -1248,16 +1248,16 @@ export default function RouteSelectionPage() {
 
                         {/* FULL RESTORED SAFETY BREAKDOWN */}
                         {isExpanded && (
-                          <div className="mt-2 rounded-xl bg-white p-2.5 border border-slate-200/90 shadow-sm space-y-2 text-[10px]">
+                          <div className="mt-2 rounded-xl bg-white p-2 border border-slate-200/90 shadow-sm space-y-1.5 text-[10px]">
                             {/* 1. What's Good (Comparative Safety Advantages) */}
-                            <div className="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200/80">
-                              <p className="font-black text-emerald-950 uppercase tracking-wider text-[9px] mb-1.5 flex items-center gap-1">
-                                <span className="material-symbols-outlined text-emerald-600 text-[13px]">verified</span>
-                                <span>Safety Advantages (What's Good)</span>
+                            <div className="bg-emerald-50/70 p-2 rounded-lg border border-emerald-200/80">
+                              <p className="font-black text-emerald-950 uppercase tracking-wider text-[8.5px] mb-1 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-emerald-600 text-[12px]">verified</span>
+                                <span>What's Good</span>
                               </p>
-                              <div className="space-y-1 text-emerald-900">
+                              <div className="space-y-0.5 text-emerald-900">
                                 {comparative.advantages.map((adv, ai) => (
-                                  <div key={ai} className="flex items-start gap-1.5 text-[9.5px]">
+                                  <div key={ai} className="flex items-start gap-1 text-[9px] leading-tight">
                                     <span className="text-emerald-600 font-black flex-shrink-0">✓</span>
                                     <span>{adv}</span>
                                   </div>
@@ -1266,14 +1266,14 @@ export default function RouteSelectionPage() {
                             </div>
 
                             {/* 2. What to Watch Out For (Trade-offs & Hazards) */}
-                            <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/80">
-                              <p className="font-black text-amber-950 uppercase tracking-wider text-[9px] mb-1.5 flex items-center gap-1">
-                                <span className="material-symbols-outlined text-amber-600 text-[13px]">warning</span>
-                                <span>What to Watch Out For (Trade-Offs)</span>
+                            <div className="bg-amber-50/70 p-2 rounded-lg border border-amber-200/80">
+                              <p className="font-black text-amber-950 uppercase tracking-wider text-[8.5px] mb-1 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-amber-600 text-[12px]">warning</span>
+                                <span>Watch Out</span>
                               </p>
-                              <div className="space-y-1 text-amber-900">
+                              <div className="space-y-0.5 text-amber-900">
                                 {comparative.tradeOffs.map((tro, ti) => (
-                                  <div key={ti} className="flex items-start gap-1.5 text-[9.5px]">
+                                  <div key={ti} className="flex items-start gap-1 text-[9px] leading-tight">
                                     <span className="text-amber-600 font-black flex-shrink-0">⚠️</span>
                                     <span>{tro}</span>
                                   </div>
@@ -1283,34 +1283,25 @@ export default function RouteSelectionPage() {
 
                             {/* 3. Traffic Police & Corridor Timing Intelligence */}
                             {comparative.trafficRegulation && (
-                              <div className={`p-2.5 rounded-xl border ${comparative.trafficRegulation.isOneWayNow ? 'bg-rose-50/80 border-rose-200' : 'bg-slate-50/90 border-slate-200'}`}>
-                                <div className="flex items-center justify-between gap-2 mb-1.5">
-                                  <div className="flex items-center gap-1 font-black uppercase tracking-wider text-[9px]" style={{ color: comparative.trafficRegulation.badgeColor }}>
-                                    <span className="material-symbols-outlined text-[13px]">local_police</span>
-                                    <span>Route Timing & Police Regulations</span>
+                              <div className={`p-2 rounded-lg border ${comparative.trafficRegulation.isOneWayNow ? 'bg-rose-50/80 border-rose-200' : 'bg-slate-50/90 border-slate-200'}`}>
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <div className="flex items-center gap-1 font-black uppercase tracking-wider text-[8.5px]" style={{ color: comparative.trafficRegulation.badgeColor }}>
+                                    <span className="material-symbols-outlined text-[12px]">local_police</span>
+                                    <span>Police & Timing Rule</span>
                                   </div>
-                                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border ${comparative.trafficRegulation.badgeBg}`}>
+                                  <span className={`text-[7.5px] font-black px-1.5 py-0.5 rounded border ${comparative.trafficRegulation.badgeBg}`}>
                                     {comparative.trafficRegulation.badgeLabel}
                                   </span>
                                 </div>
-                                <div className="space-y-1 text-[9px] text-slate-700">
+                                <div className="space-y-0.5 text-[8.5px] text-slate-700 leading-tight">
                                   <div className="flex items-baseline gap-1">
-                                    <span className="font-bold text-slate-900">Corridor:</span>
-                                    <span className="font-extrabold text-slate-800">{comparative.trafficRegulation.zoneName}</span>
-                                  </div>
-                                  <div className="flex items-baseline gap-1">
-                                    <span className="font-bold text-slate-900">Rule:</span>
+                                    <span className="font-bold text-slate-900">{comparative.trafficRegulation.zoneName}:</span>
                                     <span>{comparative.trafficRegulation.timingRule}</span>
                                   </div>
                                   {comparative.trafficRegulation.policeAdvisory && (
-                                    <div className="flex items-start gap-1 text-rose-700 font-semibold bg-rose-100/60 p-1.5 rounded-lg mt-1">
-                                      <span className="material-symbols-outlined text-[12px] flex-shrink-0 mt-0.5">policy</span>
+                                    <div className="flex items-start gap-1 text-rose-700 font-semibold bg-rose-100/60 p-1 rounded mt-0.5">
+                                      <span className="material-symbols-outlined text-[11px] flex-shrink-0 mt-0.5">policy</span>
                                       <span>{comparative.trafficRegulation.policeAdvisory}</span>
-                                    </div>
-                                  )}
-                                  {comparative.trafficRegulation.heavyVehicleInfo && (
-                                    <div className="text-[8px] text-slate-500 font-medium">
-                                      🚚 {comparative.trafficRegulation.heavyVehicleInfo}
                                     </div>
                                   )}
                                 </div>
@@ -1381,20 +1372,20 @@ export default function RouteSelectionPage() {
 
                             {/* Point Deductions & Risk Factors */}
                             {(route.crimePenalty > 0 || route.floodPenalty > 0 || route.disasterPenalty > 0 || route.accidentPenalty > 0 || route.trafficPenalty > 0 || route.envPenalty > 0 || hazardCnt > 0) && (
-                              <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                                <p className="font-black text-slate-800 uppercase tracking-wider text-[9px]">⚠️ Safety Deductions (Points Lost)</p>
+                              <div className="pt-2 border-t border-slate-100 space-y-1">
+                                <p className="font-black text-slate-800 uppercase tracking-wider text-[8.5px]">⚠️ Points Deducted</p>
 
                                 {/* Environmental / AQI / Asthma Deductions */}
                                 {route.envPenalty > 0 && (
                                   <div className="bg-rose-50/70 p-1.5 rounded-lg border border-rose-100">
-                                    <div className="flex justify-between items-center text-rose-700 font-bold text-[9.5px]">
-                                      <span>🫁 Environmental & Air Quality Factor</span>
+                                    <div className="flex justify-between items-center text-rose-700 font-bold text-[9px]">
+                                      <span>🫁 Air Quality / Asthma</span>
                                       <span className="font-black">-{route.envPenalty} pts</span>
                                     </div>
-                                    <div className="mt-0.5 text-[8.5px] text-rose-600">
+                                    <div className="mt-0.5 text-[8px] text-rose-600">
                                       {route.envBreakdown?.isRespiratory
-                                        ? `Asthma Profile: AQI ${route.envData?.aqi || 'elevated'} causes increased respiratory penalty`
-                                        : `AQI ${route.envData?.aqi || 'moderate'}`}
+                                        ? `Asthma Profile: sensitive to AQI ${route.envData?.aqi || 'levels'}`
+                                        : `Elevated AQI ${route.envData?.aqi || ''}`}
                                     </div>
                                   </div>
                                 )}
@@ -1402,14 +1393,14 @@ export default function RouteSelectionPage() {
                                 {/* Crime Deductions */}
                                 {route.onRouteCrimes?.length > 0 && (
                                   <div className="bg-red-50/70 p-1.5 rounded-lg border border-red-100">
-                                    <div className="flex justify-between items-center text-red-700 font-bold text-[9.5px]">
-                                      <span>🚨 Crime Zones on Route</span>
+                                    <div className="flex justify-between items-center text-red-700 font-bold text-[9px]">
+                                      <span>🚨 Crime Hotspots</span>
                                       <span className="font-black">-{route.crimePenalty} pts</span>
                                     </div>
-                                    <div className="mt-1 space-y-0.5 text-[8.5px] text-red-600">
+                                    <div className="mt-0.5 space-y-0.5 text-[8px] text-red-600">
                                       {route.onRouteCrimes.slice(0, 2).map(c => (
                                         <div key={c.id} className="flex justify-between">
-                                          <span>• {c.area} ({c.severity} risk)</span>
+                                          <span>• {c.area}</span>
                                           <span>-{c._penalty}pts</span>
                                         </div>
                                       ))}
@@ -1420,14 +1411,14 @@ export default function RouteSelectionPage() {
                                 {/* Flood Risk Deductions */}
                                 {route.onRouteFlood?.length > 0 && (
                                   <div className="bg-blue-50/70 p-1.5 rounded-lg border border-blue-100">
-                                    <div className="flex justify-between items-center text-blue-700 font-bold text-[9.5px]">
-                                      <span>🌊 Flood Risk Zones</span>
+                                    <div className="flex justify-between items-center text-blue-700 font-bold text-[9px]">
+                                      <span>🌊 Waterlogging Risk</span>
                                       <span className="font-black">-{route.floodPenalty} pts</span>
                                     </div>
-                                    <div className="mt-1 space-y-0.5 text-[8.5px] text-blue-600">
+                                    <div className="mt-0.5 space-y-0.5 text-[8px] text-blue-600">
                                       {route.onRouteFlood.slice(0, 2).map(z => (
                                         <div key={z.id} className="flex justify-between">
-                                          <span>• {z.area} ({z.severity} risk)</span>
+                                          <span>• {z.area}</span>
                                           <span>-{z._penalty}pts</span>
                                         </div>
                                       ))}
@@ -1438,11 +1429,11 @@ export default function RouteSelectionPage() {
                                 {/* Disaster Risk Deductions */}
                                 {route.onRouteDisasters?.length > 0 && (
                                   <div className="bg-orange-50/70 p-1.5 rounded-lg border border-orange-100">
-                                    <div className="flex justify-between items-center text-orange-700 font-bold text-[9.5px]">
-                                      <span>⚡ Natural Hazard & Subsidence Zones</span>
+                                    <div className="flex justify-between items-center text-orange-700 font-bold text-[9px]">
+                                      <span>⚡ Natural Hazards</span>
                                       <span className="font-black">-{route.disasterPenalty} pts</span>
                                     </div>
-                                    <div className="mt-1 space-y-0.5 text-[8.5px] text-orange-600">
+                                    <div className="mt-0.5 space-y-0.5 text-[8px] text-orange-600">
                                       {route.onRouteDisasters.slice(0, 2).map(dz => (
                                         <div key={dz.id} className="flex justify-between">
                                           <span>• {dz.area}</span>
@@ -1456,11 +1447,11 @@ export default function RouteSelectionPage() {
                                 {/* Accident Blackspots */}
                                 {route.onRouteAccidents?.length > 0 && (
                                   <div className="bg-rose-50/70 p-1.5 rounded-lg border border-rose-100">
-                                    <div className="flex justify-between items-center text-rose-700 font-bold text-[9.5px]">
+                                    <div className="flex justify-between items-center text-rose-700 font-bold text-[9px]">
                                       <span>🚗 Accident Blackspots</span>
                                       <span className="font-black">-{route.accidentPenalty} pts</span>
                                     </div>
-                                    <div className="mt-1 space-y-0.5 text-[8.5px] text-rose-600">
+                                    <div className="mt-0.5 space-y-0.5 text-[8px] text-rose-600">
                                       {route.onRouteAccidents.slice(0, 2).map(acc => (
                                         <div key={acc.id} className="flex justify-between">
                                           <span>• {acc.area}</span>

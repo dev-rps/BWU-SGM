@@ -242,12 +242,12 @@ export function getRouteTrafficRegulations(route, hour) {
         badgeLabel: matchedZone.nightWindow.label,
         badgeColor: '#10B981', // Emerald green
         badgeBg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-        timingRule: `${matchedZone.nightWindow.label} · ${matchedZone.nightWindow.description}`,
-        policeAdvisory: matchedZone.policeAdvisory,
-        heavyVehicleInfo: matchedZone.heavyVehicleWindow,
+        timingRule: 'Two-Way Open (8 PM – 8 AM)',
+        policeAdvisory: 'Unrestricted 2-way night window active',
+        heavyVehicleInfo: 'Commercial entry allowed tonight',
         zoneName: matchedZone.name,
         isOneWayNow: false,
-        summary: `✓ ${matchedZone.name}: ${matchedZone.nightWindow.label} (Current time is within unrestricted window).`,
+        summary: `✓ ${matchedZone.name}: Open 2-Way (Night Window).`,
       }
     } else {
       // Daytime: active restriction
@@ -259,12 +259,12 @@ export function getRouteTrafficRegulations(route, hour) {
         badgeLabel: matchedZone.dayRule.label,
         badgeColor: isOneWay ? '#EF4444' : '#F59E0B', // Red if one-way, Amber if divided/restricted
         badgeBg: isOneWay ? 'bg-rose-50 text-rose-800 border-rose-200' : 'bg-amber-50 text-amber-800 border-amber-200',
-        timingRule: `${matchedZone.dayRule.label} (${matchedZone.dayRule.hours}) · Opens 2-way at 8:00 PM`,
-        policeAdvisory: matchedZone.policeAdvisory,
-        heavyVehicleInfo: matchedZone.heavyVehicleWindow,
+        timingRule: isOneWay ? `One-Way (${matchedZone.dayRule.hours}) · 2-way after 8 PM` : `Divided Lane (${matchedZone.dayRule.hours})`,
+        policeAdvisory: 'ANPR camera enforced — strictly avoid wrong-way entry',
+        heavyVehicleInfo: 'No heavy trucks during daytime',
         zoneName: matchedZone.name,
         isOneWayNow: isOneWay,
-        summary: `⚠️ ${matchedZone.name}: ${matchedZone.dayRule.label} active (${matchedZone.dayRule.hours}). Opens 2-way after 8 PM. ${matchedZone.policeAdvisory}`,
+        summary: `⚠️ ${matchedZone.name}: ${matchedZone.dayRule.label} active. Opens 2-way after 8 PM.`,
       }
     }
   }
@@ -275,17 +275,17 @@ export function getRouteTrafficRegulations(route, hour) {
       hasRestriction: true,
       isNightWindowActive: isNightWindow,
       roadType: isNightWindow ? 'two_way' : 'variable_direction',
-      badgeLabel: isNightWindow ? '🌙 Night Window (8 PM – 8 AM)' : '⚠️ Check One-Way Signs',
+      badgeLabel: isNightWindow ? '🌙 Night 2-Way' : '⚠️ Check One-Way Signs',
       badgeColor: isNightWindow ? '#10B981' : '#F97316',
       badgeBg: isNightWindow ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-orange-50 text-orange-800 border-orange-200',
-      timingRule: 'Side-street corridor: some municipal alleys operate as one-way during 8 AM – 8 PM. Open two-way 8 PM to 8 AM.',
-      policeAdvisory: 'Watch for local traffic police signboards at street entrances to avoid wrong-way fines.',
-      heavyVehicleInfo: 'No commercial trucks allowed during daytime hours.',
-      zoneName: 'Dense Urban Shortcut Corridor',
+      timingRule: isNightWindow ? 'Open 2-way until 8:00 AM' : 'Side streets: 1-way daytime · 2-way after 8 PM',
+      policeAdvisory: 'Check street entry boards to avoid wrong-way challans',
+      heavyVehicleInfo: 'Commercial trucks restricted',
+      zoneName: 'Dense Urban Shortcut',
       isOneWayNow: !isNightWindow,
       summary: isNightWindow
-        ? '✓ Night window active: two-way movement allowed until 8:00 AM.'
-        : '⚠️ Daytime side-streets may have active one-way enforcement. Confirm direction to avoid challans.',
+        ? '✓ Night window active: two-way movement allowed.'
+        : '⚠️ Side-street one-way rules active.',
     }
   }
 
@@ -293,14 +293,14 @@ export function getRouteTrafficRegulations(route, hour) {
     hasRestriction: false,
     isNightWindowActive: isNightWindow,
     roadType: 'two_way',
-    badgeLabel: '✓ Two-Way Corridor',
+    badgeLabel: '✓ Two-Way Road',
     badgeColor: '#10B981',
     badgeBg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-    timingRule: 'Standard two-way arterial road open 24/7 with regular traffic police coverage.',
-    policeAdvisory: 'Standard traffic regulations apply. Maintain lane speed and traffic signal compliance.',
-    heavyVehicleInfo: 'Standard Kolkata Police commercial vehicle timings apply (truck entry: 10 PM – 6 AM).',
-    zoneName: 'Primary Arterial Corridor',
+    timingRule: 'Standard 2-way road open 24/7',
+    policeAdvisory: 'Standard lane and signal rules apply',
+    heavyVehicleInfo: 'Trucks: 10 PM – 6 AM only',
+    zoneName: 'Primary Arterial Road',
     isOneWayNow: false,
-    summary: '✓ Standard two-way corridor open 24/7. Regular traffic police patrol active.',
+    summary: '✓ Standard two-way corridor open 24/7.',
   }
 }
