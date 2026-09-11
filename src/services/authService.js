@@ -53,7 +53,15 @@ export const GOOGLE_CLIENT_ID =
 export const googleLogin = async () => {
   const redirectUri = `${window.location.origin}/auth/callback`
   const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-  sessionStorage.setItem('sg_google_nonce', nonce)
+
+  // Store in sessionStorage, localStorage, and cross-subdomain cookie (.safetyguardian.xyz)
+  try { sessionStorage.setItem('sg_google_nonce', nonce) } catch (_) {}
+  try { localStorage.setItem('sg_google_nonce', nonce) } catch (_) {}
+  try {
+    const hostname = window.location.hostname
+    const domainPart = hostname.includes('safetyguardian.xyz') ? '; domain=.safetyguardian.xyz' : ''
+    document.cookie = `sg_google_nonce=${encodeURIComponent(nonce)}; path=/${domainPart}; max-age=600; SameSite=Lax`
+  } catch (_) {}
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,

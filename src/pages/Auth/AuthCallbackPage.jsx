@@ -26,16 +26,51 @@ export default function AuthCallbackPage() {
 
         // 2. Check for Google ID Token from Direct OIDC flow
         const idToken = hashParams.get('id_token');
-        const nonce = sessionStorage.getItem('sg_google_nonce') || undefined;
 
         if (idToken) {
+          // Read nonce from sessionStorage, localStorage, cross-subdomain cookie, or decode from token payload
+          const cookieMatch = document.cookie.match(/(?:^|;\s*)sg_google_nonce=([^;]*)/);
+          const cookieNonce = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
+
+          let tokenNonce = null;
+          try {
+            const parts = idToken.split('.');
+            if (parts.length >= 2) {
+              const base64Url = parts[1];
+              const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+              const jsonStr = decodeURIComponent(
+                atob(base64)
+                  .split('')
+                  .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                  .join('')
+              );
+              const payload = JSON.parse(jsonStr);
+              tokenNonce = payload.nonce || null;
+            }
+          } catch (e) {
+            console.warn('[AuthCallback] Could not parse nonce from idToken payload:', e);
+          }
+
+          const nonce =
+            sessionStorage.getItem('sg_google_nonce') ||
+            localStorage.getItem('sg_google_nonce') ||
+            cookieNonce ||
+            tokenNonce ||
+            undefined;
+
           const { data, error: idTokenErr } = await supabase.auth.signInWithIdToken({
             provider: 'google',
             token: idToken,
             nonce,
           });
 
-          sessionStorage.removeItem('sg_google_nonce');
+          // Clean up all nonce storage
+          try { sessionStorage.removeItem('sg_google_nonce'); } catch (_) {}
+          try { localStorage.removeItem('sg_google_nonce'); } catch (_) {}
+          try {
+            const domainPart = window.location.hostname.includes('safetyguardian.xyz') ? '; domain=.safetyguardian.xyz' : '';
+            document.cookie = `sg_google_nonce=; path=/${domainPart}; max-age=0`;
+          } catch (_) {}
 
           if (idTokenErr) {
             console.error('[AuthCallback] signInWithIdToken error:', idTokenErr);
