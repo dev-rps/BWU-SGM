@@ -160,7 +160,8 @@ class PiperTTSManager:
 
         # Clean text of markdown asterisks and excess symbols for clean speech
         speech_text = clean_text.replace("**", "").replace("*", "").replace("#", "").strip()
-        if not speech_text:
+        # Must contain at least one pronounceable word or digit
+        if not speech_text or not any(c.isalnum() for c in speech_text):
             return None
 
         # In-memory cache lookup
@@ -171,6 +172,10 @@ class PiperTTSManager:
         try:
             buf = io.BytesIO()
             with wave.open(buf, "wb") as wav_file:
+                # Pre-set default wave parameters so close() never raises '# channels not specified'
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(22050)
                 self.voice.synthesize_wav(speech_text, wav_file)
             wav_bytes = buf.getvalue()
 
