@@ -3,21 +3,127 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Safety Guardian - Navigate West Bengal safely with real-time safety scores, route analysis, and emergency assistance." />
-    <title>Safety Guardian</title>
+    
+    <!-- Primary SEO Meta Tags -->
+    <title>Safety Guardian — Real-time Safe Navigation & Emergency Assistance</title>
+    <meta name="title" content="Safety Guardian — Real-time Safe Navigation & Emergency Assistance" />
+    <meta name="description" content="Navigate West Bengal safely with real-time safety scores, AI route analysis, community hazard reports, and instant emergency SOS assistance." />
+    <meta name="keywords" content="safety guardian, safe route navigation, west bengal safety, kolkata safe routes, emergency sos, women safety app, live hazard reporting, real-time safety score, safe travel routes" />
+    <meta name="author" content="Safety Guardian" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    <meta name="theme-color" content="#004ac6" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="application-name" content="Safety Guardian" />
+    <meta name="apple-mobile-web-app-title" content="Safety Guardian" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="canonical" href="https://bwu-sgm.vercel.app/" />
+
+    <!-- Open Graph / Facebook / WhatsApp / LinkedIn -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Safety Guardian" />
+    <meta property="og:url" content="https://bwu-sgm.vercel.app/" />
+    <meta property="og:title" content="Safety Guardian — Real-time Safe Navigation & Emergency Assistance" />
+    <meta property="og:description" content="Navigate West Bengal safely with real-time safety scores, AI route analysis, community hazard reports, and instant emergency SOS assistance." />
+    <meta property="og:image" content="https://bwu-sgm.vercel.app/logo.png" />
+    <meta property="og:image:secure_url" content="https://bwu-sgm.vercel.app/logo.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="Safety Guardian Logo" />
+    <meta property="og:locale" content="en_IN" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:url" content="https://bwu-sgm.vercel.app/" />
+    <meta name="twitter:title" content="Safety Guardian — Real-time Safe Navigation & Emergency Assistance" />
+    <meta name="twitter:description" content="Navigate West Bengal safely with real-time safety scores, AI route analysis, community hazard reports, and instant emergency SOS." />
+    <meta name="twitter:image" content="https://bwu-sgm.vercel.app/logo.png" />
+    <meta name="twitter:image:alt" content="Safety Guardian Logo" />
+
+    <!-- Favicon & PWA Manifest -->
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Typography & Stylesheets -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- JSON-LD Structured Data for Search Engines -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://bwu-sgm.vercel.app/#website",
+          "url": "https://bwu-sgm.vercel.app/",
+          "name": "Safety Guardian",
+          "description": "Real-time emergency assistance and AI-driven safe navigation in West Bengal",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://bwu-sgm.vercel.app/search?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://bwu-sgm.vercel.app/#webapp",
+          "name": "Safety Guardian",
+          "url": "https://bwu-sgm.vercel.app/",
+          "applicationCategory": "SafetyApplication, NavigationApplication",
+          "operatingSystem": "All",
+          "browserRequirements": "Requires JavaScript. Requires HTML5.",
+          "description": "Real-time emergency assistance, safe route navigation, live hazard reporting, and crime heatmaps for West Bengal.",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "INR"
+          },
+          "featureList": [
+            "AI-Powered Safe Route Navigation",
+            "Real-time Hazard and Safety Scores",
+            "Instant Emergency SOS and Location Sharing",
+            "Live Weather, Flood, and Rainfall Alerts",
+            "Community Safety Incident Reporting"
+          ]
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://bwu-sgm.vercel.app/#organization",
+          "name": "Safety Guardian",
+          "url": "https://bwu-sgm.vercel.app/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://bwu-sgm.vercel.app/logo.png"
+          }
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Fallback content for search crawlers & accessibility before React hydration -->
+    <div id="root">
+      <header style="padding: 20px; text-align: center; font-family: 'Inter', sans-serif;">
+        <h1 style="font-size: 24px; color: #004ac6; margin-bottom: 8px;">Safety Guardian — West Bengal</h1>
+        <p style="font-size: 14px; color: #475569; max-width: 600px; margin: 0 auto;">
+          Real-time safe navigation, emergency assistance, crime risk scoring, and community hazard alerts across Kolkata and West Bengal.
+        </p>
+      </header>
+    </div>
+    <noscript>
+      <div style="padding: 20px; text-align: center; font-family: sans-serif; background: #fef2f2; color: #991b1b;">
+        <p><strong>JavaScript Required:</strong> Please enable JavaScript in your browser to access live navigation, SOS dispatch, and real-time safety scores on Safety Guardian.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

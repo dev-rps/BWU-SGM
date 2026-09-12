@@ -1,0 +1,23 @@
+# Safety Guardian - robots.txt
+# https://bwu-sgm.vercel.app
+
+User-agent: *
+Allow: /
+Allow: /routes
+Allow: /safety
+Allow: /reports
+Allow: /weather
+Allow: /emergency
+Allow: /privacy
+Allow: /terms
+Allow: /onboarding
+Allow: /login
+Allow: /signup
+
+# Private authentication callbacks & developer endpoints
+Disallow: /auth/callback
+Disallow: /dev/
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://bwu-sgm.vercel.app/sitemap.xml

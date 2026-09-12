@@ -5,6 +5,7 @@ import { supabase } from './supabase/supabase';
 import { useAppStore } from './context/store';
 import { loadContacts } from './services/contactsService';
 import { useShakeSOS } from './hooks/useShakeSOS';
+import RouteSEOTracker from './hooks/useSEO';
 
 import SplashPage     from './pages/Splash/SplashPage';
 import OnboardingPage from './pages/Onboarding/OnboardingPage';
@@ -130,6 +131,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <RouteSEOTracker />
       <ShakeSOSListener />
       <Routes>
         <Route path="/splash"      element={<SplashPage />} />
