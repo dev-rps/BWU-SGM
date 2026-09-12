@@ -72,14 +72,6 @@ function timeAgo(ts) {
   return `${Math.floor(m / 1440)}d ago`
 }
 
-function sendSOS(contacts, location) {
-  const lat  = location?.lat?.toFixed(6) || ''
-  const lng  = location?.lng?.toFixed(6) || ''
-  const link = lat ? `https://maps.google.com/?q=${lat},${lng}` : ''
-  const msg  = encodeURIComponent(`🆘 EMERGENCY: I need immediate help!\nMy location: ${link}\nPlease call me NOW.`)
-  const phone = contacts?.[0]?.phone?.replace(/[\s\-()]/g, '') || ''
-  window.open(phone ? `sms:${phone}?body=${msg}` : `sms:?body=${msg}`, '_self')
-}
 
 // ─── Compact Report Card (with optimistic voting) ────────────────────────────
 function ReportCard({ report, isSelected, onClick }) {
@@ -458,34 +450,20 @@ export default function ReportsPage() {
           so map interaction still works through the gaps.
           ════════════════════════════════════════════════ */}
       <div
-        className="fixed right-4 z-[9999] flex flex-col items-end gap-3"
-        style={{ bottom: `calc(64px + 16px)`, pointerEvents: 'none' }}
+        className="fixed right-4 z-[9999] flex flex-col items-end pointer-events-none"
+        style={{ bottom: '164px' }}
       >
         {/* Report Hazard button */}
         <button
           onClick={openForm}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-full font-bold text-sm text-white shadow-lg active:scale-95 transition-all hover:shadow-xl"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-full font-bold text-sm text-white shadow-lg active:scale-95 transition-all hover:shadow-xl pointer-events-auto"
           style={{
             background: '#004ac6',
             boxShadow: '0 4px 16px rgba(0,74,198,0.4)',
-            pointerEvents: 'auto',
           }}
         >
           <span className="material-symbols-outlined icon-filled" style={{ fontSize: '18px' }}>add_location_alt</span>
           Report Hazard
-        </button>
-
-        {/* SOS button */}
-        <button
-          onClick={() => sendSOS(emergencyContacts, userLocation)}
-          className="w-14 h-14 rounded-full font-black text-white text-sm active:scale-90 transition-all"
-          style={{
-            background: '#EF4444',
-            boxShadow: '0 0 0 4px rgba(239,68,68,0.2), 0 4px 24px rgba(239,68,68,0.5)',
-            pointerEvents: 'auto',
-          }}
-        >
-          SOS
         </button>
       </div>
 
