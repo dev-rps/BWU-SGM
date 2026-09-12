@@ -100,7 +100,7 @@ const MONSOON_FLOOD_MULTIPLIER = 1.4 // Flood penalty 40% higher during June-Oct
 export const RANK_CONFIGS = [
   { label: 'SAFEST',     color: '#10B981', badge: 'bg-[#10B981]', recommended: true  },
   { label: 'BALANCED',   color: '#2563EB', badge: 'bg-[#2563EB]', recommended: false },
-  { label: 'LEAST SAFE', color: '#EF4444', badge: 'bg-[#EF4444]', recommended: false },
+  { label: 'RISKY',      color: '#EF4444', badge: 'bg-[#EF4444]', recommended: false },
 ]
 
 /**
@@ -380,6 +380,19 @@ export function calculateRouteSafetyScores(
       }
     }
 
+    // (G) Excessive Detour / Extended Exposure Penalty
+    // While a reasonable 2-5 min detour away from blackspots is beneficial,
+    // a large detour increases outdoor exposure risk (fatigue, darkness, weather).
+    const allDurations = routes.map(r => Number(r.durationMin) || (r.duration ? Math.round(r.duration / 60) : 0)).filter(d => d > 0)
+    const minDur = allDurations.length ? Math.min(...allDurations) : 0
+    const currentDur = Number(route.durationMin) || (route.duration ? Math.round(route.duration / 60) : 0)
+    const excessMin = Math.max(0, currentDur - minDur)
+    if (excessMin > 8) {
+      const detourPenalty = Math.min(18, Math.round((excessMin - 8) * 0.8))
+      roadInfraPenalty += detourPenalty
+      roadInfraNote = roadInfraNote ? `${roadInfraNote} • +${excessMin}m detour exposure` : `+${excessMin}m detour exposure`
+    }
+
     const crimeOverlapCount = scaledCrimes.length
     const accidentOverlapCount = scaledAccidents.length
     const totalHazardOverlaps = crimeOverlapCount + accidentOverlapCount
@@ -387,15 +400,15 @@ export function calculateRouteSafetyScores(
 
     let overlapSummary = ''
     if (totalHazardOverlaps === 0) {
-      overlapSummary = '🛡️ Zero Crime or Accident Overlaps (Safest Corridor)'
+      overlapSummary = 'Zero Crime or Accident Overlaps (Safest Corridor)'
     } else if (accidentOverlapCount > 0 && crimeOverlapCount > 0) {
-      overlapSummary = `⚠️ Overlaps ${accidentOverlapCount} Accident & ${crimeOverlapCount} Crime Zone${totalHazardOverlaps > 1 ? 's' : ''}`
+      overlapSummary = `Overlaps ${accidentOverlapCount} Accident & ${crimeOverlapCount} Crime Zone${totalHazardOverlaps > 1 ? 's' : ''}`
     } else if (accidentOverlapCount > 0) {
       const topAcc = scaledAccidents[0]
-      overlapSummary = `⚠️ Overlaps ${accidentOverlapCount} Accident Blackspot (${topAcc.area || topAcc.title || 'High Collision Zone'})`
+      overlapSummary = `Overlaps ${accidentOverlapCount} Accident Blackspot (${topAcc.area || topAcc.title || 'High Collision Zone'})`
     } else {
       const topCrime = scaledCrimes[0]
-      overlapSummary = `🚨 Overlaps ${crimeOverlapCount} Crime Hotspot (${topCrime.area || topCrime.title || 'Caution Area'})`
+      overlapSummary = `Overlaps ${crimeOverlapCount} Crime Hotspot (${topCrime.area || topCrime.title || 'Caution Area'})`
     }
 
     const overlapAnalysis = {
@@ -624,15 +637,15 @@ export function mergeMLPredictionsIntoRoutes(routes, mlResults = []) {
 
     let overlapSummary = ''
     if (totalHazardOverlaps === 0) {
-      overlapSummary = '🛡️ Zero Crime or Accident Overlaps (Safest Corridor)'
+      overlapSummary = 'Zero Crime or Accident Overlaps (Safest Corridor)'
     } else if (accidentOverlapCount > 0 && crimeOverlapCount > 0) {
-      overlapSummary = `⚠️ Overlaps ${accidentOverlapCount} Accident & ${crimeOverlapCount} Crime Zone${totalHazardOverlaps > 1 ? 's' : ''}`
+      overlapSummary = `Overlaps ${accidentOverlapCount} Accident & ${crimeOverlapCount} Crime Zone${totalHazardOverlaps > 1 ? 's' : ''}`
     } else if (accidentOverlapCount > 0) {
       const topAcc = onRouteAccidents[0]
-      overlapSummary = `⚠️ Overlaps ${accidentOverlapCount} Accident Blackspot (${topAcc.area || topAcc.title || 'High Collision Zone'})`
+      overlapSummary = `Overlaps ${accidentOverlapCount} Accident Blackspot (${topAcc.area || topAcc.title || 'High Collision Zone'})`
     } else {
       const topCrime = onRouteCrimes[0]
-      overlapSummary = `🚨 Overlaps ${crimeOverlapCount} Crime Hotspot (${topCrime.area || topCrime.title || 'Caution Area'})`
+      overlapSummary = `Overlaps ${crimeOverlapCount} Crime Hotspot (${topCrime.area || topCrime.title || 'Caution Area'})`
     }
 
     const overlapAnalysis = {
@@ -998,25 +1011,25 @@ export function getScoreComparativeBreakdown(score, rankLabel, envReasons = [], 
   // 2. Factual hazard deductions (Short & crisp)
   if (route) {
     if ((route.crimePenalty || 0) > 0)
-      factualDeductions.push(`🚨 Near crime spots (-${route.crimePenalty} pts)`)
+      factualDeductions.push(`Near crime spots (-${route.crimePenalty} pts)`)
     if ((route.accidentPenalty || 0) > 0)
-      factualDeductions.push(`🚗 Accident blackspot (-${route.accidentPenalty} pts)`)
+      factualDeductions.push(`Accident blackspot (-${route.accidentPenalty} pts)`)
     if ((route.floodPenalty || 0) > 0)
-      factualDeductions.push(`🌊 Waterlogging risk (-${route.floodPenalty} pts)`)
+      factualDeductions.push(`Waterlogging risk (-${route.floodPenalty} pts)`)
     if ((route.disasterPenalty || 0) > 0)
-      factualDeductions.push(`⚡ Hazard zone (-${route.disasterPenalty} pts)`)
+      factualDeductions.push(`Hazard zone (-${route.disasterPenalty} pts)`)
     if ((route.envPenalty || 0) > 0) {
       if (route.envBreakdown?.isRespiratory) {
-        factualDeductions.push(`🫁 Asthma AQI penalty (-${route.envPenalty} pts)`)
+        factualDeductions.push(`Asthma AQI penalty (-${route.envPenalty} pts)`)
       } else {
-        factualDeductions.push(`🍃 High AQI penalty (-${route.envPenalty} pts)`)
+        factualDeductions.push(`High AQI penalty (-${route.envPenalty} pts)`)
       }
     }
 
     if (route.onRouteReports && route.onRouteReports.length > 0) {
       route.onRouteReports.slice(0, 2).forEach(r => {
         const typeName = HAZARD_MAP[r.hazardType || r.type]?.label || r.title || 'Hazard'
-        factualDeductions.push(`⚠️ Report: ${typeName} (-${r._penalty || 6} pts)`)
+        factualDeductions.push(`Report: ${typeName} (-${r._penalty || 6} pts)`)
       })
     }
   }
@@ -1061,7 +1074,7 @@ export function getScoreReasons(score, rankLabel, envReasons = [], riskReasons =
   let reasons = []
 
   // 1. Primary trade-off profile
-  if (rankLabel === 'LEAST SAFE' || rankLabel === 'FASTEST') {
+  if (rankLabel === 'RISKY' || rankLabel === 'FASTEST') {
     reasons.push('Shortest travel time')
   } else if (rankLabel === 'SAFEST') {
     reasons.push('Best overall safety score')
@@ -1100,18 +1113,18 @@ export function getScoreReasons(score, rankLabel, envReasons = [], riskReasons =
   // 3. Factual hazard deductions & ML insights (if route provided)
   if (route) {
     if ((route.crimePenalty || 0) > 0)
-      reasons.push(`🚨 Near crime spots (-${route.crimePenalty} pts)`)
+      reasons.push(`Near crime spots (-${route.crimePenalty} pts)`)
     if ((route.accidentPenalty || 0) > 0)
-      reasons.push(`🚗 Accident blackspot (-${route.accidentPenalty} pts)`)
+      reasons.push(`Accident blackspot (-${route.accidentPenalty} pts)`)
     if ((route.floodPenalty || 0) > 0)
-      reasons.push(`🌊 Waterlogging risk (-${route.floodPenalty} pts)`)
+      reasons.push(`Waterlogging risk (-${route.floodPenalty} pts)`)
     if ((route.disasterPenalty || 0) > 0)
-      reasons.push(`⚡ Hazard zone (-${route.disasterPenalty} pts)`)
+      reasons.push(`Hazard zone (-${route.disasterPenalty} pts)`)
     if ((route.envPenalty || 0) > 0) {
       if (route.envBreakdown?.isRespiratory) {
-        reasons.push(`🫁 Asthma AQI penalty (-${route.envPenalty} pts)`)
+        reasons.push(`Asthma AQI penalty (-${route.envPenalty} pts)`)
       } else {
-        reasons.push(`🍃 High AQI penalty (-${route.envPenalty} pts)`)
+        reasons.push(`High AQI penalty (-${route.envPenalty} pts)`)
       }
     }
   }
@@ -1187,7 +1200,7 @@ export function getRouteType(idx) {
   const types = [
     { label: 'SAFEST',     color: '#10B981', badge: 'bg-[#10B981]' },
     { label: 'BALANCED',   color: '#2563EB', badge: 'bg-[#2563EB]' },
-    { label: 'LEAST SAFE', color: '#EF4444', badge: 'bg-[#EF4444]' },
+    { label: 'RISKY',      color: '#EF4444', badge: 'bg-[#EF4444]' },
   ]
   return types[idx] || types[0]
 }

@@ -12,6 +12,8 @@
  *  - Dynamic quick action generation
  */
 
+import { formatMedicalProfileSummary, hasMedicalData } from './medicalService'
+
 // ─── Language Registry ─────────────────────────────────────────────────────────
 export const LANGUAGES = {
   en: { name: 'English',    code: 'en-IN' },
@@ -195,12 +197,14 @@ const KB_MR = {
 
 // ─── Main Response Engine ──────────────────────────────────────────────────────
 /**
- * @param {string} text         User's message
- * @param {string} lang         Language code ('en', 'hi', etc.)
- * @param {Array}  history      Last 6 message objects for context
+ * @param {string} text               User's message
+ * @param {string} lang               Language code ('en', 'hi', etc.)
+ * @param {Array}  history            Last 6 message objects for context
+ * @param {Object} medicalProfile     User's saved medical profile context
+ * @param {Array}  emergencyContacts  User's saved emergency contacts
  * @returns {string}
  */
-export function getBotReply(text, lang = 'en', history = []) {
+export function getBotReply(text, lang = 'en', history = [], medicalProfile = null, emergencyContacts = []) {
   const t = text.toLowerCase().trim()
   
   let kb = KB;
@@ -209,6 +213,35 @@ export function getBotReply(text, lang = 'en', history = []) {
   else if (lang === 'ta') kb = { ...KB, ...KB_TA }
   else if (lang === 'te') kb = { ...KB, ...KB_TE }
   else if (lang === 'mr') kb = { ...KB, ...KB_MR }
+
+  // 1. Check for Medical Profile Inquiries
+  if (/\b(medical|health|allerg|medicin|condition|blood group|doctor)\b/i.test(t) &&
+      /\b(my|profile|what|read|view|show|check|do i have|do you know|list)\b/i.test(t)) {
+    if (hasMedicalData(medicalProfile)) {
+      const summary = formatMedicalProfileSummary(medicalProfile)
+      return `Yes! I have your saved Safety Guardian medical profile right here 📋\n\n${summary}\n\nYou can update these details anytime in your Profile tab!`
+    }
+    return `I'm connected to your Safety Guardian health records, but you haven't filled out your Medical Profile yet! 🩺\n\nTap the **Profile** tab below and open **Medical Profile** to add your blood group, conditions, allergies, and medications so I can protect you during emergencies!`
+  }
+
+  // 2. Check for Emergency Contacts Inquiries
+  if (/\b(emergency\s+contact|trusted\s+contact|who\s+are\s+my\s+contact|my\s+contact|list\s+contact)\b/i.test(t)) {
+    if (Array.isArray(emergencyContacts) && emergencyContacts.length > 0) {
+      const list = emergencyContacts.map((c, i) => `${i + 1}. **${c.name}** (${c.relationship || 'Contact'}): 📞 ${c.phone}`).join('\n')
+      return `Here are your saved Emergency Contacts 👥:\n\n${list}\n\nTap on any contact below to confirm and call them directly!`
+    }
+    return `You haven't added any Emergency Contacts yet! 👥\n\nHead over to the **Profile** tab to add your family or trusted friends. They will be alerted automatically with your live location during an SOS!`
+  }
+
+  // 3. Vehicle Breakdown & Mechanic Requests
+  if (/\b(mechanic|puncture|flat tyre|flat tire|car break|bike break|breakdown|garage|towing|engine fail|car won't start)\b/i.test(t)) {
+    return `Don't panic! If you're on the road, turn on your hazard lights and stay in a safe spot away from moving traffic. 🚗🔧\n\nI am locating nearby automobile mechanics, tyre puncture shops, and breakdown assistance around your live location right now. Check the options below!`
+  }
+
+  // 4. Navigation & Road Guidance
+  if (/\b(show me road|navigate to|take me to|directions to|show route to)\b/i.test(t)) {
+    return `I can guide you! 🚗\n\nI am searching for the destination and mapping the safest route with live traffic and hazard alerts for you. Tap the Navigation card below to start!`
+  }
 
   // Context awareness: check last 3 bot messages for topic continuity
   const recentTopics = history

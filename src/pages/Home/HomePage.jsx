@@ -385,7 +385,7 @@ export default function HomePage() {
     if (!val.trim()) { setSuggestions([]); setShowSuggestions(false); return }
     debounceRef.current = setTimeout(async () => {
       try {
-        const results = await searchPlaces(val)
+        const results = await searchPlaces(val, userLocation?.lat, userLocation?.lng)
         setSuggestions(results)
         setShowSuggestions(true)
       } catch { setSuggestions([]) }
@@ -460,8 +460,9 @@ export default function HomePage() {
           {/* Your location dot */}
           <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}>
             <Popup>
-              <div className="text-xs font-bold">
-                {userLocation.simulated ? '📍 Brainware University (GPS unavailable)' : '📍 Your Location'}
+              <div className="text-xs font-bold flex items-center gap-1 text-[#191c1e]">
+                <span className="material-symbols-outlined text-[14px] text-[#004ac6]">my_location</span>
+                <span>{userLocation.simulated ? 'Brainware University (GPS unavailable)' : 'Your Location'}</span>
               </div>
             </Popup>
           </Marker>
@@ -470,19 +471,13 @@ export default function HomePage() {
           {liveUsers.map(u => (
             <Marker key={u.id} position={[u.lat, u.lng]} icon={createFriendIcon(u.name)}>
               <Popup>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#7c3aed' }}>
-                  🟢 {u.name} is sharing live location
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#7c3aed' }} className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                  <span>{u.name} is sharing live location</span>
                 </div>
               </Popup>
             </Marker>
           ))}
-
-          {/* Safety radius circle */}
-          <Circle
-            center={[userLocation.lat, userLocation.lng]}
-            radius={300}
-            pathOptions={{ color: '#004ac6', fillColor: '#004ac6', fillOpacity: 0.07, weight: 1, opacity: 0.3 }}
-          />
 
           {/* Nearby place markers */}
           {nearbyPlaces.slice(0, 20).map(p => {
@@ -776,10 +771,10 @@ export default function HomePage() {
               {/* Area Alerts */}
               {(() => {
                 const alerts = []
-                if (weather?.temperature > 38) alerts.push({ text: 'Extreme Heat', color: '#EF4444', icon: '🔆' })
-                if (weather?.humidity > 85)    alerts.push({ text: 'High Humidity', color: '#3B82F6', icon: '🌊' })
-                if (weather?.description?.toLowerCase().includes('rain')) alerts.push({ text: 'Heavy Rain', color: '#6366F1', icon: '🌧️' })
-                if (weather?.description?.toLowerCase().includes('storm') || weather?.description?.toLowerCase().includes('thunder')) alerts.push({ text: 'Storm Warning', color: '#F59E0B', icon: '⛈️' })
+                if (weather?.temperature > 38) alerts.push({ text: 'Extreme Heat', color: '#EF4444', icon: 'sunny' })
+                if (weather?.humidity > 85)    alerts.push({ text: 'High Humidity', color: '#3B82F6', icon: 'humidity_mid' })
+                if (weather?.description?.toLowerCase().includes('rain')) alerts.push({ text: 'Heavy Rain', color: '#6366F1', icon: 'rainy' })
+                if (weather?.description?.toLowerCase().includes('storm') || weather?.description?.toLowerCase().includes('thunder')) alerts.push({ text: 'Storm Warning', color: '#F59E0B', icon: 'thunderstorm' })
                 
                 return (
                   <div className="bg-white rounded-2xl p-3 shadow-sm border border-[#eceef0]">
@@ -790,11 +785,12 @@ export default function HomePage() {
                     <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
                       {alerts.length === 0 ? (
                         <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl" style={{ background: '#10B98110' }}>
-                          <span className="text-[10px] font-bold text-[#10B981]">✅ No active alerts</span>
+                          <span className="material-symbols-outlined text-[13px] text-[#10B981]">check_circle</span>
+                          <span className="text-[10px] font-bold text-[#10B981]">No active alerts</span>
                         </div>
                       ) : alerts.map((a, i) => (
                         <div key={i} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl flex-shrink-0" style={{ background: a.color + '10', border: `1px solid ${a.color}30` }}>
-                          <span>{a.icon}</span>
+                          <span className="material-symbols-outlined text-[14px]" style={{ color: a.color }}>{a.icon}</span>
                           <span className="text-[10px] font-bold whitespace-nowrap" style={{ color: a.color }}>{a.text}</span>
                         </div>
                       ))}

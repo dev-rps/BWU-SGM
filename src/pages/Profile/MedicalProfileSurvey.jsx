@@ -327,9 +327,20 @@ export default function MedicalProfileSurvey({ uid, userName, onClose, onSaved }
                   <div>
                     <span className="text-[10px] font-bold text-[#6B7280] block mb-1">Age</span>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={3}
                       value={age}
-                      onChange={e => setAge(e.target.value)}
+                      onKeyDown={e => {
+                        if (['e', 'E', '+', '-', '.', ' '].includes(e.key)) e.preventDefault()
+                      }}
+                      onChange={e => {
+                        const clean = e.target.value.replace(/\D/g, '')
+                        if (clean === '' || (parseInt(clean, 10) >= 0 && parseInt(clean, 10) <= 125)) {
+                          setAge(clean)
+                        }
+                      }}
                       placeholder="e.g. 24"
                       className="w-full h-12 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-3 text-center text-sm font-bold text-[#111827] outline-none focus:border-[#10B981]"
                     />
@@ -337,9 +348,20 @@ export default function MedicalProfileSurvey({ uid, userName, onClose, onSaved }
                   <div>
                     <span className="text-[10px] font-bold text-[#6B7280] block mb-1">Height (cm)</span>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={3}
                       value={height}
-                      onChange={e => setHeight(e.target.value)}
+                      onKeyDown={e => {
+                        if (['e', 'E', '+', '-', '.', ' '].includes(e.key)) e.preventDefault()
+                      }}
+                      onChange={e => {
+                        const clean = e.target.value.replace(/\D/g, '')
+                        if (clean === '' || (parseInt(clean, 10) >= 0 && parseInt(clean, 10) <= 260)) {
+                          setHeight(clean)
+                        }
+                      }}
                       placeholder="e.g. 172"
                       className="w-full h-12 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-3 text-center text-sm font-bold text-[#111827] outline-none focus:border-[#10B981]"
                     />
@@ -347,9 +369,23 @@ export default function MedicalProfileSurvey({ uid, userName, onClose, onSaved }
                   <div>
                     <span className="text-[10px] font-bold text-[#6B7280] block mb-1">Weight (kg)</span>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
+                      maxLength={5}
                       value={weight}
-                      onChange={e => setWeight(e.target.value)}
+                      onKeyDown={e => {
+                        if (['e', 'E', '+', '-', ' '].includes(e.key)) e.preventDefault()
+                      }}
+                      onChange={e => {
+                        // Allow only digits and at most one decimal point
+                        let clean = e.target.value.replace(/[^0-9.]/g, '')
+                        const parts = clean.split('.')
+                        if (parts.length > 2) clean = `${parts[0]}.${parts.slice(1).join('')}`
+                        const num = parseFloat(clean)
+                        if (clean === '' || clean === '.' || (!isNaN(num) && num >= 0 && num <= 350)) {
+                          setWeight(clean)
+                        }
+                      }}
                       placeholder="e.g. 68"
                       className="w-full h-12 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-3 text-center text-sm font-bold text-[#111827] outline-none focus:border-[#10B981]"
                     />

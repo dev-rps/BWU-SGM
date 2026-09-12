@@ -47,3 +47,7 @@ ENV/
 env/
 *_backup_*.pkl
 ml_model/*_backup_*.pkl
+
+# Large Machine Learning Models (>100MB GitHub limit)
+*.onnx
+ml_model/voices/*.onnx

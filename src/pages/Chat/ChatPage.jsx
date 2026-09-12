@@ -27,10 +27,13 @@ import {
   detectEmergency,
   detectLanguage,
   getQuickActions,
+  getBotReply,
   LANGUAGES,
 } from '../../services/momoAI'
 import { askMomo, analyzeMedicalEmergencyWithGemini, MOMO_ERROR_FALLBACK } from '../../services/gemini'
-import { reverseGeocode } from '../../services/nominatim'
+import { reverseGeocode, searchPlaces } from '../../services/nominatim'
+import { findNearbyMechanics } from '../../services/mechanicService'
+import { loadContacts } from '../../services/contactsService'
 
 import {
   detectMedicalEmergency,
@@ -39,9 +42,34 @@ import {
   sendMedicalWhatsApp,
   callNumber,
 } from '../../services/medicalEmergency'
-import { loadMedicalProfile } from '../../services/medicalService'
+import { loadMedicalProfile, hasMedicalData } from '../../services/medicalService'
+import { speak as playPiperTTS, stopSpeaking as stopAllTTS, checkPiperHealth, createSpeechQueue } from '../../services/ttsService'
 
 const INTRO_KEY = 'momo_introduced_v1'
+const CHAT_STORAGE_KEY = 'momo_chat_history_v2'
+
+const DEFAULT_WELCOME_MSG = {
+  id: 1,
+  sender: 'bot',
+  streaming: false,
+  text: "Hello! I'm Momo, your Safety Guardian! \n\nAsk me anything about safety, emergencies, or how to use this app. I'm always here for you!",
+  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  quickActions: [],
+}
+
+function loadSavedMessages() {
+  try {
+    const raw = localStorage.getItem(CHAT_STORAGE_KEY)
+    if (!raw) return [DEFAULT_WELCOME_MSG]
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.map(m => ({ ...m, streaming: false }))
+    }
+    return [DEFAULT_WELCOME_MSG]
+  } catch {
+    return [DEFAULT_WELCOME_MSG]
+  }
+}
 
 // â”€â”€â”€ Default Settings â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DEFAULT_SETTINGS = {
@@ -60,16 +88,17 @@ function loadSettings() {
   } catch { return DEFAULT_SETTINGS }
 }
 
-// â”€â”€â”€ Quick Chips â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Quick Chips ─────────────────────────────────────────────────────────────
 const QUICK_CHIPS = [
-  { label: ' Flood advice',      text: 'What should I do during a flood?' },
-  { label: ' Emergency numbers', text: 'What are the emergency numbers in India?' },
-  { label: ' How to SOS',        text: 'How do I trigger an SOS alert?' },
-  { label: ' Women safety',      text: 'Give me women safety tips' },
-  { label: ' Find hospital',     text: 'How do I find the nearest hospital?' },
-  { label: 'ï¸ Route safety',     text: 'How is route safety score calculated?' },
-  { label: ' Cyber safety',      text: 'How can I stay safe from online scams?' },
-  { label: ' First aid',         text: 'Give me basic first aid tips' },
+  { icon: 'medical_services', label: 'Medical Profile',     text: 'What is in my medical profile?' },
+  { icon: 'contacts',         label: 'Emergency Contacts',  text: 'Who are my emergency contacts?' },
+  { icon: 'build',            label: 'Find Mechanic',       text: 'My car broke down, locate nearest mechanic' },
+  { icon: 'near_me',          label: 'Safe Route',          text: 'Show me road to Howrah' },
+  { icon: 'emergency',        label: 'Emergency Numbers',   text: 'What are the emergency numbers in India?' },
+  { icon: 'sos',              label: 'How to SOS',          text: 'How do I trigger an SOS alert?' },
+  { icon: 'shield',           label: 'Women Safety',        text: 'Give me women safety tips' },
+  { icon: 'local_hospital',   label: 'Find Hospital',       text: 'Find nearest hospital and call ambulance' },
+  { icon: 'health_and_safety',label: 'First Aid',           text: 'Give me basic first aid tips' },
 ]
 
 // â”€â”€â”€ Render markdown-style bold + newlines â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -100,28 +129,12 @@ function renderText(text) {
 }
 
 // â”€â”€â”€ TTS â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function speakText(text, settings, langCode) {
-  if (!window.speechSynthesis || !settings.voiceEnabled) return
-  window.speechSynthesis.cancel()
-
-  // Strip markdown bold markers for clean speech
-  const clean = text.replace(/\*\*/g, '').replace(/\n/g, ' ')
-  const utt   = new SpeechSynthesisUtterance(clean)
-  utt.rate   = settings.speechRate
-  utt.pitch  = settings.speechPitch
-  utt.volume = settings.speechVolume
-  utt.lang   = LANGUAGES[langCode]?.code || 'en-IN'
-
-  // Try to pick a female voice for Momo's personality
-  const voices = window.speechSynthesis.getVoices()
-  const female = voices.find(v =>
-    /female|woman|girl|zira|siri|samantha|heera|veena|lekha/i.test(v.name)
-  ) || voices.find(v =>
-    v.lang.startsWith(utt.lang.split('-')[0])
-  )
-  if (female) utt.voice = female
-
-  window.speechSynthesis.speak(utt)
+function speakText(text, settings) {
+  if (!settings?.voiceEnabled) return
+  // Route all speech through Piper Ryan High -- auto-falls back if backend offline
+  import('../../services/ttsService').then(({ speak }) => {
+    speak(text).catch(() => {})
+  })
 }
 
 // â”€â”€â”€ Intro Screen (shown once) â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -202,6 +215,326 @@ function IntroScreen({ onDone }) {
   )
 }
 
+// ── Call Confirmation Modal (Shows recipient name before opening dialpad) ────
+function CallConfirmModal({ isOpen, onClose, onConfirm, name, phone, role }) {
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-[#E5E7EB] animate-scale-up">
+        {/* Modal Header */}
+        <div className="px-5 py-4 bg-gradient-to-r from-[#1B4332] to-[#2D6A4F] text-white flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+              <span className="material-symbols-outlined icon-filled" style={{ fontSize: 20 }}>call</span>
+            </div>
+            <div>
+              <h3 className="font-black text-sm">Confirm Phone Call</h3>
+              <p className="text-[10px] text-white/80">Safety Guardian Direct Dial</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center">
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-5 space-y-4">
+          <div className="p-4 bg-[#F0FDF4] rounded-2xl border border-[#BBF7D0] flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-[#10B981] text-white flex items-center justify-center font-black text-lg flex-shrink-0 shadow-sm">
+              <span className="material-symbols-outlined" style={{ fontSize: 26 }}>person</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-black text-[#059669] uppercase tracking-wider">Calling Contact</p>
+              <p className="text-base font-black text-[#111827] truncate">{name || 'Emergency Number'}</p>
+              {role && <p className="text-xs text-[#4B5563] font-medium truncate">{role}</p>}
+              <p className="text-sm font-bold text-[#065F46] mt-0.5 tracking-wide">{phone}</p>
+            </div>
+          </div>
+
+          <p className="text-xs text-[#6B7280] leading-relaxed">
+            Safety Guardian will open your phone&apos;s dialpad to place this call. Tap below to proceed.
+          </p>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 py-3 rounded-2xl border border-[#D1D5DB] text-xs font-bold text-[#4B5563] hover:bg-slate-50 active:scale-95 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              className="flex-1 py-3 rounded-2xl bg-[#10B981] hover:bg-[#059669] text-white text-xs font-black shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined icon-filled" style={{ fontSize: 18 }}>call</span>
+              <span>Call Now</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Mechanic & Vehicle Breakdown Card ───────────────────────────────────────
+function MechanicBreakdownCard({ mechanicEmergency, onDismiss, onCall, onNavigate }) {
+  if (!mechanicEmergency) return null
+
+  return (
+    <div className="mx-4 mb-3 mt-2 rounded-3xl overflow-hidden shadow-xl border-2 border-amber-500 bg-white animate-slide-up">
+      {/* Header */}
+      <div className="px-4 py-3 bg-gradient-to-r from-amber-600 to-amber-500 text-white flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-lg flex-shrink-0 animate-pulse">
+            🔧
+          </span>
+          <div className="min-w-0">
+            <span className="text-[9px] font-black uppercase tracking-wider bg-white/25 px-2 py-0.5 rounded-full">
+              Vehicle Assistance
+            </span>
+            <p className="text-xs font-bold truncate mt-0.5 text-white/95">
+              Nearby Mechanics &amp; Garages
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white flex-shrink-0 ml-2"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+        </button>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {/* Safety tip */}
+        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-2.5">
+          <span className="material-symbols-outlined text-amber-600 icon-filled flex-shrink-0" style={{ fontSize: 18 }}>
+            warning
+          </span>
+          <p className="text-[11px] text-amber-950 font-medium leading-tight">
+            Turn on your hazard lights, stay on the road shoulder or safe pavement, and call the nearest garage below.
+          </p>
+        </div>
+
+        {/* List of Mechanics */}
+        {mechanicEmergency.loading ? (
+          <div className="flex items-center justify-center py-4 gap-2">
+            <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs text-[#6B7280] font-bold">Scanning for automobile mechanics &amp; garages…</p>
+          </div>
+        ) : mechanicEmergency.places?.length > 0 ? (
+          <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-0.5">
+            {mechanicEmergency.places.slice(0, 5).map((place, idx) => (
+              <div
+                key={idx}
+                className="p-3 rounded-2xl bg-[#F9FAFB] border border-[#E5E7EB] hover:bg-slate-50 transition-colors flex items-center justify-between"
+              >
+                <div className="min-w-0 flex-1 pr-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-amber-600 text-sm">build</span>
+                    <p className="text-xs font-black text-[#111827] truncate">{place.name}</p>
+                  </div>
+                  <p className="text-[10px] text-[#6B7280] truncate mt-0.5">
+                    📍 {place.distanceLabel} · {place.specialty || place.address}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {place.phone && (
+                    <button
+                      onClick={() => onCall(place.name, place.phone, place.specialty || 'Mechanic')}
+                      className="px-2.5 h-8 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-[11px] font-black flex items-center gap-1 active:scale-90 shadow-sm"
+                      title="Call Mechanic"
+                    >
+                      <span className="material-symbols-outlined icon-filled" style={{ fontSize: 14 }}>call</span>
+                      <span>Call</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onNavigate(place)}
+                    className="px-2.5 h-8 rounded-xl bg-[#004ac6] hover:bg-[#003bb0] text-white text-[11px] font-black flex items-center gap-1 active:scale-90 shadow-sm"
+                    title="Navigate to Garage"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>near_me</span>
+                    <span>Route</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-[#6B7280] text-center py-2">
+            No mechanics found in immediate radius. Call Highway Helpline: <strong>1033</strong>
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Hospital & Emergency Medical Facility Card ─────────────────────────────
+function HospitalEmergencyCard({ hospitalEmergency, onDismiss, onCall, onNavigate }) {
+  if (!hospitalEmergency) return null
+
+  return (
+    <div className="mx-4 mb-3 mt-2 rounded-3xl overflow-hidden shadow-xl border-2 border-red-500 bg-white animate-slide-up">
+      {/* Header */}
+      <div className="px-4 py-3 bg-gradient-to-r from-red-600 to-rose-600 text-white flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-lg flex-shrink-0 animate-pulse">
+            🏥
+          </span>
+          <div className="min-w-0">
+            <span className="text-[9px] font-black uppercase tracking-wider bg-white/25 px-2 py-0.5 rounded-full">
+              Emergency Medical Care
+            </span>
+            <p className="text-xs font-bold truncate mt-0.5 text-white/95">
+              Nearby Hospitals &amp; Trauma Centers
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white flex-shrink-0 ml-2"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+        </button>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {/* Quick Emergency Hotlines */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => onCall('108 Ambulance Dispatch', '108', 'Emergency Ambulance')}
+            className="flex-1 py-2.5 px-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+          >
+            <span className="material-symbols-outlined icon-filled" style={{ fontSize: 16 }}>ambulance</span>
+            <span>Call 108 (Ambulance)</span>
+          </button>
+          <button
+            onClick={() => onCall('National Emergency', '112', 'SOS')}
+            className="flex-1 py-2.5 px-3 rounded-2xl bg-[#004ac6] hover:bg-[#003bb0] text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+          >
+            <span className="material-symbols-outlined icon-filled" style={{ fontSize: 16 }}>emergency</span>
+            <span>Call 112 (SOS)</span>
+          </button>
+        </div>
+
+        {/* List of Hospitals with Call & Route Buttons */}
+        {hospitalEmergency.loading ? (
+          <div className="flex items-center justify-center py-4 gap-2">
+            <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs text-[#6B7280] font-bold">Scanning for verified hospitals &amp; emergency centers…</p>
+          </div>
+        ) : hospitalEmergency.places?.length > 0 ? (
+          <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-0.5">
+            {hospitalEmergency.places.slice(0, 5).map((place, idx) => (
+              <div
+                key={idx}
+                className="p-3 rounded-2xl bg-[#F9FAFB] border border-[#E5E7EB] hover:bg-slate-50 transition-colors flex items-center justify-between"
+              >
+                <div className="min-w-0 flex-1 pr-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-red-600 text-sm">local_hospital</span>
+                    <p className="text-xs font-black text-[#111827] truncate">{place.name}</p>
+                  </div>
+                  <p className="text-[10px] text-[#6B7280] truncate mt-0.5">
+                    📍 {place.distanceLabel} {place.etaMinutes ? `· ~${place.etaMinutes} min` : ''} · {place.openStatus || '24/7 Emergency'}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => onCall(place.name, place.phone || '108', 'Hospital')}
+                    className="px-2.5 h-8 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-[11px] font-black flex items-center gap-1 active:scale-90 shadow-sm transition-all"
+                    title={place.phone ? `Call ${place.name}` : 'Call 108'}
+                  >
+                    <span className="material-symbols-outlined icon-filled" style={{ fontSize: 14 }}>call</span>
+                    <span>{place.phone ? 'Call' : '108'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => onNavigate(place)}
+                    className="px-2.5 h-8 rounded-xl bg-[#004ac6] hover:bg-[#003bb0] text-white text-[11px] font-black flex items-center gap-1 active:scale-90 shadow-sm transition-all"
+                    title="Navigate to Hospital"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>near_me</span>
+                    <span>Route</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-[#6B7280] text-center py-2">
+            No hospitals located in immediate radius. Call Emergency Ambulance: <strong>108</strong>
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Navigation Launch Card ──────────────────────────────────────────────────
+function NavigationLaunchCard({ navCard, onDismiss, onStartNavigation }) {
+  if (!navCard) return null
+
+  return (
+    <div className="mx-4 mb-3 mt-2 rounded-3xl overflow-hidden shadow-xl border-2 border-[#1B4332] bg-white animate-slide-up">
+      <div className="px-4 py-3 bg-gradient-to-r from-[#1B4332] to-[#2D6A4F] text-white flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-base flex-shrink-0">
+            🗺️
+          </span>
+          <div className="min-w-0">
+            <span className="text-[9px] font-black uppercase tracking-wider bg-white/25 px-2 py-0.5 rounded-full">
+              Safe Route Found
+            </span>
+            <p className="text-xs font-bold truncate mt-0.5 text-white/95">
+              {navCard.destination?.name || 'Destination'}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white flex-shrink-0"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+        </button>
+      </div>
+
+      <div className="p-4 space-y-3">
+        <div className="flex items-start gap-2.5">
+          <span className="material-symbols-outlined text-[#059669] icon-filled flex-shrink-0 mt-0.5" style={{ fontSize: 20 }}>
+            location_on
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-black text-[#111827]">{navCard.destination?.name}</p>
+            <p className="text-[11px] text-[#6B7280] truncate mt-0.5">
+              {navCard.destination?.displayName || navCard.destination?.address}
+            </p>
+            {navCard.distanceText && (
+              <p className="text-[10px] text-[#059669] font-bold mt-1">
+                📍 {navCard.distanceText} · Tap below to calculate safe corridors
+              </p>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={onStartNavigation}
+          className="w-full h-11 rounded-2xl bg-[#1B4332] hover:bg-[#2D6A4F] text-white font-black text-xs flex items-center justify-center gap-2 active:scale-95 shadow-md shadow-emerald-900/20 transition-all"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>explore</span>
+          <span>Open Safe Routes &amp; Navigate</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── WhatsApp Confirmation Modal ──────────────────────────────────────────────
 function WhatsAppConfirmModal({ isOpen, onClose, onConfirm, pharmacy, messageText }) {
   if (!isOpen) return null
@@ -262,7 +595,7 @@ function WhatsAppConfirmModal({ isOpen, onClose, onConfirm, pharmacy, messageTex
 }
 
 // ── Medical Emergency Card Component ─────────────────────────────────────────
-function MedicalEmergencyCard({ medEmergency, onDismiss, userName, userLocation, medicalProfile }) {
+function MedicalEmergencyCard({ medEmergency, onDismiss, userName, userLocation, medicalProfile, onInitiateCall, onNavigate }) {
   const [selectedPharmacy, setSelectedPharmacy] = useState(null)
   const [confirmModalOpen, setConfirmModalOpen] = useState(false)
   const [previewMsg, setPreviewMsg] = useState('')
@@ -393,7 +726,7 @@ function MedicalEmergencyCard({ medEmergency, onDismiss, userName, userLocation,
             </div>
           )}
 
-          {/* Primary Quick Emergency Call Buttons */}
+          {/* Primary Quick Emergency Call Buttons — Immediately Opens Dialpad */}
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => callNumber('108')}
@@ -411,7 +744,7 @@ function MedicalEmergencyCard({ medEmergency, onDismiss, userName, userLocation,
             </button>
           </div>
 
-          {/* Doctor Call if available in Profile */}
+          {/* Doctor Call if available in Profile — Immediately Opens Dialpad */}
           {medicalProfile?.doctorPhone && (
             <button
               onClick={() => callNumber(medicalProfile.doctorPhone)}
@@ -457,21 +790,33 @@ function MedicalEmergencyCard({ medEmergency, onDismiss, userName, userLocation,
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                      {place.phone && (
+                      <button
+                        onClick={() => callNumber(place.phone || '108')}
+                        className="px-2.5 h-8 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-[11px] font-black flex items-center gap-1 active:scale-90 shadow-sm transition-all"
+                        title={place.phone ? `Call ${place.name}` : "Call 108 Ambulance"}
+                      >
+                        <span className="material-symbols-outlined icon-filled" style={{ fontSize: 14 }}>call</span>
+                        <span>{place.phone ? 'Call' : '108'}</span>
+                      </button>
+
+                      {onNavigate && (
                         <button
-                          onClick={() => callNumber(place.phone)}
-                          className="w-8 h-8 rounded-xl bg-[#10B981] text-white flex items-center justify-center active:scale-90 shadow-sm"
-                          title="Call directly"
+                          onClick={() => onNavigate(place)}
+                          className="px-2.5 h-8 rounded-xl bg-[#004ac6] hover:bg-[#003bb0] text-white text-[11px] font-black flex items-center gap-1 active:scale-90 shadow-sm transition-all"
+                          title="Navigate to Hospital"
                         >
-                          <span className="material-symbols-outlined icon-filled" style={{ fontSize: 15 }}>call</span>
+                          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>near_me</span>
+                          <span>Route</span>
                         </button>
                       )}
+
                       <button
                         onClick={() => handleOpenConfirm(place)}
-                        className="px-2.5 h-8 rounded-xl bg-[#25D366] text-white text-[11px] font-black flex items-center gap-1 active:scale-90 shadow-sm"
+                        className="px-2 h-8 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-[11px] font-black flex items-center gap-1 active:scale-90 shadow-sm transition-all"
                         title="Send pre-filled emergency WhatsApp"
                       >
-                        <span>WhatsApp</span>
+                        <span className="text-xs">💬</span>
+                        <span>Alert</span>
                       </button>
                     </div>
                   </div>
@@ -498,7 +843,7 @@ function MedicalEmergencyCard({ medEmergency, onDismiss, userName, userLocation,
 // ──────────────────────────────────────────────────────────────────────────────────────────
 export default function ChatPage() {
   const navigate   = useNavigate()
-  const { setSosActive, emergencyContacts, userLocation, user } = useAppStore()
+  const { setSosActive, emergencyContacts, userLocation, user, setDestination } = useAppStore()
 
   // ── Intro screen ──────────────────────────────────────────────────────────
   const [showIntro, setShowIntro] = useState(() => !localStorage.getItem(INTRO_KEY))
@@ -509,17 +854,61 @@ export default function ChatPage() {
     setShowIntro(false)
   }
 
+  // ── Call Confirmation Modal State ─────────────────────────────────────────
+  const [callModal, setCallModal] = useState({ isOpen: false, name: '', phone: '', role: '' })
+  const initiateCall = useCallback((name, phone, role = '') => {
+    if (!phone) return
+    setCallModal({ isOpen: true, name: name || 'Emergency Helpline', phone, role })
+  }, [])
+  const confirmCall = useCallback(() => {
+    if (callModal.phone) {
+      callNumber(callModal.phone)
+    }
+    setCallModal({ isOpen: false, name: '', phone: '', role: '' })
+  }, [callModal.phone])
+
+  // ── Mechanic & Breakdown State ─────────────────────────────────────────────
+  const [mechanicEmergency, setMechanicEmergency] = useState(null)
+  const dismissMechanicEmergency = useCallback(() => setMechanicEmergency(null), [])
+
+  // ── Hospital Emergency State ───────────────────────────────────────────────
+  const [hospitalEmergency, setHospitalEmergency] = useState(null)
+  const dismissHospitalEmergency = useCallback(() => setHospitalEmergency(null), [])
+
+  // ── Navigation Launch Card State ───────────────────────────────────────────
+  const [navCard, setNavCard] = useState(null)
+  const dismissNavCard = useCallback(() => setNavCard(null), [])
+
   // ── Medical Profile & Emergency State ─────────────────────────────────────
   const [medEmergency, setMedEmergency] = useState(null)
   const [medicalProfile, setMedicalProfile] = useState(null)
 
   useEffect(() => {
+    let active = true
+
     async function fetchProfile() {
-      const uid = auth?.currentUser?.uid || ''
+      let uid = user?.uid || user?.id || ''
+      if (!uid) {
+        try {
+          const { data } = await supabase.auth.getUser()
+          uid = data?.user?.id || ''
+        } catch {}
+      }
       const prof = await loadMedicalProfile(uid)
-      setMedicalProfile(prof)
+      if (active) setMedicalProfile(prof)
     }
+
     fetchProfile()
+
+    const handleUpdate = () => {
+      fetchProfile()
+    }
+    window.addEventListener('sg_medical_profile_updated', handleUpdate)
+
+    return () => {
+      active = false
+      window.removeEventListener('sg_medical_profile_updated', handleUpdate)
+    }
   }, [user])
 
   const handleMedicalEmergency = useCallback(async (medicine, condition, targetFacility = 'all', profile = null) => {
@@ -535,41 +924,25 @@ export default function ChatPage() {
         _profile: profile,
       }))
 
-      // Auto-contact nearest hospital/pharmacy phone or fallback to doctor/108
-      const nearestWithPhone = places.find(p => p.phone)
-      if (nearestWithPhone && nearestWithPhone.phone) {
-        callNumber(nearestWithPhone.phone)
-      } else if (profile?.doctorPhone) {
-        callNumber(profile.doctorPhone)
-      } else {
-        callNumber('108')
-      }
-
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user && places.length > 0) {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (authUser && places.length > 0) {
         supabase
           .from('sos_events')
           .insert({
-            user_id: user.id,
+            user_id: authUser.id,
             status: 'pending',
             emergency_type: 'medical',
             latitude: lat,
             longitude: lng,
             medical_summary: `${condition || 'Medical Need'}${medicine ? ` - Medicine: ${medicine}` : ''} - Nearest: ${places[0]?.name || 'Unknown'}`,
-            user_name: user.user_metadata?.full_name || user.email || 'Guardian User',
+            user_name: authUser.user_metadata?.full_name || authUser.email || 'Guardian User',
           })
           .then(() => {})
           .catch(() => {})
       }
     } catch (err) {
-      console.warn('[handleMedicalEmergency auto-dial error]:', err)
+      console.warn('[handleMedicalEmergency search error]:', err)
       setMedEmergency(prev => ({ ...prev, loading: false }))
-      // Fallback auto-contact on search failure
-      if (profile?.doctorPhone) {
-        callNumber(profile.doctorPhone)
-      } else {
-        callNumber('108')
-      }
     }
   }, [userLocation])
 
@@ -578,6 +951,7 @@ export default function ChatPage() {
   // ── Settings ──────────────────────────────────────────────────────────────
   const [settings, setSettings] = useState(loadSettings)
   const [showSettings, setShowSettings] = useState(false)
+  const [showMedCard, setShowMedCard] = useState(false)
 
   const updateSettings = (patch) => {
     setSettings(prev => {
@@ -587,32 +961,38 @@ export default function ChatPage() {
     })
   }
 
-  // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const [messages, setMessages]     = useState([{
-    id: 1, sender: 'bot', streaming: false,
-    text: "Hello! I'm Momo, your Safety Guardian! \n\nAsk me anything about safety, emergencies, or how to use this app. I'm always here for you!",
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    quickActions: [],
-  }])
+  // ── Messages (Persisted in localStorage) ───────────────────────────────────
+  const [messages, setMessages]     = useState(loadSavedMessages)
   const [input, setInput]           = useState('')
   const [isTyping, setIsTyping]     = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [lastUserMsg, setLastUserMsg] = useState('')
 
-  // â”€â”€ Voice input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Voice input ─────────────────────────────────────────────────────────────
   const recognitionRef = useRef(null)
   const textareaRef    = useRef(null)
   const messagesEndRef = useRef(null)
   const messagesRef   = useRef([])          // always-current messages for sendMessage
   const streamRef      = useRef(null)
   const sendMessageRef = useRef(null)       // ref to latest sendMessage for Enter key
+  const speechQueueRef = useRef(null)       // streaming TTS sentence queue
   const [isListening, setIsListening]   = useState(false)
   const [speechError, setSpeechError]   = useState('')
 
-  // â”€â”€ Auto-scroll â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Auto-scroll & Save to LocalStorage ──────────────────────────────────────
   useEffect(() => {
     messagesRef.current = messages   // sync ref so sendMessage always sees latest
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+
+    try {
+      if (Array.isArray(messages) && messages.length > 0) {
+        // Save history without lingering streaming states, keep latest 60 messages
+        const clean = messages.slice(-60).map(m => ({ ...m, streaming: false }))
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(clean))
+      }
+    } catch (err) {
+      console.warn('[ChatStorage] Save failed:', err)
+    }
   }, [messages, isTyping, medEmergency])
 
   // ── Reverse geocode user location ─────────────────────────────────────────
@@ -680,65 +1060,43 @@ export default function ChatPage() {
     }
   }, [isListening, settings.language])
 
-  // â”€â”€ TTS controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── TTS controls (Piper Ryan-High Primary + Web Speech Fallback) ─────────────
   const speak = useCallback((text) => {
     if (!settings.voiceEnabled || !text) return
-    if (!window.speechSynthesis) return
-
-    // Cancel any previous speech immediately
-    window.speechSynthesis.cancel()
-
-    // Robust regex to strip all emojis and special characters (so TTS doesn't speak them)
-    const clean = text
-      .replace(/\*\*/g, '')
-      .replace(/\n/g, ' ')
-      .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '')
-      .trim()
-
-    if (!clean) return
-
-    const utt = new SpeechSynthesisUtterance(clean)
-    utt.rate   = settings.speechRate
-    utt.pitch  = settings.speechPitch
-    utt.volume = settings.speechVolume
-    utt.lang   = LANGUAGES[settings.language]?.code || 'en-IN'
-
-    utt.onstart = () => setIsSpeaking(true)
-    utt.onend   = () => setIsSpeaking(false)
-    utt.onerror = () => setIsSpeaking(false)
-
-    const doSpeak = () => {
-      const voices = window.speechSynthesis.getVoices()
-      const match = voices.find(v =>
-        /female|woman|zira|siri|samantha|heera|veena|lekha|karen|moira/i.test(v.name)
-      ) || voices.find(v => v.lang.startsWith(utt.lang.split('-')[0]))
-
-      if (match) utt.voice = match
-
-      // Crucial: Chrome has a bug where synchronous cancel() followed by speak()
-      // causes the utterance to be ignored. Wrapping speak in a setTimeout resolves this.
-      setTimeout(() => {
-        window.speechSynthesis.speak(utt)
-      }, 60)
-    }
-
-    if (window.speechSynthesis.getVoices().length > 0) {
-      doSpeak()
-    } else {
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.onvoiceschanged = null
-        doSpeak()
-      }
-    }
+    playPiperTTS(text, {
+      onStart: () => setIsSpeaking(true),
+      onEnd:   () => setIsSpeaking(false),
+      rate:    settings.speechRate,
+      pitch:   settings.speechPitch,
+      volume:  settings.speechVolume,
+      lang:    LANGUAGES[settings.language]?.code || 'en-IN',
+    })
   }, [settings])
 
-  const stopSpeaking = () => {
-    window.speechSynthesis?.cancel()
+  const stopSpeaking = useCallback(() => {
+    if (speechQueueRef.current) {
+      speechQueueRef.current.stop()
+      speechQueueRef.current = null
+    }
+    stopAllTTS()
     setIsSpeaking(false)
-  }
+  }, [])
 
   // Cleanup TTS on unmount
-  useEffect(() => () => { window.speechSynthesis?.cancel() }, [])
+  useEffect(() => () => { stopAllTTS() }, [])
+
+  // ── Call Mechanic with Voice Announcement ("Calling [Name]") ─────────────
+  const handleMechanicCall = useCallback((name, phone) => {
+    if (!phone) return
+    const displayName = name || 'Mechanic'
+    if (settings.voiceEnabled) {
+      speak(`Calling ${displayName}`)
+    }
+    // Open dialpad after voice announcement begins
+    setTimeout(() => {
+      callNumber(phone)
+    }, 600)
+  }, [settings.voiceEnabled, speak])
 
   // â”€â”€ Streaming text reveal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const streamBotReply = useCallback((fullText, msgId, actions, isSoftEmergency) => {
@@ -780,22 +1138,57 @@ export default function ChatPage() {
     sendMessage(lastUserMsg, true)
   }, [lastUserMsg])
 
-  // â”€â”€ Clear chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Clear chat ─────────────────────────────────────────────────────────────
   const clearChat = () => {
-    window.speechSynthesis?.cancel()
+    stopSpeaking()
+    try {
+      localStorage.removeItem(CHAT_STORAGE_KEY)
+    } catch {}
     setMessages([{
       id: Date.now(), sender: 'bot', streaming: false,
-      text: "Chat cleared!  I'm still here â€” ask me anything!",
+      text: "Chat cleared!  I'm still here — ask me anything!",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       quickActions: [],
     }])
   }
 
-  // â”€â”€ Quick actions handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Quick actions handler ───────────────────────────────────────────────────
   const handleQuickAction = (action) => {
+    if (!action) return
+
+    if (action.startsWith('CALL_MECHANIC:')) {
+      const parts = action.split(':')
+      const name = decodeURIComponent(parts[1] || 'Mechanic')
+      const phone = parts[2] || ''
+      handleMechanicCall(name, phone)
+      return
+    }
+
+    if (action.startsWith('CALL_CONTACT:')) {
+      const phone = action.replace('CALL_CONTACT:', '')
+      callNumber(phone)
+      return
+    }
+
+    if (action.startsWith('CALL_CONFIRM:')) {
+      const parts = action.split(':')
+      const name = decodeURIComponent(parts[1] || 'Emergency Helpline')
+      const phone = parts[2] || ''
+      const role = decodeURIComponent(parts[3] || '')
+      if (/mechanic|garage|puncture|repair|roadside/i.test(role) || /mechanic|garage|puncture|repair/i.test(name)) {
+        handleMechanicCall(name, phone)
+      } else {
+        callNumber(phone)
+      }
+      return
+    }
+
     switch (action) {
       case 'CALL_108':
         callNumber('108')
+        break
+      case 'CALL_112':
+        callNumber('112')
         break
       case 'SOS':
         setSosActive(true)
@@ -803,13 +1196,11 @@ export default function ChatPage() {
         break
       case 'HOSPITAL':
       case 'PHARMACY':
-        navigate('/')
-        break
       case 'POLICE':
         navigate('/')
         break
       case 'ROUTE':
-        navigate('/search')
+        navigate('/routes')
         break
       case 'CONTACTS':
         navigate('/profile')
@@ -817,15 +1208,21 @@ export default function ChatPage() {
       case 'REPORT':
         navigate('/reports')
         break
+      default:
+        if (action.startsWith('CALL_')) {
+          const num = action.replace('CALL_', '')
+          callNumber(num)
+        }
+        break
     }
   }
 
-  // -- Send message (Gemini-powered, bug-free) --------------------------------
+  // ── Send message (Gemini-powered + Real-time Mechanics & Navigation) ──────
   const sendMessage = useCallback(async (text, isRegenerate = false) => {
     const trimmed = (text || input).trim()
     if (!trimmed || isTyping) return
 
-    window.speechSynthesis?.cancel()
+    stopSpeaking()
     setIsSpeaking(false)
 
     const { isHard, isSoft } = detectEmergency(trimmed)
@@ -856,7 +1253,235 @@ export default function ChatPage() {
 
     setIsTyping(true)
 
-    // 1. Deep Gemini Medical Triaging with User's Medical Profile Context
+    // A0. Check for Direct Phone Call Intent ("call 108", "call 112", "call dad", "call [contact]")
+    const callMatch = trimmed.match(/^call\s+(.+)/i)
+    if (callMatch && callMatch[1]) {
+      const target = callMatch[1].trim()
+      const targetLower = target.toLowerCase()
+
+      // 1. Call 108 (Ambulance) — Immediately Opens Dialpad
+      if (/^(108|ambulance|hospital helpline)/i.test(targetLower)) {
+        setIsTyping(false)
+        const botReply = "Opening dialpad to call 108 Ambulance immediately! 🚑"
+        setMessages(prev => [
+          ...prev,
+          { id: botId, sender: 'bot', streaming: false, text: botReply, timestamp: ts, quickActions: [{ label: '📞 Call 108', action: 'CALL_108' }] }
+        ])
+        if (settings.voiceEnabled && settings.autoPlayVoice) speak(botReply)
+        callNumber('108')
+        return
+      }
+
+      // 2. Call 112 (National Helpline / SOS) — Immediately Opens Dialpad
+      if (/^(112|police|emergency|sos)/i.test(targetLower)) {
+        setIsTyping(false)
+        const botReply = "Opening dialpad to call 112 Emergency Services immediately! 🚨"
+        setMessages(prev => [
+          ...prev,
+          { id: botId, sender: 'bot', streaming: false, text: botReply, timestamp: ts, quickActions: [{ label: '📞 Call 112', action: 'CALL_112' }] }
+        ])
+        if (settings.voiceEnabled && settings.autoPlayVoice) speak(botReply)
+        callNumber('112')
+        return
+      }
+
+      // 3. Call Doctor from Medical Profile — Immediately Opens Dialpad
+      if (/^(doctor|my doctor|physician)/i.test(targetLower) && medicalProfile?.doctorPhone) {
+        setIsTyping(false)
+        const docName = medicalProfile.doctorName || 'Doctor'
+        const botReply = `Opening dialpad to call Dr. ${docName} (${medicalProfile.doctorPhone}) immediately! 🩺`
+        setMessages(prev => [
+          ...prev,
+          { id: botId, sender: 'bot', streaming: false, text: botReply, timestamp: ts, quickActions: [{ label: `📞 Call ${docName}`, action: `CALL_${medicalProfile.doctorPhone}` }] }
+        ])
+        if (settings.voiceEnabled && settings.autoPlayVoice) speak(botReply)
+        callNumber(medicalProfile.doctorPhone)
+        return
+      }
+
+      // 4. Call Emergency Contact — Immediately Opens Dialpad
+      if (Array.isArray(emergencyContacts) && emergencyContacts.length > 0) {
+        const found = emergencyContacts.find(c =>
+          targetLower.includes(c.name.toLowerCase()) ||
+          (c.relationship && targetLower.includes(c.relationship.toLowerCase())) ||
+          targetLower === 'emergency contact' ||
+          targetLower === 'my contact' ||
+          targetLower === 'contact'
+        )
+        if (found && found.phone) {
+          setIsTyping(false)
+          const botReply = `Opening dialpad to call ${found.name} (${found.phone}) immediately! 📞`
+          setMessages(prev => [
+            ...prev,
+            { id: botId, sender: 'bot', streaming: false, text: botReply, timestamp: ts, quickActions: [{ label: `📞 Call ${found.name}`, action: `CALL_CONTACT:${found.phone}` }] }
+          ])
+          if (settings.voiceEnabled && settings.autoPlayVoice) speak(botReply)
+          callNumber(found.phone)
+          return
+        }
+      }
+    }
+
+    // A0.5 — Hospital / Nearest Medical Facility Request → Immediately dial nearest hospital/108 + show in-chat routes & cards
+    const isHospitalQuery = /(find|locate|nearest|nearby|where is|take me to|show me|i need a?)\s*(the\s*)?(hospital|emergency room|er\b|casualty|ambulance|medical help|medical facility|medical centre|medical center|clinic near)/i.test(trimmed)
+      || /^(hospital|nearest hospital|find hospital|hospitals|call ambulance|call 108|emergency hospital)\s*$/i.test(trimmed)
+      || /(hospital.*near\s*(me|here)|nearest.*hospital|ambulance.*now|need.*hospital|hospital.*emergency)/i.test(trimmed)
+
+    if (isHospitalQuery) {
+      setIsTyping(false)
+      const lat = userLocation?.lat || 22.7225
+      const lng = userLocation?.lng || 88.4815
+
+      // Show immediate loading card
+      setHospitalEmergency({
+        places: [],
+        loading: true,
+      })
+
+      let places = []
+      try {
+        places = await findNearbyMedicalHelp(lat, lng, 'hospital', 5000)
+      } catch (err) {
+        console.warn('Failed to find medical help:', err)
+      }
+
+      // Filter strictly for hospital/clinic facilities
+      const hospitalPlaces = (places || []).filter(p => p.type === 'hospital' || p.type === 'clinic')
+      const finalHospitals = hospitalPlaces.length > 0 ? hospitalPlaces : (places || [])
+
+      setHospitalEmergency({
+        places: finalHospitals.slice(0, 6),
+        loading: false,
+      })
+
+      const nearest = finalHospitals && finalHospitals.length > 0 ? finalHospitals[0] : null
+      const nearestHasPhone = Boolean(nearest && nearest.phone && nearest.phone !== '108')
+
+      // Intelligent dialpad decision:
+      // If the nearest hospital has a direct phone number, launch dialpad with that hospital!
+      // Otherwise launch with 108 National Ambulance Helpline!
+      const numberToCall = nearestHasPhone ? nearest.phone : '108'
+      callNumber(numberToCall)
+
+      const botReply = nearestHasPhone
+        ? `🏥 Located **${finalHospitals.length} hospitals** nearby! Dialing **${nearest.name}** (${nearest.distanceLabel}) on your phone dialpad.\n\nYou can review all nearby hospitals below with **Route** and **Call** buttons, or call 108 for ambulance dispatch.`
+        : nearest
+        ? `🚑 Dialing **108 Ambulance** immediately! The closest hospital to you is **${nearest.name}** (${nearest.distanceLabel} away).\n\nTap **Route** below to start navigation, or tap Call.`
+        : `🚑 Dialing **108 Ambulance** immediately! Searching wider medical network around your coordinates.`
+
+      const quickActions = [
+        { label: '🚑 Call 108 (Ambulance)', action: 'CALL_108' },
+        ...(nearestHasPhone ? [{ label: `📞 Call ${nearest.name.slice(0, 18)}`, action: `CALL_CONFIRM:${encodeURIComponent(nearest.name)}:${nearest.phone}:Hospital` }] : []),
+        { label: '🚨 Call 112 (Emergency)', action: 'CALL_112' },
+      ]
+
+      setMessages(prev => [
+        ...prev,
+        {
+          id: botId,
+          sender: 'bot',
+          streaming: false,
+          text: botReply,
+          timestamp: ts,
+          cardType: 'hospital',
+          places: finalHospitals.slice(0, 5),
+          quickActions,
+        },
+      ])
+
+      const voiceMsg = nearestHasPhone
+        ? `Located ${finalHospitals.length} hospitals nearby. Dialing ${nearest.name} now. Safe routes and call options are on your screen.`
+        : `Calling 108 ambulance now. Nearest hospital is ${nearest?.name || 'located'}. Tap route to navigate.`
+
+      if (settings.voiceEnabled && settings.autoPlayVoice) speak(voiceMsg)
+      return
+    }
+
+    // A. Check for Vehicle Breakdown / Mechanic Query
+    const isMechanicQuery = /(mechanic|garage|puncture|flat ty?re|flat tire|car (broke|breakdown|repair|stalled|won't start)|bike (broke|breakdown|repair|puncher)|tow truck|towing|jump ?start|auto repair|vehicle breakdown)/i.test(trimmed)
+
+    if (isMechanicQuery) {
+      const lat = userLocation?.lat || 22.7225
+      const lng = userLocation?.lng || 88.4815
+      try {
+        const places = await findNearbyMechanics(lat, lng, 'all', 5000)
+        setIsTyping(false)
+        setMechanicEmergency({
+          issue: trimmed,
+          places: places.slice(0, 6),
+          loading: false,
+        })
+        const botReply = `Don't panic! I found **${places.length}** automobile mechanics and emergency puncture repair shops near your live location. 🚗🔧\n\nYou can review them below, tap to call any garage, or start navigation to the nearest one immediately.`
+        const quickActions = [
+          ...(places.length > 0 && places[0].phone ? [{ label: `📞 Call ${places[0].name}`, action: `CALL_MECHANIC:${encodeURIComponent(places[0].name)}:${places[0].phone}` }] : []),
+          { label: '📞 Highway Helpline (1033)', action: 'CALL_CONFIRM:National%20Highway%20Helpline:1033:Emergency%20Roadside%20Assistance' },
+          { label: '🆘 SOS Alert', action: 'SOS' },
+        ]
+        setMessages(prev => [
+          ...prev,
+          {
+            id: botId,
+            sender: 'bot',
+            streaming: false,
+            text: botReply,
+            timestamp: ts,
+            cardType: 'mechanic',
+            places: places.slice(0, 5),
+            quickActions,
+          },
+        ])
+        if (settings.voiceEnabled && settings.autoPlayVoice) speak('I have located nearby mechanics and repair shops for you.')
+        return
+      } catch (err) {
+        console.warn('[Mechanic search error]:', err)
+      }
+    }
+
+    // B. Check for Autonomous Navigation Request ("show me road to X", "navigate to X", etc.)
+    const navMatch = trimmed.match(/(?:show (?:me )?(?:the )?(?:road|route|way|directions) to|navigate to|take me to|directions to|route to|how to (?:go|reach) to?|lead me to)\s+([^?.!,]+)/i)
+
+    if (navMatch && navMatch[1] && navMatch[1].trim().length > 1) {
+      const destinationQuery = navMatch[1].trim()
+      try {
+        const places = await searchPlaces(destinationQuery, userLocation?.lat, userLocation?.lng)
+        if (places && places.length > 0) {
+          const best = places[0]
+          const destObj = {
+            name: best.name || destinationQuery,
+            displayName: best.displayName || best.address,
+            lat: best.lat,
+            lng: best.lng,
+          }
+          if (setDestination) setDestination(destObj)
+          setNavCard({
+            destination: destObj,
+            distanceText: best.distanceKm ? `${best.distanceKm} km away` : '',
+          })
+          setIsTyping(false)
+          const botReply = `I found **${destObj.name}**! 🗺️\n\nI have set this as your destination and mapped out the safe corridor routes. Tap **"Open Safe Routes & Navigate"** on the card below to preview the safest, lit corridors and begin turn-by-turn guidance.`
+          setMessages(prev => [
+            ...prev,
+            {
+              id: botId,
+              sender: 'bot',
+              streaming: false,
+              text: botReply,
+              timestamp: ts,
+              quickActions: [
+                { label: '🗺️ Open Safe Routes', action: 'ROUTE' },
+                { label: '🆘 SOS Alert', action: 'SOS' },
+              ],
+            },
+          ])
+          if (settings.voiceEnabled && settings.autoPlayVoice) speak(`I found the route to ${destObj.name}. Tap below to start safe navigation.`)
+          return
+        }
+      } catch (err) {
+        console.warn('[Navigation search error]:', err)
+      }
+    }
+
+    // C. Deep Gemini Medical Triaging with User's Medical Profile Context
     let medResult = { isMedical: false }
     try {
       const geminiAnalysis = await analyzeMedicalEmergencyWithGemini(trimmed, medicalProfile)
@@ -867,7 +1492,7 @@ export default function ChatPage() {
       console.warn('[Gemini Medical Triaging Check]:', e)
     }
 
-    // 2. Offline Conversational Pattern Fallback (if Gemini fails or offline)
+    // Offline Conversational Pattern Fallback (if Gemini fails or offline)
     if (!medResult.isMedical) {
       medResult = detectMedicalEmergency(trimmed, medicalProfile)
     }
@@ -906,7 +1531,7 @@ export default function ChatPage() {
       return
     }
 
-    // Normal Momo Logic
+    // D. Normal Momo Logic (Gemini Chat + Medical Profile + Emergency Contacts + Offline Fallback)
     const softPreamble = isSoft
       ? 'The user may be distressed or in danger. Be warm, calm them first, then guide them to tap SOS or call 112. '
       : ''
@@ -915,6 +1540,22 @@ export default function ChatPage() {
 
     try {
       let accumulated = ''
+      let speechQueue = null
+      let enqueuedLength = 0
+
+      if (settings.voiceEnabled && settings.autoPlayVoice) {
+        stopSpeaking()
+        speechQueue = createSpeechQueue({
+          onStart: () => setIsSpeaking(true),
+          onEnd:   () => setIsSpeaking(false),
+          rate:    settings.speechRate,
+          pitch:   settings.speechPitch,
+          volume:  settings.speechVolume,
+          lang:    LANGUAGES[settings.language]?.code || 'en-IN',
+        })
+        speechQueueRef.current = speechQueue
+      }
+
       await askMomo(
         messageToSend,
         historySnapshot,   // messages BEFORE the current user message
@@ -933,34 +1574,62 @@ export default function ChatPage() {
               m.id === botId ? { ...m, text: accumulated } : m
             ))
           }
+
+          // Instant Sentence-by-Sentence Streaming Speech:
+          // Immediately start speaking the very moment the first sentence arrives!
+          if (speechQueue) {
+            const unparsed = accumulated.slice(enqueuedLength)
+            const sentenceMatch = unparsed.match(/^([\s\S]*?[.!?\n]+)(\s+|$)/)
+            if (sentenceMatch && sentenceMatch[1] && sentenceMatch[1].trim().length > 3) {
+              const sentenceToSpeak = sentenceMatch[1].trim()
+              speechQueue.enqueue(sentenceToSpeak)
+              enqueuedLength += sentenceMatch[0].length
+            }
+          }
         },
-        { lat: userLocation?.lat, lng: userLocation?.lng, address: readableAddress }
+        { lat: userLocation?.lat, lng: userLocation?.lng, address: readableAddress },
+        emergencyContacts
       )
+
+      // Send any trailing text that did not end with standard punctuation
+      if (speechQueue && enqueuedLength < accumulated.length) {
+        const remaining = accumulated.slice(enqueuedLength).trim()
+        if (remaining.length > 1) {
+          speechQueue.enqueue(remaining)
+        }
+      }
+
       const actions = getQuickActions(accumulated, isSoft)
       setMessages(prev => prev.map(m =>
         m.id === botId
           ? { ...m, text: accumulated, streaming: false, quickActions: actions }
           : m
       ))
-      if (settings.voiceEnabled && settings.autoPlayVoice) speak(accumulated)
+      if (!speechQueue && settings.voiceEnabled && settings.autoPlayVoice) speak(accumulated)
     } catch {
+      // If Gemini API fails or offline, use smart fallback with medicalProfile and contacts
+      const offlineReply = getBotReply(trimmed, settings.language, historySnapshot, medicalProfile, emergencyContacts)
+      const fallbackText = offlineReply || MOMO_ERROR_FALLBACK
+      const actions = getQuickActions(fallbackText, isSoft)
+
       if (!bubbleAdded) {
         setMessages(prev => [
           ...prev,
-          { id: botId, sender: 'bot', text: MOMO_ERROR_FALLBACK, streaming: false, timestamp: ts, quickActions: [] }
+          { id: botId, sender: 'bot', text: fallbackText, streaming: false, timestamp: ts, quickActions: actions }
         ])
       } else {
         setMessages(prev => prev.map(m =>
           m.id === botId
-            ? { ...m, text: MOMO_ERROR_FALLBACK, streaming: false, quickActions: [] }
+            ? { ...m, text: fallbackText, streaming: false, quickActions: actions }
             : m
         ))
       }
+      if (settings.voiceEnabled && settings.autoPlayVoice) speak(fallbackText)
     } finally {
       setIsTyping(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input, isTyping, settings, navigate, setSosActive, speak, medicalProfile, handleMedicalEmergency])
+  }, [input, isTyping, settings, navigate, setSosActive, speak, medicalProfile, emergencyContacts, userLocation, readableAddress, setDestination, handleMedicalEmergency])
   // Keep sendMessageRef in sync so the Enter onKeyDown always calls latest version
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
 
@@ -986,14 +1655,13 @@ export default function ChatPage() {
           .blink-cursor::after {
             content: '|'; animation: blink 0.8s step-end infinite;
             color: #10B981; margin-left: 1px;
-          }
           @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
           .quick-action-btn:active { transform: scale(0.93); }
         `}</style>
 
-        {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Header ──────────────────────────────────────────────────────────── */}
         <div
-          className="flex items-center gap-3 px-4 pt-11 pb-3 flex-shrink-0"
+          className="flex items-center gap-2 px-4 pt-11 pb-3 flex-shrink-0"
           style={{
             background: 'rgba(255,255,255,0.92)',
             backdropFilter: 'blur(20px)',
@@ -1004,10 +1672,11 @@ export default function ChatPage() {
           {/* Back */}
           <button
             onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-90 transition-transform flex-shrink-0"
-            style={{ background: '#f0fdf4', border: '1px solid rgba(16,185,129,0.2)' }}
+            className="flex flex-col items-center justify-center gap-0.5 rounded-2xl px-2.5 py-1.5 active:scale-90 transition-all flex-shrink-0"
+            style={{ background: '#f0fdf4', border: '1.5px solid rgba(16,185,129,0.2)' }}
           >
-            <span className="material-symbols-outlined text-[#059669]" style={{ fontSize: 20 }}>arrow_back</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#059669' }}>arrow_back</span>
+            <span className="text-[9px] font-bold uppercase tracking-wide leading-none" style={{ color: '#059669' }}>Back</span>
           </button>
 
           {/* Momo avatar */}
@@ -1029,52 +1698,69 @@ export default function ChatPage() {
             <p className="text-sm font-black text-[#064e3b] leading-tight">Momo </p>
             <div className="flex items-center gap-1.5 mt-0.5">
               <div className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
-              <p className="text-[10px] text-[#10B981] font-bold">Your Safety Guardian Â· Always On</p>
+              <p className="text-[10px] text-[#10B981] font-bold">Your Safety Guardian · Always On</p>
             </div>
           </div>
 
-          {/* Speaking indicator */}
+          {/* Medical Profile Quick Card Button — same icon as ProfilePage medical card */}
+          {hasMedicalData(medicalProfile) && (
+            <button
+              onClick={() => setShowMedCard(true)}
+              className="flex flex-col items-center justify-center gap-0.5 rounded-2xl px-2.5 py-1.5 active:scale-90 transition-all flex-shrink-0"
+              style={{ background: '#fff1f2', border: '1.5px solid rgba(244,63,94,0.2)' }}
+              title="View Medical Profile"
+            >
+              <span className="material-symbols-outlined icon-filled" style={{ fontSize: 22, color: '#f43f5e' }}>medical_services</span>
+              <span className="text-[9px] font-bold uppercase tracking-wide leading-none" style={{ color: '#f43f5e' }}>
+                {medicalProfile.bloodGroup || 'Med'}
+              </span>
+            </button>
+          )}
+
+          {/* Speaking stop indicator */}
           {isSpeaking && (
             <button
               onClick={stopSpeaking}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg active:scale-90 transition-transform"
-              style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)' }}
+              className="flex flex-col items-center justify-center gap-0.5 rounded-2xl px-2.5 py-1.5 active:scale-90 transition-all flex-shrink-0"
+              style={{ background: 'rgba(16,185,129,0.1)', border: '1.5px solid rgba(16,185,129,0.3)' }}
             >
-              <span className="material-symbols-outlined text-[#10B981] animate-pulse" style={{ fontSize: 14 }}>volume_up</span>
-              <span className="text-[10px] font-bold text-[#10B981]">Stop</span>
+              <span className="material-symbols-outlined text-[#10B981] animate-pulse" style={{ fontSize: 22 }}>volume_off</span>
+              <span className="text-[9px] font-bold uppercase tracking-wide leading-none text-[#10B981]">Stop</span>
             </button>
           )}
 
           {/* Clear chat */}
           <button
             onClick={clearChat}
-            className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-90 transition-transform flex-shrink-0"
-            style={{ background: '#f0fdf4', border: '1px solid rgba(16,185,129,0.2)' }}
-            title="Clear chat"
+            className="flex flex-col items-center justify-center gap-0.5 rounded-2xl px-2.5 py-1.5 active:scale-90 transition-all flex-shrink-0"
+            style={{ background: '#f0fdf4', border: '1.5px solid rgba(16,185,129,0.2)' }}
+            title="Clear chat history"
           >
-            <span className="material-symbols-outlined text-[#059669]" style={{ fontSize: 18 }}>delete_sweep</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#059669' }}>delete</span>
+            <span className="text-[9px] font-bold uppercase tracking-wide leading-none" style={{ color: '#059669' }}>Clear</span>
           </button>
 
-          {/* Settings */}
+          {/* Voice settings */}
           <button
             onClick={() => setShowSettings(s => !s)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center active:scale-90 transition-transform flex-shrink-0"
+            className="flex flex-col items-center justify-center gap-0.5 rounded-2xl px-2.5 py-1.5 active:scale-90 transition-all flex-shrink-0"
             style={{
               background: showSettings ? '#10B981' : '#f0fdf4',
-              border: '1px solid rgba(16,185,129,0.2)',
+              border: '1.5px solid rgba(16,185,129,0.2)',
             }}
-            title="Settings"
+            title="Voice & display settings"
           >
             <span
               className="material-symbols-outlined"
-              style={{ fontSize: 18, color: showSettings ? 'white' : '#059669' }}
+              style={{ fontSize: 22, color: showSettings ? 'white' : '#059669' }}
             >
-              settings
+              tune
             </span>
+            <span className="text-[9px] font-bold uppercase tracking-wide leading-none" style={{ color: showSettings ? 'white' : '#059669' }}>Voice</span>
           </button>
         </div>
 
-        {/* â”€â”€ Settings Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ── Settings Panel ──────────────────────────────────────────────────── */}
         {showSettings && (
           <div
             className="flex-shrink-0 px-4 py-4 space-y-4"
@@ -1151,7 +1837,7 @@ export default function ChatPage() {
         )}
 
         {/* â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ overscrollBehavior: 'contain' }}>
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4" style={{ overscrollBehavior: 'contain' }}>
           {messages.map((msg, msgIdx) => {
             const isUser = msg.sender === 'user'
             const isLast = msgIdx === messages.length - 1
@@ -1181,9 +1867,86 @@ export default function ChatPage() {
                     >
                       <div className="text-sm leading-relaxed">
                         {msg.text ? renderText(msg.text) : (
-                          <span className="text-gray-400 italic text-xs">Thinkingâ€¦</span>
+                          <span className="text-gray-400 italic text-xs">Thinking…</span>
                         )}
                       </div>
+
+                      {/* In-Chat Interactive Place Cards (Hospitals & Mechanics) */}
+                      {!msg.streaming && msg.places && msg.places.length > 0 && (
+                        <div className="mt-3 pt-2.5 border-t border-gray-100 space-y-2">
+                          <div className="flex items-center justify-between px-0.5">
+                            <span className="text-[11px] font-black uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+                              <span
+                                className="material-symbols-outlined text-[15px]"
+                                style={{ color: msg.cardType === 'hospital' ? '#DC2626' : '#D97706' }}
+                              >
+                                {msg.cardType === 'hospital' ? 'local_hospital' : 'build'}
+                              </span>
+                              {msg.cardType === 'hospital' ? 'Nearby Hospitals & Emergency' : 'Nearby Mechanics & Garages'}
+                            </span>
+                            <span className="text-[10px] font-bold text-gray-400">
+                              {msg.places.length} found
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            {msg.places.map((place, idx) => (
+                              <div
+                                key={idx}
+                                className="p-2.5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-between gap-2 shadow-xs hover:bg-slate-50 transition-colors"
+                              >
+                                <div className="min-w-0 flex-1 pr-1">
+                                  <p className="text-xs font-bold text-[#0F172A] truncate leading-tight">
+                                    {place.name}
+                                  </p>
+                                  <p className="text-[10px] text-[#64748B] truncate mt-0.5">
+                                    📍 {place.distanceLabel} {place.etaMinutes ? `· ~${place.etaMinutes} min` : ''} · {place.openStatus || place.specialty || 'Available'}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      const phone = place.phone || (msg.cardType === 'hospital' ? '108' : '')
+                                      if (phone) {
+                                        if (msg.cardType === 'mechanic') {
+                                          handleMechanicCall(place.name, phone)
+                                        } else {
+                                          callNumber(phone)
+                                        }
+                                      }
+                                    }}
+                                    className="h-8 px-2.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-[11px] font-black flex items-center gap-1 active:scale-90 shadow-xs transition-all"
+                                    title={place.phone ? `Call ${place.name}` : 'Call 108'}
+                                  >
+                                    <span className="material-symbols-outlined icon-filled" style={{ fontSize: 14 }}>call</span>
+                                    <span>{place.phone ? 'Call' : '108'}</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => {
+                                      if (setDestination) {
+                                        setDestination({
+                                          name: place.name,
+                                          displayName: place.address || place.name,
+                                          lat: place.lat,
+                                          lng: place.lng,
+                                        })
+                                      }
+                                      navigate('/routes')
+                                    }}
+                                    className="h-8 px-2.5 rounded-xl bg-[#004ac6] hover:bg-[#003bb0] text-white text-[11px] font-black flex items-center gap-1 active:scale-90 shadow-xs transition-all"
+                                    title="Navigate to destination"
+                                  >
+                                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>near_me</span>
+                                    <span>Route</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Quick actions */}
@@ -1272,6 +2035,69 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Call Confirmation Dialog */}
+        <CallConfirmModal
+          isOpen={callModal.isOpen}
+          onClose={() => setCallModal({ isOpen: false, name: '', phone: '', role: '' })}
+          onConfirm={confirmCall}
+          name={callModal.name}
+          phone={callModal.phone}
+          role={callModal.role}
+        />
+
+        {/* Mechanic Breakdown Card */}
+        {mechanicEmergency && (
+          <MechanicBreakdownCard
+            mechanicEmergency={mechanicEmergency}
+            onDismiss={dismissMechanicEmergency}
+            onCall={(name, phone) => handleMechanicCall(name, phone)}
+            onNavigate={(place) => {
+              if (setDestination) {
+                setDestination({
+                  name: place.name,
+                  displayName: place.address || place.name,
+                  lat: place.lat,
+                  lng: place.lng,
+                })
+              }
+              navigate('/routes')
+            }}
+          />
+        )}
+
+        {/* Hospital Emergency Card */}
+        {hospitalEmergency && (
+          <HospitalEmergencyCard
+            hospitalEmergency={hospitalEmergency}
+            onDismiss={dismissHospitalEmergency}
+            onCall={(name, phone, role) => {
+              if (phone) callNumber(phone)
+            }}
+            onNavigate={(place) => {
+              if (setDestination) {
+                setDestination({
+                  name: place.name,
+                  displayName: place.address || place.name,
+                  lat: place.lat,
+                  lng: place.lng,
+                })
+              }
+              navigate('/routes')
+            }}
+          />
+        )}
+
+        {/* Navigation Launch Card */}
+        {navCard && (
+          <NavigationLaunchCard
+            navCard={navCard}
+            onDismiss={dismissNavCard}
+            onStartNavigation={() => {
+              navigate('/routes')
+            }}
+          />
+        )}
+
         {/* Medical Emergency Card Mounting Point */}
         {medEmergency && (
           <MedicalEmergencyCard
@@ -1280,6 +2106,18 @@ export default function ChatPage() {
             userName={user?.name}
             userLocation={userLocation}
             medicalProfile={medicalProfile}
+            onInitiateCall={(name, phone, role) => initiateCall(name, phone, role)}
+            onNavigate={(place) => {
+              if (setDestination) {
+                setDestination({
+                  name: place.name,
+                  displayName: place.address || place.name,
+                  lat: place.lat,
+                  lng: place.lng,
+                })
+              }
+              navigate('/routes')
+            }}
           />
         )}
 
@@ -1299,7 +2137,7 @@ export default function ChatPage() {
               <button
                 key={i}
                 onClick={() => sendMessage(chip.text)}
-                className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+                className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 flex items-center gap-1.5 shadow-xs hover:bg-emerald-50"
                 style={{
                   background: 'rgba(16,185,129,0.08)',
                   color: '#059669',
@@ -1307,7 +2145,8 @@ export default function ChatPage() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {chip.label}
+                <span className="material-symbols-outlined text-[15px]">{chip.icon}</span>
+                <span>{chip.label}</span>
               </button>
             ))}
           </div>
@@ -1330,7 +2169,7 @@ export default function ChatPage() {
                   />
                 ))}
               </div>
-              <p className="text-xs font-bold text-[#1B5E20]">Momo is listeningâ€¦ speak now</p>
+              <p className="text-xs font-bold text-[#1B5E20]">Momo is listening... speak now</p>
             </div>
           )}
 
@@ -1370,7 +2209,7 @@ export default function ChatPage() {
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessageRef.current(e.currentTarget.value) }
                 }}
-                placeholder={isListening ? 'Listeningâ€¦' : 'Ask Momo anything about safetyâ€¦'}
+                placeholder={isListening ? 'Listening...' : 'Ask Momo anything about safety...'}
                 className="w-full bg-transparent outline-none text-sm text-[#191c1e] resize-none leading-relaxed placeholder:text-[#a7f3d0]"
                 style={{ maxHeight: 96 }}
                 rows={1}
@@ -1394,6 +2233,135 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Medical Profile Card Modal ──────────────────────────────────────── */}
+      {showMedCard && (
+        <div
+          className="fixed inset-0 z-[200] flex items-end justify-center"
+          style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setShowMedCard(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-3xl p-5 pb-8 overflow-y-auto"
+            style={{ background: 'white', maxHeight: '80dvh', boxShadow: '0 -8px 40px rgba(0,0,0,0.18)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Handle bar */}
+            <div className="w-10 h-1 rounded-full bg-gray-200 mx-auto mb-4" />
+
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{ background: '#fff1f2' }}>
+                <span className="material-symbols-outlined icon-filled text-[26px]" style={{ color: '#f43f5e' }}>medical_services</span>
+              </div>
+              <div>
+                <p className="font-black text-[#0f172a] text-base leading-tight">Medical Profile</p>
+                <p className="text-[11px] text-gray-500 font-medium">Shared with Momo for emergency context</p>
+              </div>
+              <button onClick={() => setShowMedCard(false)} className="ml-auto w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+                <span className="material-symbols-outlined text-gray-500 text-[18px]">close</span>
+              </button>
+            </div>
+
+            {/* Blood group + vitals row */}
+            <div className="flex gap-3 mb-4">
+              {[
+                { icon: 'water_drop', label: 'Blood', value: medicalProfile.bloodGroup || '—', color: '#DC2626', bg: '#FFF0F0' },
+                { icon: 'person', label: 'Age', value: medicalProfile.age ? `${medicalProfile.age} yrs` : '—', color: '#7C3AED', bg: '#F5F3FF' },
+                { icon: 'height', label: 'Height', value: medicalProfile.height ? `${medicalProfile.height} cm` : '—', color: '#0369A1', bg: '#F0F9FF' },
+                { icon: 'monitor_weight', label: 'Weight', value: medicalProfile.weight ? `${medicalProfile.weight} kg` : '—', color: '#059669', bg: '#F0FDF4' },
+              ].map(item => (
+                <div key={item.label} className="flex-1 rounded-2xl p-3 text-center" style={{ background: item.bg }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: item.color }}>{item.icon}</span>
+                  <p className="font-black text-[13px] mt-1" style={{ color: item.color }}>{item.value}</p>
+                  <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wide">{item.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Conditions */}
+            {(medicalProfile.conditions?.length > 0 || medicalProfile.otherCondition) && (
+              <div className="mb-3 p-3 rounded-2xl bg-orange-50 border border-orange-100">
+                <p className="text-[11px] font-black text-orange-700 uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">warning</span> Medical Conditions
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[...(medicalProfile.conditions || []), medicalProfile.otherCondition].filter(Boolean).map((c, i) => (
+                    <span key={i} className="text-[11px] font-semibold bg-orange-100 text-orange-800 px-2.5 py-1 rounded-full">{c}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Allergies */}
+            {(medicalProfile.allergies?.length > 0 || medicalProfile.otherAllergy) && (
+              <div className="mb-3 p-3 rounded-2xl bg-red-50 border border-red-100">
+                <p className="text-[11px] font-black text-red-700 uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">block</span> Allergies
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[...(medicalProfile.allergies || []), medicalProfile.otherAllergy].filter(Boolean).map((a, i) => (
+                    <span key={i} className="text-[11px] font-semibold bg-red-100 text-red-800 px-2.5 py-1 rounded-full">{a}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Medicines */}
+            {(medicalProfile.medicines?.length > 0 || medicalProfile.emergencyMedicines?.length > 0) && (
+              <div className="mb-3 p-3 rounded-2xl bg-blue-50 border border-blue-100">
+                <p className="text-[11px] font-black text-blue-700 uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">medication</span> Medicines
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[...(medicalProfile.medicines || []), ...(medicalProfile.emergencyMedicines || [])].filter(Boolean).map((m, i) => (
+                    <span key={i} className="text-[11px] font-semibold bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full">{m}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Doctor */}
+            {(medicalProfile.doctorName || medicalProfile.doctorHospital) && (
+              <div className="mb-3 p-3 rounded-2xl bg-green-50 border border-green-100">
+                <p className="text-[11px] font-black text-green-700 uppercase tracking-wide mb-1 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">local_hospital</span> Doctor / Hospital
+                </p>
+                {medicalProfile.doctorName && <p className="text-[13px] font-bold text-green-900">{medicalProfile.doctorName}</p>}
+                {medicalProfile.doctorHospital && <p className="text-[12px] text-green-700">{medicalProfile.doctorHospital}</p>}
+                {medicalProfile.doctorPhone && (
+                  <button onClick={() => callNumber(medicalProfile.doctorPhone)} className="mt-2 flex items-center gap-1 text-[12px] font-bold text-green-700">
+                    <span className="material-symbols-outlined text-[15px]">call</span> {medicalProfile.doctorPhone}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Insurance */}
+            {medicalProfile.insuranceProvider && (
+              <div className="mb-4 p-3 rounded-2xl bg-purple-50 border border-purple-100">
+                <p className="text-[11px] font-black text-purple-700 uppercase tracking-wide mb-1 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">shield</span> Insurance
+                </p>
+                <p className="text-[13px] font-bold text-purple-900">{medicalProfile.insuranceProvider}</p>
+                {medicalProfile.insurancePolicyNumber && (
+                  <p className="text-[11px] text-purple-600">Policy: {medicalProfile.insurancePolicyNumber}</p>
+                )}
+              </div>
+            )}
+
+            {/* Full profile link */}
+            <button
+              onClick={() => { setShowMedCard(false); navigate('/profile') }}
+              className="w-full py-3 rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-transform"
+              style={{ background: 'linear-gradient(135deg,#10B981,#059669)', color: 'white', boxShadow: '0 4px 14px rgba(16,185,129,0.35)' }}
+            >
+              <span className="material-symbols-outlined text-[18px]">manage_accounts</span>
+              Edit Full Medical Profile
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }

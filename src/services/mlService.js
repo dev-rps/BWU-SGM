@@ -748,19 +748,19 @@ export function clientMLEvaluateMultipleRoutes(routes, { hour, dayOfWeek, weathe
     // Factual reasons
     const reasons = []
     if (compositeScore >= 85) {
-      reasons.push('✅ High safety corridor: low hazard proximity, divided lanes, good lighting')
+      reasons.push('High safety corridor: low hazard proximity, divided lanes, good lighting')
     } else if (compositeScore >= 75) {
-      reasons.push('✅ Mostly safe route: manageable hazard exposure along main arterial')
+      reasons.push('Mostly safe route: manageable hazard exposure along main arterial')
     } else {
-      reasons.push('⚠️ Moderate caution route: higher intersection and congestion density')
+      reasons.push('Moderate caution route: higher intersection and congestion density')
     }
     if (Object.keys(crimesFound).length > 0) {
       const cName = Object.keys(crimesFound)[0]
-      reasons.push(`🚨 Near crime caution zone: ${cName}`)
+      reasons.push(`Near crime caution zone: ${cName}`)
     }
     if (Object.keys(floodsFound).length > 0) {
       const fName = Object.keys(floodsFound)[0]
-      reasons.push(`🌊 Waterlogging risk section: ${fName}`)
+      reasons.push(`Waterlogging risk section: ${fName}`)
     }
 
     return {

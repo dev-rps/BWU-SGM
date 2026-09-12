@@ -36,9 +36,20 @@ for _p in [str(_current_dir), str(_parent_dir)]:
 try:
     from ml_model.inference import SafetyInferenceEngine
     from ml_model.data_pipeline import HazardManager
-except ImportError:
-    from inference import SafetyInferenceEngine
-    from data_pipeline import HazardManager
+    from ml_model.piper_tts import get_piper_manager
+except Exception:
+    try:
+        from inference import SafetyInferenceEngine
+        from data_pipeline import HazardManager
+        from piper_tts import get_piper_manager
+    except Exception as _err:
+        print(f"[FastAPI] Notice: ML Inference engine unavailable: {_err}")
+        SafetyInferenceEngine = None
+        HazardManager = None
+        try:
+            from piper_tts import get_piper_manager
+        except Exception:
+            from ml_model.piper_tts import get_piper_manager
 
 # ── API credentials (loaded once at startup) ──────────────────────────────────
 OPENAQ_API_KEY = os.environ.get(
@@ -363,6 +374,10 @@ class BatchRouteEvaluationRequest(BaseModel):
     lighting:    Optional[str] = None
     auto_enrich: bool = Field(True, description="Auto-fetch live weather/AQI if not supplied")
 
+class TTSSynthesizeRequest(BaseModel):
+    text: str = Field(..., description="Text to synthesize with Piper Ryan High")
+    speaker_id: Optional[int] = 0
+
 
 # ── Engine initialization ─────────────────────────────────────────────────────
 engine: Optional[SafetyInferenceEngine] = None
@@ -375,6 +390,17 @@ def startup_event():
         print("[FastAPI] SafetyInferenceEngine v3.0 initialized (26-feature model).")
     except Exception as e:
         print(f"[FastAPI] Error initializing engine: {e}")
+
+    # Initialize Piper TTS ONCE during backend startup
+    try:
+        piper_mgr = get_piper_manager()
+        success = piper_mgr.initialize()
+        if success:
+            print("[FastAPI] Piper TTS initialized with Ryan High voice model.")
+        else:
+            print(f"[FastAPI] Piper TTS startup initialization failed: {piper_mgr.init_error}. Fallback will be used.")
+    except Exception as e:
+        print(f"[FastAPI] Exception initializing Piper TTS: {e}")
 
 
 def _get_engine() -> SafetyInferenceEngine:
@@ -644,6 +670,58 @@ def legacy_predict(payload: Dict[str, Any]):
         "safety_score":  res["safety_score"],
         "probabilities": res["probabilities"],
         "nearest_hazards": res["nearest_hazards"],
+    }
+
+
+# ── Piper TTS Endpoints (Ryan High Voice Model) ──────────────────────────────
+@app.post("/tts/synthesize")
+def synthesize_tts(req: TTSSynthesizeRequest):
+    """
+    Synthesizes speech using Piper Ryan High ONNX model with in-memory caching.
+    Returns standard audio/wav binary response.
+    Returns 503 with fallback flag if Piper is unavailable.
+    """
+    piper_mgr = get_piper_manager()
+    if not piper_mgr.is_ready:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Piper TTS not initialized or failed to load voice model.",
+                "reason": piper_mgr.init_error,
+                "fallback": True
+            }
+        )
+
+    wav_bytes = piper_mgr.synthesize(req.text)
+    if not wav_bytes:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to synthesize audio with Piper Ryan High.", "fallback": True}
+        )
+
+    from fastapi.responses import Response
+    return Response(
+        content=wav_bytes,
+        media_type="audio/wav",
+        headers={
+            "Content-Type": "audio/wav",
+            "X-Voice-Model": "en_US-ryan-high",
+            "Cache-Control": "public, max-age=86400",
+        }
+    )
+
+
+@app.get("/tts/health")
+def tts_health():
+    """Health check for Piper TTS service."""
+    piper_mgr = get_piper_manager()
+    return {
+        "status": "ready" if piper_mgr.is_ready else "error",
+        "model": "Ryan High (en_US-ryan-high)",
+        "model_path": str(piper_mgr.active_model_path) if piper_mgr.active_model_path else None,
+        "config_path": str(piper_mgr.active_config_path) if piper_mgr.active_config_path else None,
+        "cached_entries": len(piper_mgr._cache),
+        "error": piper_mgr.init_error,
     }
 
 

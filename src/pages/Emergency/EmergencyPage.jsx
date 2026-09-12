@@ -362,19 +362,31 @@ export default function EmergencyPage() {
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs text-white/80">
               <div>
-                <p className="font-bold text-white">📍 Location</p>
+                <p className="font-bold text-white flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[13px]">my_location</span>
+                  <span>Location</span>
+                </p>
                 <p>{lat && lng ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'Acquiring...'}</p>
               </div>
               <div>
-                <p className="font-bold text-white">👥 Contacts</p>
+                <p className="font-bold text-white flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[13px]">group</span>
+                  <span>Contacts</span>
+                </p>
                 <p>{emergencyContacts.length} saved</p>
               </div>
               <div>
-                <p className="font-bold text-white">🏥 Hospital</p>
+                <p className="font-bold text-white flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[13px]">local_hospital</span>
+                  <span>Hospital</span>
+                </p>
                 <p className="truncate">{nearestHospital}</p>
               </div>
               <div>
-                <p className="font-bold text-white">🚔 Police</p>
+                <p className="font-bold text-white flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[13px]">local_police</span>
+                  <span>Police</span>
+                </p>
                 <p className="truncate">{nearestPolice}</p>
               </div>
             </div>

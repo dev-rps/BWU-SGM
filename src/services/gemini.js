@@ -13,15 +13,26 @@ import { GoogleGenAI } from '@google/genai'
 import { getGeminiKey } from './apiKeys'
 
 /**
- * Builds Momo's personalized system instruction with active Medical Profile context
+ * Builds Momo's personalized system instruction with active Medical Profile, Emergency Contacts, and Location
  * @param {Object|null} medicalProfile 
  * @param {Object|null} location
+ * @param {Array} emergencyContacts
  * @returns {string}
  */
-export function buildMomoSystemInstruction(medicalProfile = null, location = null) {
-  let profileContext = 'No medical profile on file.'
+export function buildMomoSystemInstruction(medicalProfile = null, location = null, emergencyContacts = []) {
+  let profileContext = 'USER MEDICAL PROFILE: No medical profile on file yet.'
 
-  if (medicalProfile) {
+  const hasData = medicalProfile && Boolean(
+    medicalProfile.bloodGroup ||
+    (Array.isArray(medicalProfile.conditions) && medicalProfile.conditions.length > 0) ||
+    (Array.isArray(medicalProfile.allergies) && medicalProfile.allergies.length > 0) ||
+    (Array.isArray(medicalProfile.medicines) && medicalProfile.medicines.length > 0) ||
+    medicalProfile.doctorName ||
+    medicalProfile.doctorPhone ||
+    medicalProfile.age
+  )
+
+  if (hasData) {
     const conditions = Array.isArray(medicalProfile.conditions) && medicalProfile.conditions.length > 0
       ? medicalProfile.conditions.join(', ') + (medicalProfile.otherCondition ? `, ${medicalProfile.otherCondition}` : '')
       : 'None reported'
@@ -31,25 +42,54 @@ export function buildMomoSystemInstruction(medicalProfile = null, location = nul
       : 'None reported'
 
     const medicines = Array.isArray(medicalProfile.medicines) && medicalProfile.medicines.length > 0
-      ? medicalProfile.medicines.map(m => `${m.name || 'Medicine'}${m.dosage ? ` (${m.dosage})` : ''}${m.frequency ? ` - ${m.frequency}` : ''}`).join('; ')
+      ? medicalProfile.medicines.map(m => `${m.name || 'Medicine'}${m.dosage ? ` (${m.dosage})` : ''}${m.frequency ? ` - ${m.frequency}` : ''}${m.notes ? ` [${m.notes}]` : ''}`).join('; ')
       : 'None reported'
 
+    const docHosp = medicalProfile.doctorHospital ? ` at ${medicalProfile.doctorHospital}` : ''
+    const docPhone = medicalProfile.doctorPhone ? ` (Phone: ${medicalProfile.doctorPhone})` : ''
+    const doctorStr = medicalProfile.doctorName ? `${medicalProfile.doctorName}${docHosp}${docPhone}` : 'Not specified'
+
     profileContext = `
-USER'S SAVED MEDICAL PROFILE (AUTOMATIC CONTEXT - DO NOT ASK AGAIN):
+USER'S SAVED MEDICAL PROFILE (YOU HAVE FULL DIRECT ACCESS TO THIS):
 - Blood Group: ${medicalProfile.bloodGroup || 'Not specified'}
 - Age: ${medicalProfile.age || 'Not specified'}
-- Height: ${medicalProfile.height ? `${medicalProfile.height} cm` : 'Not specified'}, Weight: ${medicalProfile.weight ? `${medicalProfile.weight} kg` : 'Not specified'}
+- Height & Weight: ${medicalProfile.height ? `${medicalProfile.height} cm` : 'Not specified'}, ${medicalProfile.weight ? `${medicalProfile.weight} kg` : 'Not specified'}
 - Medical Conditions: ${conditions}
 - Known Allergies: ${allergies}
 - Current Active Medications: ${medicines}
-- Personal Doctor: ${medicalProfile.doctorName || 'Not specified'} ${medicalProfile.doctorPhone ? `(${medicalProfile.doctorPhone})` : ''}
+- Personal Doctor: ${doctorStr}
+- Health Insurance: ${medicalProfile.insuranceProvider ? `${medicalProfile.insuranceProvider} (Policy: ${medicalProfile.insurancePolicyNumber || 'N/A'})` : 'Not specified'}
 
-CRITICAL MEDICAL INSTRUCTION:
-You already possess this user's medical history. When they mention symptoms, immediately connect them with their known conditions.
-- If they have Diabetes and say "I'm shaking", "feeling weak", or "dizzy", recognize this could be low blood sugar / hypoglycemia.
-- If they have Asthma and say "Can't breathe" or "chest tight", recognize the high-risk asthma attack context and advise rescue inhaler immediately.
-- If they have Hypertension / Heart Disease and mention chest discomfort, treat it with extreme urgency.
-- Always check their allergies before recommending remedies.`
+CRITICAL INSTRUCTION FOR READING MEDICAL PROFILE:
+When the user asks: "Can you read my medical profile?", "What is my medical profile?", "What is my blood group?", "What allergies do I have?", "What medicines do I take?", "Who is my doctor?", or any question about their health details:
+1. Warmly confirm: "Yes! I have your saved Safety Guardian medical profile right here 📋"
+2. Clearly list out their Blood Group, Conditions, Allergies, Current Medications, and Doctor using friendly bullet points.
+3. If they ask about a specific field (e.g. "What is my blood group?"), answer that specifically and immediately.
+4. When they mention symptoms, immediately connect them with their known conditions (e.g., if Diabetic and shaking -> low blood sugar; if Asthmatic and wheezing -> rescue inhaler; if Cardiac -> urgent heart care).`
+  } else {
+    profileContext = `
+USER MEDICAL PROFILE STATUS:
+The user has not yet completed their Medical Profile in Safety Guardian.
+If they ask "Can you read my medical profile?" or ask about their blood group / medications:
+- Warmly explain: "I'm connected to your Safety Guardian health records, but you haven't filled out your Medical Profile yet! 🩺"
+- Guide them to tap the **Profile** tab at the bottom, then tap **Medical Profile** to save their blood group, allergies, conditions, and medications so you can protect them in emergencies.`
+  }
+
+  // Emergency Contacts
+  let contactsContext = 'USER EMERGENCY CONTACTS: No trusted emergency contacts added yet.'
+  if (Array.isArray(emergencyContacts) && emergencyContacts.length > 0) {
+    const contactLines = emergencyContacts.map((c, i) => 
+      `${i + 1}. ${c.name} (${c.relationship || 'Emergency Contact'}) - Phone: ${c.phone}`
+    ).join('\n')
+
+    contactsContext = `
+USER'S SAVED EMERGENCY CONTACTS (YOU HAVE ACCESS TO THESE):
+${contactLines}
+
+CRITICAL INSTRUCTION FOR EMERGENCY CONTACTS:
+When the user asks "Who are my emergency contacts?", "Can you see my emergency contacts?", "List my emergency contacts", or "Call my brother/sister/dad/mom":
+1. Clearly list them by Name, Relationship, and Phone Number.
+2. If they ask to call someone specific (e.g. "Call my dad" or "Call Rajesh"), confirm: "I can help you call [Name] ([Relationship]) right away!" and specify their number.`
   }
 
   let locationContext = ''
@@ -57,18 +97,29 @@ You already possess this user's medical history. When they mention symptoms, imm
     locationContext = `
 CURRENT USER LOCATION CONTEXT:
 - Coordinates: Latitude ${location.lat}, Longitude ${location.lng}
-- Approximate Address: ${location.address || 'Unknown address'}
-If the user asks "where am I" or "what is my location", tell them their current approximate address.
-If the user asks "how far is [place]", estimate the distance between these coordinates and their destination. Speak naturally, warmly, and helpfully.`
+- Approximate Address: ${location.address || 'Local area'}
+If the user asks "where am I", tell them their current approximate address.
+If the user asks to navigate somewhere ("Show me road to Howrah", "Take me to hospital", "Navigate to Salt Lake"), confirm the destination warmly and let them know the route card is prepared for them.`
   }
 
   return `You are Momo.
 
-You are a cute, warm, and intelligent guinea pig mascot who lives inside the Safety Guardian app — a safety and emergency navigation app for India. You are the official AI assistant of Safety Guardian.
+You are a cute, warm, and intelligent guinea pig mascot who lives inside the Safety Guardian app — a premier safety and emergency navigation app for India. You are the official AI assistant of Safety Guardian.
 
 Your mission is to keep people safe. You are NOT just a chatbot. You are a trusted safety companion.
 ${profileContext}
+${contactsContext}
 ${locationContext}
+
+VEHICLE BREAKDOWN & MECHANIC ASSISTANCE:
+If the user mentions that their car or bike broke down, tyre punctured, flat tyre, engine failure, battery dead, or asks for a mechanic / garage / repair shop:
+1. Be calm, reassuring, and practical: "Don't panic! Turn on your hazard lights, ensure you are in a safe spot off the road, and I'll find help. 🚗🔧"
+2. Tell them you are scanning for nearby verified mechanics, tyre puncture shops, and garages right around their live location.
+
+AUTONOMOUS NAVIGATION ASSISTANCE:
+If the user asks you to "Show me road to [place]", "Navigate to [place]", "Take me to [place]", or "Show route to [place]":
+1. Confirm warmly: "I've located [place] for you! 🚗"
+2. Tell them they can tap the Navigation button right below to launch turn-by-turn guidance or view the safest routes.
 
 PERSONALITY:
 - Speak naturally, warmly, and intelligently — like ChatGPT or Gemini, not a FAQ bot.
@@ -177,7 +228,7 @@ function buildGeminiHistory(previousMessages) {
  * @param {Object}   location          - User's live location context
  * @returns {Promise<string>}          - Full response text after streaming completes
  */
-export async function askMomo(userMessage, previousMessages = [], medicalProfile = null, onChunk = null, location = null) {
+export async function askMomo(userMessage, previousMessages = [], medicalProfile = null, onChunk = null, location = null, emergencyContacts = []) {
   const maxRetries = 2
   let attempt = 0
 
@@ -185,7 +236,7 @@ export async function askMomo(userMessage, previousMessages = [], medicalProfile
     try {
       const ai = getGenAI()
       const geminiHistory = buildGeminiHistory(previousMessages)
-      const systemInstruction = buildMomoSystemInstruction(medicalProfile, location)
+      const systemInstruction = buildMomoSystemInstruction(medicalProfile, location, emergencyContacts)
 
       const chat = ai.chats.create({
         model: 'gemini-flash-lite-latest',

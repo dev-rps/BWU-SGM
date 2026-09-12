@@ -333,7 +333,7 @@ export function getRouteTrafficRegulations(route, hour) {
   }
 
   // Standard corridor fallback (based on route rank)
-  if (route.rankLabel === 'LEAST SAFE') {
+  if (route.rankLabel === 'RISKY') {
     return {
       hasRestriction: true,
       isNightWindowActive: isNightWindow,

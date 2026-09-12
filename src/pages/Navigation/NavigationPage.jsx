@@ -15,14 +15,17 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import Map, { Source, Layer, Marker } from 'react-map-gl/maplibre'
 import { setWorkerUrl } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
 import { HAZARD_TYPES, SEVERITY_COLORS } from '../../constants'
+import { VehicleAvatar } from '../../components/navigation/VehicleIcons'
 import { mapProvider } from '../../services/mapProvider'
+import { getWeather } from '../../services/weather'
 import { getCurrentLocation, watchLocation, clearLocationWatch, getInitialLocation } from '../../services/location'
 import { ACCIDENT_BLACKSPOTS } from '../../data/accidentBlackspots'
 import { CRIME_HOTSPOTS } from '../../data/crimeHotspots'
 import { FLOOD_ZONES_STATIC } from '../../data/floodZones'
+import { formatLocalTime, getEstimatedArrivalTime, resolveExactTimezone, getHeuristicTimezone } from '../../utils/timezone'
 
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 
@@ -69,15 +72,24 @@ function fmtDist(m) {
 
 function fmtDuration(totalMin) {
   if (!totalMin && totalMin !== 0) return '—'
-  const m = Math.round(totalMin)
-  if (m < 60) return `${m} min`
-  const h = Math.floor(m / 60)
-  const rem = m % 60
-  return rem === 0 ? `${h}h` : `${h}h ${rem}m`
+  const m = Math.max(0, Math.round(totalMin))
+  if (m === 0) return '0 min'
+  const days = Math.floor(m / 1440)
+  const hours = Math.floor((m % 1440) / 60)
+  const mins = m % 60
+
+  if (days > 0) {
+    return hours > 0 ? `${days} d ${hours} h ${mins}min` : `${days} d ${mins}min`
+  }
+  if (hours > 0) {
+    return mins > 0 ? `${hours} h ${mins}min` : `${hours} h`
+  }
+  return `${mins} min`
 }
 
 export default function NavigationPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const mapRef = useRef(null)
 
   const {
@@ -86,15 +98,72 @@ export default function NavigationPage() {
     destination,
     routes,
     selectedRouteIdx,
+    transportMode: storeTransportMode,
     setIsNavigating,
     setJourneyComplete,
     setLiveUserLocation,
     addReport,
   } = useAppStore()
 
-  const selectedRoute = routes[selectedRouteIdx] || routes[0]
+  const locationStateRoute = location.state?.selectedRoute
+  const effectiveRouteIdx = location.state?.selectedRouteIdx ?? selectedRouteIdx
+  const selectedRoute = locationStateRoute || routes[effectiveRouteIdx] || routes[0]
+  const activeMode = selectedRoute?.mode || selectedRoute?.travelMode || storeTransportMode || 'driving'
+  const isMotorbike = activeMode === 'motorbike' || activeMode === 'motorcycle' || activeMode === 'bike'
+  const isWalking   = activeMode === 'walking' || activeMode === 'pedestrian' || activeMode === 'walk'
+  const isCycling   = activeMode === 'cycling' || activeMode === 'bicycle' || activeMode === 'cycle'
+
+  const modeIcon = isMotorbike ? 'two_wheeler'
+    : isWalking ? 'directions_walk'
+    : isCycling ? 'directions_bike'
+    : 'directions_car'
+
+  const modeLabel = isMotorbike ? 'Bike'
+    : isWalking ? 'Walking'
+    : isCycling ? 'Cycling'
+    : 'Driving'
+
   const onRouteReports = useMemo(() => selectedRoute?.onRouteReports || [], [selectedRoute?.onRouteReports])
   const rawGeometry = useMemo(() => selectedRoute?.geometry || [], [selectedRoute?.geometry])
+
+  // ── Weather condition & AQI state during active navigation ─────────────
+  const [navWeather, setNavWeather] = useState(null)
+
+  useEffect(() => {
+    const lat = userLocation?.lat || startLocation?.lat
+    const lng = userLocation?.lng || startLocation?.lng
+    if (!lat || !lng) return
+    getWeather(lat, lng).then(setNavWeather).catch(() => {})
+  }, [userLocation?.lat, userLocation?.lng, startLocation?.lat, startLocation?.lng])
+
+  const navCondition = useMemo(() => {
+    if (!navWeather?.current?.weather?.[0]) {
+      return { text: 'Clear', icon: 'wb_sunny', color: '#F59E0B' }
+    }
+    const w = navWeather.current.weather[0]
+    const main = (w.main || '').toLowerCase()
+    const desc = (w.description || '').toLowerCase()
+    if (main.includes('rain') || desc.includes('rain') || desc.includes('drizzle')) {
+      return { text: 'Rainy', icon: 'rainy', color: '#2563EB' }
+    }
+    if (main.includes('cloud') || desc.includes('cloud')) {
+      return { text: 'Cloudy', icon: 'cloud', color: '#64748B' }
+    }
+    if (main.includes('thunder') || desc.includes('thunder')) {
+      return { text: 'Storm', icon: 'thunderstorm', color: '#7C3AED' }
+    }
+    if (main.includes('clear') || desc.includes('clear') || desc.includes('sun')) {
+      return { text: 'Clear', icon: 'wb_sunny', color: '#F59E0B' }
+    }
+    if (main.includes('fog') || desc.includes('mist') || desc.includes('haze')) {
+      return { text: 'Hazy', icon: 'foggy', color: '#9CA3AF' }
+    }
+    return { text: w.main || 'Clear', icon: 'partly_cloudy_day', color: '#0284C7' }
+  }, [navWeather])
+
+  const liveAqi = useMemo(() => {
+    return selectedRoute?.envData?.aqi || Math.round(selectedRoute?.mlAqiPm25 || 35)
+  }, [selectedRoute])
 
   // Coordinate normalizer that guarantees [lng, lat] for MapLibre GeoJSON
   const normalizeToLngLat = useCallback((p) => {
@@ -223,9 +292,15 @@ export default function NavigationPage() {
 
   const [stepIdx, setStepIdx] = useState(0)
   const [gpsMode, setGpsMode] = useState('live')
-  const [speed, setSpeed] = useState(38)
+  const [speed, setSpeed] = useState(() => {
+    if (activeMode === 'walking') return 5
+    if (activeMode === 'cycling') return 15
+    if (activeMode === 'motorbike') return 40
+    return 48
+  })
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true)
   const [is3DMode, setIs3DMode] = useState(true)
+  const [isNorthUp, setIsNorthUp] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isFollowing, setIsFollowing] = useState(true)
   const [momoToast, setMomoToast] = useState(null)
@@ -233,6 +308,24 @@ export default function NavigationPage() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [activeProvider, setActiveProvider] = useState(() => mapProvider.getStatus().activeProvider)
   const mapStyle = useMemo(() => mapProvider.getMapLibreStyle(), [activeProvider])
+
+  // ── Local Timezone & Real-Time Clock (Calculates user country's exact time, never Etc/UTC) ──
+  const [userTimezone, setUserTimezone] = useState(() => getHeuristicTimezone(initLoc?.lat, initLoc?.lng))
+  const [clockTick, setClockTick] = useState(0)
+
+  // Keep clock updated every 20 seconds so arrival ETA advances cleanly
+  useEffect(() => {
+    const timer = setInterval(() => setClockTick(t => t + 1), 20000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const lat = currentLat || userLocation?.lat || startLocation?.lat
+    const lng = currentLng || userLocation?.lng || startLocation?.lng
+    if (lat && lng) {
+      resolveExactTimezone(lat, lng).then(setUserTimezone).catch(() => {})
+    }
+  }, [currentLat, currentLng, userLocation?.lat, userLocation?.lng, startLocation?.lat, startLocation?.lng])
 
   // Simulation State
   const [isSimulating, setIsSimulating] = useState(false)
@@ -245,10 +338,12 @@ export default function NavigationPage() {
   const lastRafTimeRef = useRef(null)
   const isFollowingRef = useRef(true)
   const is3DModeRef = useRef(true)
+  const isNorthUpRef = useRef(false)
   const isSimulatingRef = useRef(false)
   const simMultiplierRef = useRef(2)
   const lastUiThrottleRef = useRef(0)
   const announcedMilestonesRef = useRef(new Set())
+  const lastProgressSpokenTimeRef = useRef(0)
   const watchRef = useRef(null)
   const prevGpsPos = useRef(null)
   const lastSpokenHazardRef = useRef(false)
@@ -256,15 +351,15 @@ export default function NavigationPage() {
   // Arrowhead rotation angle for LIVE GPS mode (Not active during 60 FPS simulation to prevent CSS transition fighting)
   useEffect(() => {
     if (isSimulating) return
-    const currentMapHeading = is3DMode && isFollowing ? cameraBearingRef.current : mapBearing
-    const relativeAngle = is3DMode && isFollowing
-      ? getShortestAngleDiff(arrowHeading, currentMapHeading)
-      : arrowHeading
+    const currentMapHeading = mapBearing
+    const relativeAngle = isNorthUp
+      ? arrowHeading
+      : 0
     const diff = ((relativeAngle - (prevContinuousAngleRef.current % 360) + 540) % 360) - 180
     const nextAngle = prevContinuousAngleRef.current + diff
     prevContinuousAngleRef.current = nextAngle
     setContinuousArrowAngle(nextAngle)
-  }, [arrowHeading, mapBearing, is3DMode, isFollowing, isSimulating])
+  }, [arrowHeading, mapBearing, isNorthUp, isFollowing, isSimulating])
 
   useEffect(() => {
     if (validCoords && validCoords.length > 1) {
@@ -272,13 +367,18 @@ export default function NavigationPage() {
       cameraBearingRef.current = b
       vehicleHeadingRef.current = b
       setBearing(b)
-      setMapBearing(is3DMode ? b : 0)
+      const initMapB = isNorthUpRef.current ? 0 : b
+      setMapBearing(initMapB)
+      if (compassNeedleRef.current) {
+        compassNeedleRef.current.style.transform = `rotate(${-initMapB}deg)`
+      }
       setArrowHeading(b)
     }
   }, [validCoords, is3DMode])
 
   useEffect(() => { isFollowingRef.current = isFollowing }, [isFollowing])
   useEffect(() => { is3DModeRef.current = is3DMode }, [is3DMode])
+  useEffect(() => { isNorthUpRef.current = isNorthUp }, [isNorthUp])
   useEffect(() => { isSimulatingRef.current = isSimulating }, [isSimulating])
   useEffect(() => { simMultiplierRef.current = simSpeedMultiplier }, [simSpeedMultiplier])
 
@@ -398,66 +498,212 @@ export default function NavigationPage() {
   }, [validCoords, polylineData])
 
   // Steps & Maneuver Waypoints
-  const steps = useMemo(() => {
-    if (selectedRoute?.steps?.length > 0) {
-      return selectedRoute.steps.map(s => ({
-        ...s,
-        instruction: s.instruction || s.name || 'Continue on route',
-        distanceText: s.distance < 1000 ? `${Math.round(s.distance)} m` : `${(s.distance / 1000).toFixed(1)} km`,
-      }))
+  // Steps & Maneuver Waypoints
+  // Polyline-driven windowed turn detection helper to ensure EVERY physical turn on the road is mapped
+  const { steps, stepTargetDistances } = useMemo(() => {
+    if (!validCoords || validCoords.length < 2 || !polylineData) {
+      const defSteps = [
+        { instruction: 'Head towards main road', shortInstruction: 'Head towards main road', streetName: 'Main Rd', distance: 350, distanceText: '350 m', icon: 'north', type: 'depart', turnDist: 0, completionDist: 350 },
+        { instruction: 'Turn right onto main corridor', shortInstruction: 'Turn right onto main corridor', streetName: 'Main corridor', distance: 1200, distanceText: '1.2 km', icon: 'turn_right', type: 'turn', turnDist: 350, completionDist: 1550 },
+        { instruction: 'Continue straight on high-safety arterial', shortInstruction: 'Continue straight', streetName: 'Arterial', distance: 3400, distanceText: '3.4 km', icon: 'straight', type: 'straight', turnDist: 1550, completionDist: 4950 },
+        { instruction: 'Arrive at destination', shortInstruction: 'Arrive at destination', streetName: 'Destination', distance: 100, distanceText: '100 m', icon: 'flag', type: 'arrive', turnDist: 4950, completionDist: 5050 },
+      ]
+      return {
+        steps: defSteps,
+        stepTargetDistances: [350, 1550, 4950, 5050],
+      }
     }
-    return [
-      { instruction: 'Head towards main road', distance: 350, distanceText: '350 m', icon: 'north' },
-      { instruction: 'Turn right onto main corridor', distance: 1200, distanceText: '1.2 km', icon: 'turn_right' },
-      { instruction: 'Continue straight on high-safety arterial', distance: 3400, distanceText: '3.4 km', icon: 'straight' },
-      { instruction: 'Turn left towards destination approach', distance: 800, distanceText: '800 m', icon: 'turn_left' },
-      { instruction: 'Arrive at destination', distance: 100, distanceText: '100 m', icon: 'flag' },
-    ]
-  }, [selectedRoute])
 
-  const stepTargetDistances = useMemo(() => {
-    if (!polylineData) return []
-    const { totalDistance, cumDists } = polylineData
-    return steps.map((s, idx) => {
-      if (s.point && Array.isArray(s.point) && geometry.length > 0) {
-        let minD = Infinity
-        let bestDist = ((idx + 1) / steps.length) * totalDistance
-        for (let i = 0; i < geometry.length; i++) {
-          const d = haversineMeters(s.point[0], s.point[1], geometry[i][0], geometry[i][1])
-          if (d < minD) {
-            minD = d
-            bestDist = cumDists[i]
+    const { cumDists, totalDistance } = polylineData
+    const rawSteps = selectedRoute?.steps || []
+    const detectedTurns = []
+    let lastTurnMeters = -100
+
+    // Scan polyline geometry points for real physical turns (bearing changes >= 25 degrees)
+    // Uses windowed sampling (~16-22m before and after) to capture sharp and curved intersections smoothly
+    for (let i = 1; i < validCoords.length - 1; i++) {
+      const curDist = cumDists[i]
+      if (curDist < 25 || curDist > totalDistance - 25) continue
+      if (curDist - lastTurnMeters < 28) continue
+
+      // Look back ~16-22m for incoming approach heading
+      let backIdx = i - 1
+      while (backIdx > 0 && curDist - cumDists[backIdx] < 16) {
+        backIdx--
+      }
+
+      // Look forward ~16-22m for outgoing departure heading
+      let fwdIdx = i + 1
+      while (fwdIdx < validCoords.length - 1 && cumDists[fwdIdx] - curDist < 16) {
+        fwdIdx++
+      }
+
+      const pBack = validCoords[backIdx]
+      const pCurr = validCoords[i]
+      const pFwd = validCoords[fwdIdx]
+
+      // CRITICAL: validCoords are [lng, lat]. In calculateBearing, arg1=lat1, arg2=lng1, arg3=lat2, arg4=lng2!
+      const inBearing = calculateBearing(pBack[1], pBack[0], pCurr[1], pCurr[0])
+      const outBearing = calculateBearing(pCurr[1], pCurr[0], pFwd[1], pFwd[0])
+      const diff = getShortestAngleDiff(outBearing, inBearing)
+
+      if (Math.abs(diff) >= 25) {
+        let turnText = 'Continue'
+        let icon = 'straight'
+        let type = 'turn'
+
+        if (diff > 120) {
+          turnText = 'Make a sharp right'
+          icon = 'u_turn_right'
+          type = 'sharp_right'
+        } else if (diff < -120) {
+          turnText = 'Make a sharp left'
+          icon = 'u_turn_left'
+          type = 'sharp_left'
+        } else if (diff >= 45) {
+          turnText = 'Turn right'
+          icon = 'turn_right'
+          type = 'turn_right'
+        } else if (diff <= -45) {
+          turnText = 'Turn left'
+          icon = 'turn_left'
+          type = 'turn_left'
+        } else if (diff > 0) {
+          turnText = 'Bear right'
+          icon = 'turn_slight_right'
+          type = 'slight_right'
+        } else {
+          turnText = 'Bear left'
+          icon = 'turn_slight_left'
+          type = 'slight_left'
+        }
+
+        // Match with nearby road name in rawSteps if available
+        let matchedRoad = ''
+        for (const rs of rawSteps) {
+          if (rs.point && isFinite(rs.point[0]) && isFinite(rs.point[1])) {
+            const distToStep = haversineMeters(pCurr[1], pCurr[0], rs.point[0], rs.point[1])
+            if (distToStep < 90 && (rs.name || rs.street)) {
+              matchedRoad = rs.name || rs.street
+              break
+            }
           }
         }
-        return bestDist
-      }
-      return Math.min(totalDistance, ((idx + 1) / steps.length) * totalDistance)
-    })
-  }, [polylineData, steps, geometry])
 
-  // Speech Synthesis
+        const fullInstruction = matchedRoad ? `${turnText} onto ${matchedRoad}` : turnText
+
+        detectedTurns.push({
+          turnDist: curDist,
+          instruction: fullInstruction,
+          shortInstruction: fullInstruction,
+          streetName: matchedRoad || (diff > 0 ? 'Right turn' : 'Left turn'),
+          icon,
+          type,
+          point: pCurr,
+          diff,
+        })
+        lastTurnMeters = curDist
+      }
+    }
+
+    const stepsList = []
+    const targets = []
+
+    // Step 0: Initial departure
+    const firstTurnDist = detectedTurns[0]?.turnDist || totalDistance
+    const depCompDist = Math.min(45, firstTurnDist * 0.4)
+    const depStreet = rawSteps[0]?.name || selectedRoute?.viaRoads || ''
+    stepsList.push({
+      instruction: rawSteps[0]?.instruction || (depStreet ? `Head toward ${depStreet}` : 'Head toward route corridor'),
+      shortInstruction: depStreet ? `Head toward ${depStreet}` : 'Head toward route corridor',
+      streetName: depStreet || 'Start corridor',
+      turnDist: 0,
+      completionDist: depCompDist,
+      icon: 'north',
+      type: 'depart',
+      point: validCoords[0],
+    })
+    targets.push(depCompDist)
+
+    // Step 1 to N: Detected Turns
+    for (let j = 0; j < detectedTurns.length; j++) {
+      const dt = detectedTurns[j]
+      const nextTurnDist = detectedTurns[j + 1]?.turnDist || totalDistance
+      // Keep turn active until 18m past apex (or until next turn), so current turn stays displayed during cornering
+      const compDist = Math.min(nextTurnDist - 12, dt.turnDist + 18)
+
+      stepsList.push({
+        ...dt,
+        completionDist: compDist,
+      })
+      targets.push(compDist)
+    }
+
+    // Final Step: Destination Arrival
+    stepsList.push({
+      instruction: `Arrive at ${destination?.name || 'destination'}`,
+      shortInstruction: 'Arrive at destination',
+      streetName: destination?.name || 'Destination',
+      turnDist: totalDistance,
+      completionDist: totalDistance,
+      icon: 'flag',
+      type: 'arrive',
+      point: validCoords[validCoords.length - 1],
+    })
+    targets.push(totalDistance)
+
+    return {
+      steps: stepsList,
+      stepTargetDistances: targets,
+    }
+  }, [validCoords, polylineData, selectedRoute, destination])
+
+  const lastSpokenRef = useRef({ text: '', time: 0 })
+
+  // Snappy, instant browser voice synthesis -- 0ms network latency, cancels outdated speech immediately
   const speakText = useCallback((text, force = false) => {
     if (!('speechSynthesis' in window)) return
     if (!isVoiceEnabled && !force) return
+    if (!text || typeof text !== 'string') return
+
+    const now = Date.now()
+    const clean = text.replace(/\*\*/g, '').replace(/\n/g, ' ').trim()
+
+    // Prevent repeating identical speech within 3.5 seconds
+    if (!force && clean === lastSpokenRef.current.text && now - lastSpokenRef.current.time < 3500) {
+      return
+    }
 
     try {
       window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.rate = 1.02
-      utterance.pitch = 1.05
-      utterance.volume = 1.0
+      lastSpokenRef.current = { text: clean, time: now }
+
+      const utt = new SpeechSynthesisUtterance(clean)
+      const multiplier = simMultiplierRef.current || 1
+      utt.rate = Math.min(1.4, 1.02 + (multiplier - 1) * 0.12)
+      utt.pitch = 0.95
+      utt.volume = 1.0
+      utt.lang = 'en-US'
 
       const voices = window.speechSynthesis.getVoices()
-      const enVoice = voices.find(v => v.lang.startsWith('en')) || voices[0]
-      if (enVoice) utterance.voice = enVoice
+      const isFemale = (name) => /female|woman|girl|zira|siri|samantha|heera|veena|lekha|karen|moira|victoria|susan|hazel|catherine|jenny|aria|lind/i.test(name)
 
-      utterance.onstart = () => setIsSpeaking(true)
-      utterance.onend = () => setIsSpeaking(false)
-      utterance.onerror = () => setIsSpeaking(false)
+      const enVoice =
+        voices.find(v => /\b(david|mark|ryan|george|ravi|prabhat|james|daniel|richard|aaron|guy|alex|oliver)\b/i.test(v.name) && !isFemale(v.name)) ||
+        voices.find(v => /\bmale\b/i.test(v.name) && !isFemale(v.name)) ||
+        voices.find(v => v.lang.startsWith('en') && !isFemale(v.name)) ||
+        voices.find(v => !isFemale(v.name)) ||
+        voices[0]
 
-      window.speechSynthesis.speak(utterance)
+      if (enVoice) utt.voice = enVoice
+
+      utt.onstart = () => setIsSpeaking(true)
+      utt.onend = () => setIsSpeaking(false)
+      utt.onerror = () => setIsSpeaking(false)
+
+      window.speechSynthesis.speak(utt)
     } catch (err) {
-      console.warn('Speech error:', err)
+      console.warn('Navigation speech error:', err)
       setIsSpeaking(false)
     }
   }, [isVoiceEnabled])
@@ -474,23 +720,51 @@ export default function NavigationPage() {
     }
   }
 
+  // ── Safety Score Helpers ─────────────────────────────────────────────────────
+
+  const safetyScore = selectedRoute?.safetyScore ?? 88
+  const safetyLabel = safetyScore >= 80 ? 'Safe' : safetyScore >= 50 ? 'Moderate' : 'Risky'
+
+  const hazardCount = onRouteReports.length +
+    (selectedRoute?.onRouteAccidents?.length || 0) +
+    (selectedRoute?.onRouteCrimes?.length || 0) +
+    (selectedRoute?.onRouteFlood?.length || 0)
+
   const currentStep = steps[stepIdx] || steps[steps.length - 1]
   const nextStep = steps[stepIdx + 1] || null
 
-  const targetStepDist = stepTargetDistances[stepIdx] || (polylineData?.totalDistance || 1000)
-  const liveMetersToStep = Math.max(0, targetStepDist - routeDistanceProgress)
-  const liveStepDistanceText = fmtDist(liveMetersToStep)
+  const targetManeuverDist = currentStep?.turnDist ?? (polylineData?.totalDistance || 1000)
+  const isAtManeuver = routeDistanceProgress >= targetManeuverDist && routeDistanceProgress < (currentStep?.completionDist ?? (targetManeuverDist + 18))
+  const liveMetersToStep = Math.max(0, targetManeuverDist - routeDistanceProgress)
+  const liveStepDistanceText = isAtManeuver ? 'Now' : (liveMetersToStep <= 15 ? 'Now' : fmtDist(liveMetersToStep))
 
-  const totalRouteDist = polylineData?.totalDistance || (selectedRoute?.distanceKm ? selectedRoute.distanceKm * 1000 : 5000)
+  const totalRouteDist = Math.max(
+    1,
+    Number(selectedRoute?.distance) > 0
+      ? Number(selectedRoute.distance)
+      : (polylineData?.totalDistance || (Number(selectedRoute?.distanceKm) > 0 ? Number(selectedRoute.distanceKm) * 1000 : 1000))
+  )
   const distRemainingMeters = Math.max(0, totalRouteDist - routeDistanceProgress)
-  const remainingMin = Math.max(1, Math.round(distRemainingMeters / (Math.max(speed, 20) * 1000 / 60)))
-  const progressPct = Math.min(100, Math.round((routeDistanceProgress / totalRouteDist) * 100))
+
+  // Determine mode speed for fallback duration: walking 4.5 km/h, cycling 15 km/h, motorbike 35 km/h, driving 35 km/h
+  const speedKmh = isWalking ? 4.5 : isCycling ? 15 : isMotorbike ? 35 : 35
+  const fallbackDurationMin = Math.max(1, Math.round((totalRouteDist / 1000 / speedKmh) * 60))
+  const routeDurMin = Number(selectedRoute?.durationMin) > 0
+    ? Number(selectedRoute.durationMin)
+    : (Number(selectedRoute?.duration) > 0 ? Math.round(Number(selectedRoute.duration) / 60) : fallbackDurationMin)
+  const baseRouteDurationMin = Math.max(1, routeDurMin)
+
+  const progressFraction = Math.min(1, Math.max(0, routeDistanceProgress / (totalRouteDist || 1)))
+  const remainingMin = Math.max(1, Math.round(baseRouteDurationMin * (1 - progressFraction)))
+  const progressPct = Math.min(100, Math.round(progressFraction * 100))
 
   const arrivalTime = useMemo(() => {
-    const d = new Date()
-    d.setMinutes(d.getMinutes() + remainingMin)
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }, [remainingMin])
+    return getEstimatedArrivalTime(remainingMin, {
+      lat: currentLat || userLocation?.lat || startLocation?.lat,
+      lng: currentLng || userLocation?.lng || startLocation?.lng,
+      timeZone: userTimezone,
+    })
+  }, [remainingMin, currentLat, currentLng, userLocation?.lat, userLocation?.lng, startLocation?.lat, startLocation?.lng, userTimezone, clockTick])
 
   const handleMomoBriefing = () => {
     const safetyScore = selectedRoute?.safetyScore || 88
@@ -504,7 +778,7 @@ export default function NavigationPage() {
       hazardMsg += ` Note: ${selectedRoute.mlReasons[0]}.`
     }
 
-    const msg = `Momo here! In ${liveStepDistanceText}, ${currentStep.instruction}. ${fmtDist(distRemainingMeters)} remaining, ETA ${arrivalTime}. Route safety score is ${safetyScore}. ${hazardMsg}`
+    const msg = `Momo here! In ${liveStepDistanceText}, ${currentStep.instruction}. ${fmtDist(distRemainingMeters)} remaining, arriving at ${arrivalTime}. Route safety score is ${safetyScore}. ${hazardMsg}`
     setMomoToast(`In ${liveStepDistanceText}, ${currentStep.instruction} • ${fmtDist(distRemainingMeters)} to destination`)
     setTimeout(() => setMomoToast(null), 5500)
     speakText(msg, true)
@@ -523,19 +797,57 @@ export default function NavigationPage() {
   }, [navigate, setLiveUserLocation, setIsNavigating, setJourneyComplete, isVoiceEnabled, speakText])
 
   useEffect(() => {
-    if (!isVoiceEnabled) return
+    if (!isVoiceEnabled || !currentStep) return
 
-    const stepKey400 = `${stepIdx}-400`
-    const stepKey100 = `${stepIdx}-100`
+    const stepKeyPre = `${stepIdx}-pre`
+    const stepKeyNow = `${stepIdx}-now`
 
-    if (liveMetersToStep <= 450 && liveMetersToStep > 350 && !announcedMilestonesRef.current.has(stepKey400)) {
-      announcedMilestonesRef.current.add(stepKey400)
-      speakText(`In 400 meters, ${currentStep.instruction}`)
-    } else if (liveMetersToStep <= 120 && liveMetersToStep > 60 && !announcedMilestonesRef.current.has(stepKey100)) {
-      announcedMilestonesRef.current.add(stepKey100)
-      speakText(`In 100 meters, ${currentStep.instruction}`)
+    // 1. Advance warning when 90m - 220m away from the turn (for steps that are long enough)
+    if (liveMetersToStep <= 220 && liveMetersToStep > 90 && !announcedMilestonesRef.current.has(stepKeyPre)) {
+      announcedMilestonesRef.current.add(stepKeyPre)
+      const roundedMeters = Math.round(liveMetersToStep / 10) * 10
+      speakText(`In ${roundedMeters} meters, ${currentStep.shortInstruction || currentStep.instruction}`)
+    } else if ((liveMetersToStep <= 30 || isAtManeuver) && !announcedMilestonesRef.current.has(stepKeyNow)) {
+      // 2. Immediate maneuver at the turn intersection
+      announcedMilestonesRef.current.add(stepKeyNow)
+      speakText(currentStep.shortInstruction || currentStep.instruction, true)
+    } else if (liveMetersToStep >= 380) {
+      // 3. Periodic countdown for long stretches: announce distance every 200 meters (e.g. 1.2 km, 1 km, 800m, 600m, 400m to go)
+      const speedMult = simMultiplierRef.current || 1
+      const interval = speedMult >= 5 ? 500 : 200
+      const milestone = Math.round(liveMetersToStep / interval) * interval
+      const stepKeyProg = `${stepIdx}-prog-${milestone}`
+      const now = Date.now()
+
+      if (
+        milestone >= 400 &&
+        Math.abs(liveMetersToStep - milestone) <= 25 &&
+        !announcedMilestonesRef.current.has(stepKeyProg) &&
+        now - lastProgressSpokenTimeRef.current >= 6500
+      ) {
+        announcedMilestonesRef.current.add(stepKeyProg)
+        lastProgressSpokenTimeRef.current = now
+
+        const distText = milestone >= 1000
+          ? (milestone === 1000 ? '1 kilometer to go' : `${(milestone / 1000).toFixed(1)} kilometers to go`)
+          : `${milestone} meters to go`
+
+        let speech = ''
+        if (currentStep.type === 'arrive') {
+          speech = `${distText} to destination`
+        } else {
+          const roadName = currentStep.streetName && !/right|left|start/i.test(currentStep.streetName)
+            ? currentStep.streetName
+            : ''
+          speech = roadName
+            ? `Continue on ${roadName}, ${distText}`
+            : `Continue straight, ${distText}`
+        }
+
+        speakText(speech)
+      }
     }
-  }, [stepIdx, liveMetersToStep, currentStep, isVoiceEnabled, speakText])
+  }, [stepIdx, liveMetersToStep, isAtManeuver, currentStep, isVoiceEnabled, speakText])
 
   const hazardNearby = useMemo(() => {
     if (!isFinite(currentLat) || !isFinite(currentLng)) {
@@ -668,13 +980,13 @@ export default function NavigationPage() {
     const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
     if (!map) return
 
-    const targetBearing = cameraBearingRef.current || 0
+    const targetBearing = isNorthUpRef.current ? 0 : (cameraBearingRef.current || 0)
     const lat = currentLatRef.current
     const lng = currentLngRef.current
 
     map.easeTo({
       center: [lng, lat],
-      bearing: is3DMode ? targetBearing : 0,
+      bearing: targetBearing,
       pitch: is3DMode ? 62 : 0,
       zoom: is3DMode ? 18.2 : 16.5,
       padding: is3DMode
@@ -682,8 +994,46 @@ export default function NavigationPage() {
         : { top: 40, bottom: 180, left: 0, right: 0 },
       duration: 650,
     })
-    setMapBearing(is3DMode ? targetBearing : 0)
+    setMapBearing(targetBearing)
+    if (compassNeedleRef.current) {
+      compassNeedleRef.current.style.transform = `rotate(${-targetBearing}deg)`
+    }
   }, [is3DMode])
+
+  const handleCompassClick = useCallback(() => {
+    const nextNorthUp = !isNorthUp
+    setIsNorthUp(nextNorthUp)
+    isNorthUpRef.current = nextNorthUp
+
+    const targetB = nextNorthUp ? 0 : (cameraBearingRef.current || 0)
+    setMapBearing(targetB)
+
+    if (mapRef.current) {
+      const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
+      if (map) {
+        map.easeTo({
+          bearing: targetB,
+          pitch: nextNorthUp ? 0 : (is3DMode ? 62 : 0),
+          duration: 500,
+        })
+      }
+    }
+
+    if (compassNeedleRef.current) {
+      compassNeedleRef.current.style.transform = `rotate(${-targetB}deg)`
+    }
+
+    if (arrowIconRef.current) {
+      arrowIconRef.current.style.transform = nextNorthUp
+        ? `rotate(${vehicleHeadingRef.current}deg)`
+        : 'rotate(0deg)'
+    }
+
+    if (nextNorthUp && is3DMode) {
+      setIs3DMode(false)
+      is3DModeRef.current = false
+    }
+  }, [isNorthUp, is3DMode])
 
   // ── 60 FPS Smooth Parametric Simulation Loop (Zero Jitter, Synchronous WebGL Marker) ──
   useEffect(() => {
@@ -741,13 +1091,15 @@ export default function NavigationPage() {
       const camDiff = getShortestAngleDiff(state.lookaheadBearing, cameraBearingRef.current)
       cameraBearingRef.current = (cameraBearingRef.current + camDiff * Math.min(1, dt * 4.2) + 360) % 360
 
-      // 3. Synchronous WebGL Map Camera update in 3D follow perspective
+      // 3. Synchronous WebGL Map Camera update in follow perspective (Course-Up in both 2D and 3D)
+      const activeMapBearing = isNorthUpRef.current ? 0 : cameraBearingRef.current
+
       if (isFollowingRef.current && mapRef.current) {
         const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
         if (map) {
           map.jumpTo({
             center: [state.lng, state.lat],
-            bearing: is3DModeRef.current ? cameraBearingRef.current : 0,
+            bearing: activeMapBearing,
             pitch: is3DModeRef.current ? 62 : 0,
             zoom: is3DModeRef.current ? 18.2 : 16.5,
             padding: is3DModeRef.current
@@ -762,21 +1114,20 @@ export default function NavigationPage() {
         markerRef.current.setLngLat([state.lng, state.lat])
       }
 
-      // 5. Arrowhead On-Screen Orientation:
-      // In 3D follow mode: points forward relative to camera, smoothly steering into curves
-      // In 2D mode: points in world travel direction
-      const onScreenArrowAngle = is3DModeRef.current && isFollowingRef.current
-        ? getShortestAngleDiff(vehicleHeadingRef.current, cameraBearingRef.current)
-        : vehicleHeadingRef.current
-
+      // 5. Arrowhead / Vehicle Avatar On-Screen Orientation:
+      // In Heading-Up (!isNorthUpRef.current): avatar stays straight upright (rotate(0deg)) pointing forward along the road!
+      // In North-Up (isNorthUpRef.current): avatar rotates with vehicle heading relative to North.
       if (arrowIconRef.current) {
-        arrowIconRef.current.style.transform = `rotate(${onScreenArrowAngle}deg)`
+        if (!isNorthUpRef.current) {
+          arrowIconRef.current.style.transform = 'rotate(0deg)'
+        } else {
+          arrowIconRef.current.style.transform = `rotate(${vehicleHeadingRef.current}deg)`
+        }
       }
 
-      // 6. Mini Compass Needle Direct Update
+      // 6. Mini Compass Needle Direct Update (Syncs with real North in real time!)
       if (compassNeedleRef.current) {
-        const mapHeading = is3DModeRef.current && isFollowingRef.current ? cameraBearingRef.current : 0
-        compassNeedleRef.current.style.transform = `rotate(${-mapHeading}deg)`
+        compassNeedleRef.current.style.transform = `rotate(${-activeMapBearing}deg)`
       }
 
       // 7. Throttled UI State updates (~4 Hz) — eliminates React 60 FPS re-render overhead
@@ -789,7 +1140,7 @@ export default function NavigationPage() {
         setCurrentLat(state.lat)
         setCurrentLng(state.lng)
         setBearing(cameraBearingRef.current)
-        setMapBearing(is3DModeRef.current ? cameraBearingRef.current : 0)
+        setMapBearing(activeMapBearing)
         setArrowHeading(vehicleHeadingRef.current)
 
         let activeIdx = 0
@@ -802,9 +1153,23 @@ export default function NavigationPage() {
         }
         setStepIdx(s => {
           if (s !== activeIdx) {
-            const newStep = steps[activeIdx]
-            if (newStep && isVoiceEnabled) {
-              speakText(newStep.instruction)
+            // Cancel stale speech immediately when vehicle completes turn or steps advance
+            if ('speechSynthesis' in window) {
+              window.speechSynthesis.cancel()
+            }
+            setIsSpeaking(false)
+
+            const cur = steps[activeIdx]
+            const distToTurn = (cur?.turnDist ?? 0) - simDistanceRef.current
+            if (cur && isVoiceEnabled) {
+              if (distToTurn <= 30 || simDistanceRef.current >= (cur.turnDist ?? 0)) {
+                announcedMilestonesRef.current.add(`${activeIdx}-now`)
+                speakText(cur.shortInstruction || cur.instruction, true)
+              } else if (distToTurn <= 180 && distToTurn > 30) {
+                announcedMilestonesRef.current.add(`${activeIdx}-pre`)
+                const rounded = Math.round(distToTurn / 10) * 10
+                speakText(`In ${rounded} meters, ${cur.shortInstruction || cur.instruction}`)
+              }
             }
           }
           return activeIdx
@@ -880,21 +1245,67 @@ export default function NavigationPage() {
       const diff = getShortestAngleDiff(nextHeading, cameraBearingRef.current)
       cameraBearingRef.current = (cameraBearingRef.current + diff * 0.4 + 360) % 360
       setBearing(cameraBearingRef.current)
-      setMapBearing(is3DModeRef.current ? cameraBearingRef.current : 0)
+      const activeMapBearing = isNorthUpRef.current ? 0 : cameraBearingRef.current
+      setMapBearing(activeMapBearing)
 
+      if (arrowIconRef.current) {
+        if (!isNorthUpRef.current) {
+          arrowIconRef.current.style.transform = 'rotate(0deg)'
+        } else {
+          arrowIconRef.current.style.transform = `rotate(${nextHeading}deg)`
+        }
+      }
       if (compassNeedleRef.current) {
-        compassNeedleRef.current.style.transform = `rotate(${- (is3DModeRef.current ? cameraBearingRef.current : 0)}deg)`
+        compassNeedleRef.current.style.transform = `rotate(${-activeMapBearing}deg)`
       }
     }
 
     prevGpsPos.current = { lat, lng }
 
+    // Update route progress & step in live GPS mode
+    if (polylineData && validCoords && validCoords.length > 1) {
+      let minDist = Infinity
+      let closestIdx = 0
+      for (let i = 0; i < validCoords.length; i++) {
+        // validCoords[i][1] is latitude, validCoords[i][0] is longitude
+        const d = haversineMeters(lat, lng, validCoords[i][1], validCoords[i][0])
+        if (d < minDist) {
+          minDist = d
+          closestIdx = i
+        }
+      }
+      const curProgress = polylineData.cumDists?.[closestIdx] || 0
+      setRouteDistanceProgress(curProgress)
+      updateRouteProgress(lng, lat, curProgress)
+
+      if (stepTargetDistances && stepTargetDistances.length) {
+        let activeIdx = 0
+        for (let i = 0; i < stepTargetDistances.length; i++) {
+          if (curProgress < stepTargetDistances[i]) {
+            activeIdx = i
+            break
+          }
+          activeIdx = i
+        }
+        setStepIdx(s => {
+          if (s !== activeIdx) {
+            if ('speechSynthesis' in window) {
+              window.speechSynthesis.cancel()
+            }
+            setIsSpeaking(false)
+          }
+          return activeIdx
+        })
+      }
+    }
+
     if (isFollowingRef.current && mapRef.current) {
       const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
       if (map) {
+        const activeMapBearing = isNorthUpRef.current ? 0 : cameraBearingRef.current
         map.easeTo({
           center: [lng, lat],
-          bearing: is3DModeRef.current ? cameraBearingRef.current : 0,
+          bearing: activeMapBearing,
           pitch: is3DModeRef.current ? 62 : 0,
           zoom: is3DModeRef.current ? 18.2 : 16.5,
           padding: is3DModeRef.current
@@ -904,7 +1315,7 @@ export default function NavigationPage() {
         })
       }
     }
-  }, [setLiveUserLocation])
+  }, [setLiveUserLocation, polylineData, validCoords, updateRouteProgress, stepTargetDistances])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !navigator.geolocation) return
@@ -990,10 +1401,18 @@ export default function NavigationPage() {
           onRotateStart={() => setIsFollowing(false)}
           onZoomStart={() => setIsFollowing(false)}
           onMove={(e) => {
-            setMapBearing(e.viewState.bearing)
+            const b = e.viewState.bearing
+            setMapBearing(b)
+            if (compassNeedleRef.current) {
+              compassNeedleRef.current.style.transform = `rotate(${-b}deg)`
+            }
           }}
           onRotate={(e) => {
-            setMapBearing(e.viewState.bearing)
+            const b = e.viewState.bearing
+            setMapBearing(b)
+            if (compassNeedleRef.current) {
+              compassNeedleRef.current.style.transform = `rotate(${-b}deg)`
+            }
           }}
         >
 
@@ -1037,35 +1456,30 @@ export default function NavigationPage() {
             />
           </Source>
 
-          {/* 3D User Navigation Puck with Rotating Directional Arrow & Heading Beam */}
+          {/* User Navigation Vehicle on Road (Replaces blue circle puck with mode-adapted vehicle) */}
           <Marker ref={markerRef} longitude={currentLng} latitude={currentLat} anchor="center">
             <div className="relative flex items-center justify-center pointer-events-none" style={{ width: 84, height: 84 }}>
-              {/* Pulsing radar glow */}
-              <div className="absolute w-16 h-16 rounded-full bg-blue-500/25 animate-ping opacity-70" />
+              {/* Radar pulse */}
+              <div className="absolute w-16 h-16 rounded-full bg-emerald-500/25 animate-ping opacity-60" />
+              <div className="absolute w-12 h-12 rounded-full bg-emerald-500/15 border border-emerald-500/30" />
 
-              {/* Rotating 3D Navigation Arrowhead (Points towards forward movement direction) */}
+              {/* Vehicle Avatar:
+                  In 3D mode: ALWAYS upright / straight (rotate(0deg)) facing horizon!
+                  In 2D mode: rotates with continuousArrowAngle along the road heading.
+              */}
               <div
                 ref={arrowIconRef}
-                className="relative z-10 w-11 h-11 rounded-full bg-white shadow-[0_8px_24px_rgba(0,0,0,0.55)] border-[2.5px] border-blue-600 flex items-center justify-center will-change-transform"
+                className="relative z-10 flex items-center justify-center will-change-transform filter drop-shadow-[0_6px_14px_rgba(0,0,0,0.5)]"
                 style={{
-                  transform: `rotate(${continuousArrowAngle}deg)`,
-                  transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                  transform: isNorthUp ? `rotate(${continuousArrowAngle}deg)` : 'rotate(0deg)',
+                  transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
                 }}
               >
-                <svg viewBox="0 0 24 24" className="w-6 h-6 drop-shadow-sm">
-                  <path
-                    d="M12 2.5 L20 20.5 L12 16.5 L4 20.5 Z"
-                    fill="#1d4ed8"
-                    stroke="#2563eb"
-                    strokeWidth="1.2"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M12 3 L19 19.5 L12 16 Z"
-                    fill="rgba(255,255,255,0.35)"
-                  />
-                  <circle cx="12" cy="14" r="1.8" fill="#ffffff" />
-                </svg>
+                <VehicleAvatar
+                  mode={activeMode}
+                  is3D={is3DMode}
+                  className={is3DMode ? "w-14 h-16" : "w-10 h-14"}
+                />
               </div>
             </div>
           </Marker>
@@ -1111,420 +1525,424 @@ export default function NavigationPage() {
         </Map>
       </div>
 
-      {/* ════════ TOP MANEUVER HUD (Google Maps Obsidian/Emerald Style) ════════ */}
-      <div className="absolute top-0 left-0 right-0 z-30 p-3 pt-4 select-none">
-        <div className="relative bg-gradient-to-b from-[#0A3622] to-[#0F5132] text-white rounded-3xl p-4 shadow-[0_12px_32px_rgba(0,0,0,0.6)] border border-emerald-600/40 backdrop-blur-md overflow-hidden">
-          
-          {/* Top Status Indicators (Map Provider + GPS Mode + Momo Assistant + Voice) */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <button 
-                type="button"
-                onClick={() => {
-                  const next = activeProvider === 'google' ? 'osm' : 'google'
-                  mapProvider.forceFallback(next === 'osm')
-                  setActiveProvider(next)
-                }}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/40 border border-white/10 text-[10px] font-black uppercase tracking-wider hover:bg-black/60 active:scale-95 transition-all cursor-pointer"
-                title={`Active: ${activeProvider === 'google' ? 'Google Maps 3D' : 'OpenStreetMap Fallback'}. Click to toggle provider.`}
-              >
-                <div className={`w-2 h-2 rounded-full ${activeProvider === 'google' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                <span>{activeProvider === 'google' ? 'Google Maps' : 'OSM Fallback'}</span>
-                <span className="text-[9px] text-slate-400 ml-0.5">⇄</span>
-              </button>
-
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/40 border border-white/10 text-[10px] font-bold">
-                <span className="material-symbols-outlined text-[12px] text-sky-400">
-                  {gpsMode === 'simulated' ? 'sports_esports' : 'gps_fixed'}
-                </span>
-                <span className="text-slate-300 capitalize">{gpsMode}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleMomoBriefing}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-900/60 hover:bg-emerald-800/80 border border-emerald-500/40 text-emerald-200 text-[11px] font-bold active:scale-95 transition-all cursor-pointer shadow-sm"
-                title="Hear Momo's Route Briefing"
-              >
-                <span className="text-[13px] leading-none">🐹</span>
-                <span>Momo</span>
-              </button>
-
-              <button
-                onClick={toggleVoice}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black transition-all active:scale-95 ${
-                  isVoiceEnabled
-                    ? 'bg-emerald-500/25 border border-emerald-400/50 text-emerald-200'
-                    : 'bg-black/30 border border-white/10 text-slate-400'
-                }`}
-                title={isVoiceEnabled ? 'Voice Guidance Active (Tap to mute)' : 'Voice Muted (Tap to enable)'}
-              >
-                {isSpeaking ? (
-                  <div className="flex items-end gap-0.5 h-3.5 w-3.5 justify-center">
-                    <span className="w-0.5 bg-emerald-300 rounded-full animate-pulse h-3" />
-                    <span className="w-0.5 bg-emerald-200 rounded-full animate-pulse h-3.5" style={{ animationDelay: '150ms' }} />
-                    <span className="w-0.5 bg-emerald-300 rounded-full animate-pulse h-2" style={{ animationDelay: '300ms' }} />
-                  </div>
-                ) : (
-                  <span className="material-symbols-outlined text-[15px]">
-                    {isVoiceEnabled ? 'volume_up' : 'volume_off'}
-                  </span>
-                )}
-                <span>{isVoiceEnabled ? 'Voice ON' : 'Muted'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Maneuver Icon & Distance Countdown */}
-          <div className="flex items-center gap-3.5">
-            <div className="w-14 h-14 rounded-2xl bg-black/30 border border-white/15 flex items-center justify-center flex-shrink-0 shadow-inner">
-              <span className="material-symbols-outlined text-white text-[38px] font-black">
-                {currentStep.icon || 'straight'}
-              </span>
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl font-black tracking-tight text-white drop-shadow-sm">
-                  {liveStepDistanceText}
-                </span>
-              </div>
-              <p className="text-base font-bold text-emerald-100 truncate leading-snug">
-                {currentStep.instruction}
-              </p>
-            </div>
-          </div>
-
-          {/* Next Turn Preview Pill */}
-          {nextStep && (
-            <div className="mt-3 pt-2.5 border-t border-emerald-700/50 flex items-center gap-2 text-xs font-semibold text-emerald-200/90">
-              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 bg-black/30 px-1.5 py-0.5 rounded">
-                Then
-              </span>
-              <span className="material-symbols-outlined text-[15px] text-emerald-300">
-                {nextStep.icon || 'straight'}
-              </span>
-              <span className="truncate">{nextStep.instruction}</span>
-            </div>
-          )}
-
-          {/* Progress Bar */}
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/40">
-            <div
-              className="h-full bg-sky-400 transition-all duration-300 rounded-r-full shadow-[0_0_8px_#38bdf8]"
-              style={{ width: `${progressPct}%` }}
+      {/* ════════ TOP HEADER - Safety Guardian Map Brand Bar ════════ */}
+      <header className="absolute top-0 left-0 right-0 z-30 pt-2.5 px-3.5 flex items-center justify-between pointer-events-auto md:left-1/2 md:-translate-x-1/2 md:w-[480px] md:right-auto">
+        {/* Brand Chip with Momo Navigation Avatar */}
+        <div className="flex items-center gap-2 bg-white/95 backdrop-blur-md px-2.5 py-1.5 rounded-full border border-slate-200/90 shadow-sm flex-shrink-0">
+          <button
+            type="button"
+            onClick={handleMomoBriefing}
+            className="w-7.5 h-7.5 rounded-full overflow-hidden border border-emerald-400/80 bg-emerald-50 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform shadow-xs p-0"
+            title="Momo Safety Guardian Briefing"
+          >
+            <img
+              src="/momo-nav.png"
+              alt="Momo Safety Guardian"
+              className="w-full h-full object-cover"
             />
+          </button>
+          <div className="flex flex-col leading-tight">
+            <span className="text-[12px] font-black tracking-tight text-slate-900">Safety Guardian Map</span>
+            <span className="text-[9px] font-bold text-emerald-700 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+              {is3DMode ? '3D Navigation Active' : '2D Navigation Active'}
+            </span>
           </div>
         </div>
 
-        {/* Momo Floating Speech Toast */}
+        {/* Quick Controls: Voice Toggle */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={toggleVoice}
+            className="w-9 h-9 rounded-full bg-white/95 backdrop-blur-md border border-slate-200/90 shadow-sm flex items-center justify-center text-slate-700 hover:text-[#1B4332] active:scale-95 transition cursor-pointer"
+            title={isVoiceEnabled ? 'Voice On' : 'Voice Off'}
+          >
+            {isSpeaking ? (
+              <div className="flex items-end gap-0.5 h-4 justify-center">
+                <span className="w-0.5 bg-emerald-500 rounded-full animate-pulse h-3" />
+                <span className="w-0.5 bg-emerald-400 rounded-full animate-pulse h-4" style={{ animationDelay: '150ms' }} />
+                <span className="w-0.5 bg-emerald-500 rounded-full animate-pulse h-2" style={{ animationDelay: '300ms' }} />
+              </div>
+            ) : (
+              <span className="material-symbols-outlined text-[19px]">{isVoiceEnabled ? 'volume_up' : 'volume_off'}</span>
+            )}
+          </button>
+        </div>
+      </header>
+
+      {/* ════════ NAVIGATION INSTRUCTION CARD (Positioned with zero overlap) ════════ */}
+      <div className="absolute top-[56px] left-0 right-0 z-30 px-3.5 pointer-events-auto md:left-1/2 md:-translate-x-1/2 md:w-[480px] md:right-auto">
+        <div className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-3 shadow-xl flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-11 h-11 rounded-xl bg-[#1B4332] text-white flex items-center justify-center shadow-md flex-shrink-0">
+              <span className="material-symbols-outlined text-[28px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24" }}>{currentStep?.icon || 'straight'}</span>
+            </div>
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-sm font-black text-slate-900">{liveStepDistanceText}</span>
+                <span className="text-xs font-semibold text-slate-500 truncate">• {currentStep?.instruction || 'Continue on route'}</span>
+              </div>
+              <div className="text-[14px] font-extrabold text-slate-900 tracking-tight truncate">{currentStep?.streetName || currentStep?.name || selectedRoute?.viaRoads || ''}</div>
+              
+              {/* Route & Clean Weather/AQI Info (No bulky background) */}
+              <div className="flex items-center gap-2 mt-1 text-[11px] font-bold flex-wrap">
+                <div className="flex items-center gap-1.5 text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200/80">
+                  <span className="material-symbols-outlined text-[14px] icon-filled text-emerald-700">verified_user</span>
+                  <span className="font-bold">{selectedRoute?.rankLabel || 'BALANCED'}</span>
+                </div>
+
+                {/* Dark cloud weather icon & AQI (Clean, non-bulky, no background box) */}
+                <div className="flex items-center gap-1.5 text-slate-700">
+                  <span className="material-symbols-outlined icon-filled text-slate-700 text-[15px]">
+                    {navCondition.text.toLowerCase().includes('cloud') ? 'cloud' : navCondition.icon}
+                  </span>
+                  <span className="font-extrabold capitalize text-slate-800">{navCondition.text}</span>
+                  <span className="text-slate-300 font-light">·</span>
+                  <span className="text-emerald-800 font-extrabold flex items-center gap-0.5">
+                    <span className="material-symbols-outlined text-[12px] text-emerald-600">air</span>
+                    <span>AQI {liveAqi}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          {nextStep && (
+            <div className="pl-2 border-l border-slate-100 flex flex-col items-center text-slate-400 flex-shrink-0">
+              <span className="text-[9px] font-bold uppercase tracking-wider">Then</span>
+              <span className="material-symbols-outlined text-[20px] text-slate-700" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>{nextStep?.icon || 'straight'}</span>
+            </div>
+          )}
+        </div>
         {momoToast && (
-          <div className="mt-2.5 px-3.5 py-2 rounded-2xl bg-slate-900/95 border border-emerald-500/40 shadow-xl backdrop-blur-md flex items-center gap-2 animate-fade-in text-xs font-bold text-emerald-200">
-            <span className="text-[16px]">🐹</span>
-            <span className="truncate">{momoToast}</span>
+          <div className="mt-2 animate-fade-in">
+            <div className="bg-slate-900/95 backdrop-blur-md text-white rounded-xl px-3 py-2 shadow-lg border border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-5.5 h-5.5 rounded-full overflow-hidden flex-shrink-0 border border-emerald-400/50 bg-emerald-50">
+                  <img
+                    src="/momo-nav.png"
+                    alt="Momo"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <p className="text-xs font-medium leading-snug">{momoToast}</p>
+              </div>
+              <button onClick={() => setMomoToast(null)} className="text-slate-400 hover:text-white ml-2 flex-shrink-0 cursor-pointer"><span className="material-symbols-outlined text-[16px]">close</span></button>
+            </div>
+          </div>
+        )}
+        {!momoToast && hazardCount > 0 && (
+          <div className="mt-2 animate-fade-in">
+            <div className="bg-amber-600/95 backdrop-blur-md text-white rounded-xl px-3 py-2 shadow-lg border border-amber-400/40 flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center font-black text-[11px] flex-shrink-0">!</div>
+              <p className="text-xs font-semibold">{hazardCount} hazard{hazardCount > 1 ? 's' : ''} reported on this route - stay alert</p>
+            </div>
           </div>
         )}
       </div>
 
-      {/* ════════ FLOATING CONTROLS (Right Edge) ════════ */}
-      <div className="absolute right-3.5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2.5 items-center">
-        
-        {/* Floating Interactive Mini Compass Widget (Active needle rotates to True North, tap to orient North / Heading) */}
-        <button
-          type="button"
-          onClick={() => {
-            if (!mapRef.current) return
-            const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
-            if (!map) return
-
-            const isNorthUp = Math.abs(mapBearing % 360) < 5
-            const targetBearing = isNorthUp ? (cameraBearingRef.current || 0) : 0
-
-            map.easeTo({
-              bearing: targetBearing,
-              duration: 450,
-            })
-            setMapBearing(targetBearing)
-          }}
-          className="relative w-12 h-12 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-slate-700/80 shadow-[0_8px_24px_rgba(0,0,0,0.5)] flex items-center justify-center active:scale-90 transition-transform cursor-pointer group hover:border-slate-500"
-          title={`Compass: ${Math.round((360 - (mapBearing % 360)) % 360)}° — Tap to orient North`}
-        >
-          <div className="absolute inset-0 rounded-2xl flex items-center justify-center pointer-events-none">
-            <div className="absolute top-1 w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
-            <div className="absolute bottom-1 w-1 h-1 rounded-full bg-slate-500" />
-            <div className="absolute left-1 w-1 h-1 rounded-full bg-slate-600" />
-            <div className="absolute right-1 w-1 h-1 rounded-full bg-slate-600" />
-          </div>
-
-          <div
-            ref={compassNeedleRef}
-            className="relative w-8 h-8 flex items-center justify-center pointer-events-none will-change-transform"
-            style={{
-              transform: `rotate(${-mapBearing}deg)`,
-              transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-            }}
-          >
-            <div className="absolute top-0.5 flex flex-col items-center">
-              <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[10px] border-b-rose-500 drop-shadow-[0_0_4px_rgba(244,63,94,0.8)]" />
-              <span className="text-[7.5px] font-black text-rose-400 leading-none mt-0.5 select-none tracking-tighter">N</span>
-            </div>
-            <div className="w-2 h-2 rounded-full bg-white shadow-md z-10 border border-slate-400" />
-            <div className="absolute bottom-0.5 flex flex-col items-center">
-              <span className="text-[7px] font-black text-slate-400 leading-none mb-0.5 select-none tracking-tighter">S</span>
-              <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[9px] border-t-slate-300" />
-            </div>
-          </div>
-        </button>
-
-        {/* Dedicated Re-center Button (Snaps back to 3D forward follow) */}
-        <button
-          onClick={recenterCamera}
-          className={`relative w-12 h-12 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 shadow-xl border-2 active:scale-90 ${
-            !isFollowing
-              ? 'bg-blue-600 text-white border-white ring-4 ring-blue-500/40 shadow-blue-500/40'
-              : 'bg-slate-900/90 text-slate-300 border-slate-700/80 hover:text-white'
-          }`}
-          title={!isFollowing ? 'Re-center camera on vehicle (Tracking paused)' : 'Camera locked on forward route'}
-        >
-          <span className={`material-symbols-outlined text-[22px] ${!isFollowing ? 'text-white' : 'text-slate-300'}`}>
-            {!isFollowing ? 'near_me' : 'my_location'}
-          </span>
-          {!isFollowing && (
-            <span className="text-[7.5px] font-black uppercase tracking-tight leading-none mt-0.5">
-              Recenter
-            </span>
-          )}
-          {!isFollowing && (
-            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500 border-2 border-white"></span>
-            </span>
-          )}
-        </button>
-
-        {/* 3D vs 2D Perspective Toggle */}
+      {/* ════════ FLOATING MAP CONTROLS (Left side) ════════ */}
+      <div className={`absolute left-3 z-30 flex flex-col gap-2.5 pointer-events-auto md:left-6 ${isSimulating ? 'bottom-[255px]' : 'bottom-[215px]'} transition-all duration-300`}>
+        {/* 3D / 2D Toggle */}
         <button
           onClick={() => {
-            const next3D = !is3DMode
-            setIs3DMode(next3D)
-            const targetB = next3D ? cameraBearingRef.current : 0
+            const next = !is3DMode
+            setIs3DMode(next)
+            is3DModeRef.current = next
+            // In both 3D and 2D, follow the travel direction unless explicitly in North-Up!
+            const targetB = isNorthUpRef.current ? 0 : cameraBearingRef.current
             setMapBearing(targetB)
             if (mapRef.current) {
               const map = mapRef.current.getMap ? mapRef.current.getMap() : mapRef.current
-              if (map) {
-                map.easeTo({
-                  pitch: next3D ? 62 : 0,
-                  bearing: targetB,
-                  zoom: next3D ? 18.2 : 16.5,
-                  padding: next3D
-                    ? { top: 60, bottom: 200, left: 0, right: 0 }
-                    : { top: 40, bottom: 180, left: 0, right: 0 },
-                  duration: 500,
-                })
-              }
+              if (map) map.easeTo({
+                pitch: next ? 62 : 0,
+                bearing: targetB,
+                zoom: next ? 18.2 : 16.5,
+                duration: 500,
+              })
+            }
+            if (compassNeedleRef.current) {
+              compassNeedleRef.current.style.transform = `rotate(${-targetB}deg)`
             }
           }}
-          className="w-11 h-11 rounded-2xl bg-slate-900/90 backdrop-blur-md text-white border border-slate-700/70 shadow-lg flex items-center justify-center active:scale-90 transition-all cursor-pointer"
-          title={is3DMode ? 'Switch to 2D North-Up' : 'Switch to 3D Driving Perspective'}
+          className={`w-10 h-10 rounded-xl backdrop-blur-md border shadow-lg flex items-center justify-center font-black text-xs active:scale-95 transition cursor-pointer ${is3DMode ? 'bg-[#1B4332] text-white border-emerald-700/50' : 'bg-white/95 text-[#1B4332] border-slate-200'}`}
+          title={is3DMode ? 'Switch to 2D' : 'Switch to 3D'}
         >
-          <span 
-            className="material-symbols-outlined text-[20px] transition-transform duration-300"
-            style={{
-              transform: is3DMode ? `rotate(${bearing}deg)` : 'rotate(0deg)',
-              color: is3DMode ? '#38BDF8' : '#94A3B8'
-            }}
+          {is3DMode ? '3D' : '2D'}
+        </button>
+
+        {/* Compass Button with Real Rotating Needle & North-Up Toggle */}
+        <button
+          onClick={handleCompassClick}
+          className={`w-10 h-10 rounded-xl backdrop-blur-md border shadow-lg flex items-center justify-center active:scale-95 transition cursor-pointer relative overflow-hidden ${isNorthUp ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-400/30' : 'bg-white/95 border-slate-200'}`}
+          title={isNorthUp ? "Switch to Heading-Up (Road Ahead)" : "Align to North"}
+        >
+          {/* Compass Dial Needle that points to Magnetic North in Real Time */}
+          <div
+            ref={compassNeedleRef}
+            className="w-7 h-7 flex items-center justify-center will-change-transform pointer-events-none transition-transform duration-200"
+            style={{ transform: `rotate(${-mapBearing}deg)` }}
           >
-            explore
+            <svg viewBox="0 0 24 24" className="w-5 h-5 filter drop-shadow-sm">
+              {/* North needle pointer (Red) */}
+              <polygon points="12,2 15.5,12 12,9.5 8.5,12" fill="#EF4444" stroke="#DC2626" strokeWidth="0.5" />
+              {/* South needle pointer (Slate grey) */}
+              <polygon points="12,22 15.5,12 12,9.5 8.5,12" fill="#94A3B8" stroke="#64748B" strokeWidth="0.5" />
+              {/* Center pivot pin */}
+              <circle cx="12" cy="12" r="1.5" fill="#1E293B" />
+            </svg>
+          </div>
+          {/* Subtle North Indicator 'N' */}
+          <span className="absolute top-0.5 right-1 text-[8px] font-black text-rose-600 leading-none pointer-events-none select-none">
+            N
           </span>
         </button>
 
-        {/* Quick Report Road Hazard */}
+        {/* Recenter Camera */}
         <button
-          onClick={() => setShowHazardModal(true)}
-          className="w-11 h-11 rounded-2xl bg-amber-500 text-slate-950 shadow-lg flex items-center justify-center active:scale-90 transition-transform font-bold cursor-pointer"
-          title="Report road hazard at current location"
+          onClick={recenterCamera}
+          className={`w-10 h-10 rounded-xl backdrop-blur-md border shadow-lg flex items-center justify-center active:scale-95 transition cursor-pointer ${isFollowing ? 'bg-white/95 border-slate-200 text-[#2563EB]' : 'bg-[#2563EB] border-blue-400/50 text-white ring-2 ring-blue-400/30'}`}
+          title="Recenter camera on vehicle"
         >
-          <span className="material-symbols-outlined icon-filled text-[22px]">warning</span>
-        </button>
-
-        {/* Route Suggestions / Safety Insights Toggle */}
-        <button
-          onClick={() => setShowSuggestions(s => !s)}
-          className={`w-11 h-11 rounded-2xl border shadow-lg flex items-center justify-center active:scale-90 transition-all cursor-pointer ${
-            showSuggestions ? 'bg-sky-500 text-slate-950 border-sky-400' : 'bg-slate-900/90 text-slate-200 border-slate-700/70'
-          }`}
-          title="Safety route advisory"
-        >
-          <span className="material-symbols-outlined text-[20px]">shield</span>
+          <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>my_location</span>
         </button>
       </div>
 
-      {/* ════════ QUICK HAZARD REPORT MODAL ════════ */}
-      {showHazardModal && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-700 p-5 shadow-2xl">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-black text-white flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-amber-400">report</span>
-                Report Hazard at Current Spot
-              </h3>
-              <button onClick={() => setShowHazardModal(false)} className="text-slate-400 text-sm">✕</button>
+      {/* ════════ FLOATING QUICK ACTIONS (Right side) ════════ */}
+      <div className={`absolute right-3 z-30 flex flex-col gap-2.5 items-end pointer-events-auto md:right-6 ${isSimulating ? 'bottom-[255px]' : 'bottom-[215px]'} transition-all duration-300`}>
+        {/* Safe Havens */}
+        <button
+          onClick={() => setShowSuggestions(true)}
+          className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-emerald-300 shadow-lg px-3 py-1.5 rounded-full text-emerald-800 font-bold text-xs hover:bg-emerald-50 active:scale-95 transition cursor-pointer"
+        >
+          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+            <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>local_hospital</span>
+          </span>
+          <span className="pr-1 text-[11px]">Safe Havens</span>
+        </button>
+
+        {/* Report Hazard */}
+        <button
+          onClick={() => setShowHazardModal(true)}
+          className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-amber-300 shadow-lg px-3 py-1.5 rounded-full text-amber-800 font-bold text-xs hover:bg-amber-50 active:scale-95 transition cursor-pointer"
+        >
+          <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+            <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>warning</span>
+          </span>
+          <span className="pr-1 text-[11px]">Report Hazard</span>
+        </button>
+
+        {/* SOS Emergency */}
+        <button
+          onClick={() => navigate('/emergency')}
+          className="flex items-center gap-2 bg-[#EF4444] hover:bg-rose-700 text-white border-2 border-white shadow-xl px-4 py-2 rounded-full font-black text-xs active:scale-90 transition cursor-pointer"
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping flex-shrink-0" />
+          <span className="tracking-wide">SOS</span>
+        </button>
+      </div>
+
+      {/* ════════ HAZARD PROXIMITY ALERT (ACCIDENT BLACKSPOT / WATERLOGGING / CRIME) ════════ */}
+      {hazardNearby?.active && (
+        <div className={`absolute left-4 right-4 z-30 pointer-events-none md:left-1/2 md:-translate-x-1/2 md:w-[460px] md:right-auto ${isSimulating ? 'bottom-[195px]' : 'bottom-[155px]'} transition-all duration-300 animate-in slide-in-from-bottom duration-200`}>
+          <div className={`flex items-center gap-3 rounded-2xl px-4 py-2.5 text-white shadow-2xl border backdrop-blur-md ${hazardNearby.bg || 'bg-rose-600/95 border-rose-400/50'}`}>
+            <span className="material-symbols-outlined text-[22px] flex-shrink-0" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>{hazardNearby.icon || 'warning'}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black uppercase tracking-wide leading-tight">{hazardNearby.title}</p>
+              <p className="text-[11px] font-medium opacity-90 truncate leading-tight mt-0.5">{hazardNearby.message}</p>
             </div>
-            <p className="text-xs text-slate-400 mb-4">Tap to notify upcoming drivers on this road corridor:</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { id: 'pothole', label: 'Pothole / Bump', icon: 'minor_crash', color: '#F59E0B' },
-                { id: 'waterlogged', label: 'Waterlogging', icon: 'flood', color: '#38BDF8' },
-                { id: 'accident', label: 'Accident Scene', icon: 'car_crash', color: '#EF4444' },
-                { id: 'unlit', label: 'Dark / No Lights', icon: 'nightlight', color: '#8B5CF6' },
-              ].map(h => (
+          </div>
+        </div>
+      )}
+
+      {/* ════════ BOTTOM STATS PANEL (Clean White Stitch Design) ════════ */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-8px_30px_rgba(0,0,0,0.12)] px-4 pt-2 pb-3 flex flex-col gap-1.5 pointer-events-auto md:left-1/2 md:-translate-x-1/2 md:w-[480px] md:right-auto md:rounded-t-[24px]">
+        {/* Drag handle */}
+        <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto" />
+
+        {/* Row 1: Left Safety Score Hero + Center Time/ETA + Right Distance & Speed */}
+        <div className="flex items-center justify-between gap-3">
+          {/* Left: Prominent Hero Safety Score in Number */}
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${
+            safetyScore >= 80 ? 'bg-emerald-50 text-emerald-800 border-emerald-200/90 shadow-2xs' :
+            safetyScore >= 50 ? 'bg-blue-50 text-blue-800 border-blue-200/90 shadow-2xs' :
+            'bg-rose-50 text-rose-800 border-rose-200/90 shadow-2xs'
+          }`}>
+            <span
+              className={`material-symbols-outlined text-[20px] shrink-0 ${
+                safetyScore >= 80 ? 'text-emerald-600' : safetyScore >= 50 ? 'text-blue-600' : 'text-rose-600'
+              }`}
+              style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}
+            >
+              {safetyScore >= 80 ? 'verified_user' : safetyScore >= 50 ? 'shield' : 'warning'}
+            </span>
+            <div className="flex flex-col leading-none">
+              <div className="flex items-baseline gap-0.5">
+                <span className="text-xl font-black tracking-tight">{safetyScore}</span>
+                <span className="text-[10px] font-bold opacity-75">/100</span>
+              </div>
+              <span className="text-[8.5px] font-black uppercase tracking-wider opacity-90 mt-0.5">
+                {safetyLabel}
+              </span>
+            </div>
+          </div>
+
+          {/* Center: Duration & Country Local Arrival Time (Zero ETA prefix) */}
+          <div className="flex flex-col justify-center min-w-0 flex-1 px-1">
+            <span className="text-lg font-black text-slate-900 tracking-tight leading-tight whitespace-nowrap truncate">
+              {fmtDuration(remainingMin)}
+            </span>
+            <span className="text-[12.5px] font-extrabold text-slate-600 leading-tight whitespace-nowrap mt-0.5 truncate">
+              {arrivalTime}
+            </span>
+          </div>
+
+          {/* Right: Distance on top, Speed below it */}
+          <div className="flex flex-col items-end justify-center shrink-0 text-right">
+            <span className="text-sm font-black text-slate-900 leading-tight whitespace-nowrap">
+              {fmtDist(distRemainingMeters)}
+            </span>
+            <div className="flex items-center gap-1 text-[11.5px] font-extrabold text-slate-700 leading-tight mt-0.5 whitespace-nowrap">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+              <span>{speed} km/h</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Balanced Info Strip (Mode + Active Road Corridor + Hazard Counter) — Zero Empty Gap */}
+        <div className="flex items-center justify-between gap-2 py-1 border-y border-slate-100/90 text-xs">
+          {/* Mode Pill */}
+          <div className="flex items-center gap-1.5 bg-slate-100 text-slate-800 border border-slate-200/90 px-2.5 py-1 rounded-xl transition-colors shrink-0 shadow-2xs">
+            <span className="material-symbols-outlined text-[17px] text-emerald-700" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>
+              {modeIcon}
+            </span>
+            <span className="text-[12px] font-black tracking-tight">{modeLabel}</span>
+          </div>
+
+          {/* Center Active Corridor — Fills the previous empty gap with high-value road corridor info */}
+          <div className="flex items-center justify-center gap-1.5 min-w-0 flex-1 px-2.5 py-1 bg-slate-50/90 border border-slate-200/70 rounded-xl text-slate-700 font-bold text-[11.5px] truncate shadow-2xs">
+            <span className="material-symbols-outlined text-[14px] text-slate-400 shrink-0">alt_route</span>
+            <span className="truncate">{currentStep?.streetName || selectedRoute?.viaRoads || 'Safe Route Corridor'}</span>
+          </div>
+
+          {/* Hazards Ahead Pill */}
+          <div className={`flex items-center gap-1.5 text-[11.5px] font-black px-2.5 py-1 rounded-xl border shrink-0 shadow-2xs ${
+            hazardCount > 0 ? 'bg-amber-50 text-amber-900 border-amber-200/90' : 'bg-emerald-50 text-emerald-900 border-emerald-200/90'
+          }`}>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${hazardCount > 0 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+            <span>{hazardCount > 0 ? `${hazardCount} hazard${hazardCount > 1 ? 's' : ''} ahead` : '0 Hazards ahead'}</span>
+          </div>
+        </div>
+
+        {/* Row 3: Action Controls + Simulation Multipliers */}
+        <div className="flex items-center gap-2 pt-0.5">
+          <button
+            onClick={handleArrived}
+            className="flex-1 bg-[#1B4332] hover:bg-slate-900 active:scale-[0.98] text-white py-2.5 px-3.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>flag</span>
+            <span>Finish Journey</span>
+          </button>
+          <button
+            onClick={toggleSimulation}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center transition border active:scale-95 flex-shrink-0 cursor-pointer ${isSimulating ? 'bg-amber-500 text-white border-amber-400' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'}`}
+            title={isSimulating ? 'Pause Simulation' : 'Start Simulation'}
+          >
+            <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>{isSimulating ? 'stop' : 'play_arrow'}</span>
+          </button>
+          <button
+            onClick={() => setShowSuggestions(true)}
+            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 flex items-center justify-center transition border border-slate-200 flex-shrink-0 cursor-pointer"
+            title="Route Insights"
+          >
+            <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>tune</span>
+          </button>
+        </div>
+
+        {/* Row 4: Speed Multiplier (When Simulating) */}
+        {isSimulating && (
+          <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-2.5 py-1 border border-slate-200 mt-0.5">
+            <span className="material-symbols-outlined text-amber-500 text-[14px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>speed</span>
+            <span className="text-[10px] font-bold text-slate-700 mr-1">Speed:</span>
+            {[1, 2, 5, 10].map(x => (
+              <button
+                key={x}
+                onClick={() => {
+                  if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+                  setIsSpeaking(false)
+                  setSimSpeedMultiplier(x)
+                }}
+                className={`px-2 py-0.5 rounded text-[10px] font-black transition cursor-pointer ${simSpeedMultiplier === x ? 'bg-amber-500 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
+              >
+                {x}x
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ════════ REPORT HAZARD MODAL ════════ */}
+      {showHazardModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center p-0 animate-fade-in">
+          <div className="w-full max-w-[480px] bg-white rounded-t-3xl p-5 pb-8 shadow-2xl">
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
+            <h2 className="text-base font-black text-slate-900 mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-amber-500 text-[22px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>warning</span>
+              Report Hazard
+            </h2>
+            <div className="grid grid-cols-3 gap-2.5">
+              {HAZARD_TYPES.slice(0, 9).map(h => (
                 <button
                   key={h.id}
                   onClick={() => handleQuickReport(h.id)}
-                  className="flex items-center gap-2 p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-left border border-slate-700/60 active:scale-95 transition-transform"
+                  className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-slate-50 border border-slate-200 hover:bg-amber-50 hover:border-amber-300 active:scale-95 transition cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[20px]" style={{ color: h.color }}>{h.icon}</span>
-                  <span className="text-xs font-bold text-slate-200">{h.label}</span>
+                  <span className="material-symbols-outlined text-[22px] text-amber-600" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>{h.icon}</span>
+                  <span className="text-[10px] font-bold text-slate-700 text-center leading-tight">{h.label}</span>
                 </button>
               ))}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ════════ DYNAMIC HAZARD PROXIMITY ALERT (Only visible within <300m, disappears when clear) ════════ */}
-      {hazardNearby?.active && (
-        <div className={`absolute bottom-[235px] left-4 right-4 z-30 flex items-center gap-3 rounded-2xl px-4 py-3 text-white shadow-2xl animate-pulse border backdrop-blur-md transition-all duration-300 ${hazardNearby.bg || 'bg-rose-600/95 border-rose-400/50'}`}>
-          <span className="material-symbols-outlined icon-filled text-[24px] flex-shrink-0">{hazardNearby.icon || 'warning'}</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-black uppercase tracking-wide flex items-center gap-1.5">
-              <span>{hazardNearby.title}</span>
-              <span className="text-[10px] opacity-80 font-normal">({hazardNearby.distance}m)</span>
-            </p>
-            <p className="text-[11px] text-white/95 truncate font-medium">{hazardNearby.message}</p>
-          </div>
-        </div>
-      )}
-
-      {/* ════════ BOTTOM TRIP STATUS HUD (Google Maps & Uber Grade) ════════ */}
-      <div className="absolute bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-slate-950 via-slate-900 to-slate-900/95 border-t border-slate-800 rounded-t-[32px] shadow-[0_-12px_40px_rgba(0,0,0,0.7)] p-4 pb-6 select-none backdrop-blur-xl">
-        
-        {/* Main Stats Row */}
-        <div className="flex items-center justify-between gap-4 mb-3">
-          
-          {/* Big ETA Duration */}
-          <div className="flex items-baseline gap-1">
-            <h2 className="text-4xl font-black text-emerald-400 tracking-tight leading-none drop-shadow-sm">
-              {fmtDuration(remainingMin)}
-            </h2>
-          </div>
-
-          {/* Distance & Arrival Clock */}
-          <div className="flex flex-col items-center">
-            <p className="text-sm font-bold text-slate-200">
-              {fmtDist(distRemainingMeters)}
-            </p>
-            <p className="text-xs font-semibold text-slate-400">
-              ETA {arrivalTime}
-            </p>
-          </div>
-
-          {/* Live Speedometer Widget */}
-          <div className="flex flex-col items-center px-3 py-1.5 rounded-2xl bg-slate-800/80 border border-slate-700/60 shadow-inner">
-            <span className="text-xl font-black text-white leading-none">
-              {speed}
-            </span>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-              km/h
-            </span>
-          </div>
-
-          {/* Safety Score Shield */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-300">
-            <span className="material-symbols-outlined icon-filled text-[18px]">shield</span>
-            <span className="text-xs font-black">{selectedRoute?.safetyScore || 88}</span>
-          </div>
-        </div>
-
-        {/* Action Buttons: Finish Journey & Exit */}
-        <div className="flex items-center gap-3">
-          {/* Exit Navigation */}
-          <button
-            onClick={() => {
-              if ('speechSynthesis' in window) window.speechSynthesis.cancel()
-              setIsNavigating(false)
-              navigate(-1)
-            }}
-            className="w-12 h-12 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center active:scale-95 transition-all border border-slate-700 cursor-pointer"
-            title="Exit Navigation"
-          >
-            <span className="material-symbols-outlined text-[24px]">close</span>
-          </button>
-
-          {/* Finish Journey */}
-          <button
-            onClick={handleArrived}
-            className="flex-1 h-12 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer"
-          >
-            <span className="material-symbols-outlined icon-filled text-[20px]">flag</span>
-            <span>Finish Journey</span>
-          </button>
-        </div>
-
-        {/* Interactive Drive Simulator Control Bar */}
-        <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-          <div className="flex items-center gap-2">
             <button
-              onClick={toggleSimulation}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold transition-all cursor-pointer ${
-                isSimulating
-                  ? 'bg-amber-500 text-slate-950'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-              }`}
+              onClick={() => setShowHazardModal(false)}
+              className="mt-4 w-full py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 active:scale-[0.98] transition cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[16px]">
-                {isSimulating ? 'pause' : 'play_arrow'}
-              </span>
-              <span>{isSimulating ? 'Pause Sim' : 'Simulate Drive'}</span>
+              Cancel
             </button>
-
-            {isSimulating && (
-              <button
-                onClick={() => setSimSpeedMultiplier(s => s === 1 ? 2 : s === 2 ? 4 : s === 4 ? 8 : 1)}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 font-extrabold text-[11px] border border-slate-700 active:scale-95 transition-all cursor-pointer"
-                title="Toggle simulation speed (1x, 2x, 4x, 8x)"
-              >
-                {simSpeedMultiplier}x Speed
-              </button>
-            )}
           </div>
-
-          <button
-            onClick={() => {
-              const nextIdx = Math.min(stepIdx + 1, steps.length - 1)
-              setStepIdx(nextIdx)
-              if (stepTargetDistances[nextIdx]) {
-                const targetDist = Math.max(0, stepTargetDistances[nextIdx] - 50)
-                simDistanceRef.current = targetDist
-                setRouteDistanceProgress(targetDist)
-                const state = getInterpolatedRouteState(targetDist)
-                setCurrentLat(state.lat)
-                setCurrentLng(state.lng)
-                updateRouteProgress(state.lng, state.lat, targetDist)
-              }
-              const st = steps[nextIdx]
-              if (st && isVoiceEnabled) speakText(st.instruction)
-            }}
-            className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-            title="Advance step manually"
-          >
-            <span>Next Step</span>
-            <span className="material-symbols-outlined text-[14px]">skip_next</span>
-          </button>
         </div>
+      )}
 
-      </div>
+      {/* ════════ SAFE HAVENS MODAL ════════ */}
+      {showSuggestions && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end justify-center p-0 animate-fade-in">
+          <div className="w-full max-w-[480px] bg-white rounded-t-3xl p-5 pb-8 shadow-2xl">
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4" />
+            <h2 className="text-base font-black text-slate-900 mb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-emerald-600 text-[22px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>local_hospital</span>
+              Nearby Safe Havens
+            </h2>
+            <p className="text-xs text-slate-500 mb-4">Verified safe locations along your route</p>
+            {[
+              { name: 'Police Station', sub: '~0.4 km · Always open', icon: 'local_police', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+              { name: 'Hospital / Clinic', sub: '~0.8 km · 24hr emergency', icon: 'local_hospital', color: 'text-rose-700', bg: 'bg-rose-50 border-rose-200' },
+              { name: 'Petrol Station', sub: '~0.3 km · Open now', icon: 'local_gas_station', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
+            ].map(item => (
+              <div key={item.name} className={`flex items-center gap-3 p-3 rounded-xl border mb-2 ${item.bg}`}>
+                <span className={`material-symbols-outlined text-[22px] ${item.color}`} style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>{item.icon}</span>
+                <div>
+                  <p className={`text-sm font-extrabold ${item.color}`}>{item.name}</p>
+                  <p className="text-[11px] text-slate-500">{item.sub}</p>
+                </div>
+              </div>
+            ))}
+            <button
+              onClick={() => setShowSuggestions(false)}
+              className="mt-3 w-full py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 active:scale-[0.98] transition cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -25,20 +25,23 @@ const BASE_URL = 'https://api.tomtom.com/routing/1'
 
 // ─── Transport mode map ────────────────────────────────────────────────────────
 const TOMTOM_MODE = {
-  driving: 'car',
-  walking: 'pedestrian',
-  cycling: 'bicycle',
+  driving:   'car',
+  motorbike: 'motorcycle',
+  walking:   'pedestrian',
+  cycling:   'bicycle',
 }
 
 export const MODE_LABELS = {
-  driving: { label: 'Drive', icon: 'directions_car',  color: '#004ac6', speed: '40 km/h avg' },
-  walking: { label: 'Walk',  icon: 'directions_walk', color: '#10B981', speed: '5 km/h avg'  },
-  cycling: { label: 'Cycle', icon: 'directions_bike', color: '#F59E0B', speed: '15 km/h avg' },
+  driving:   { label: 'Drive', icon: 'directions_car',  color: '#004ac6', speed: '40 km/h avg' },
+  motorbike: { label: 'Bike',  icon: 'two_wheeler',     color: '#EF4444', speed: '45 km/h avg' },
+  walking:   { label: 'Walk',  icon: 'directions_walk', color: '#10B981', speed: '5 km/h avg'  },
+  cycling:   { label: 'Cycle', icon: 'directions_bike', color: '#F59E0B', speed: '15 km/h avg' },
 }
 
 // Multiplier applied when fallback routing engine uses car/driving profile
 export const MODE_MULTIPLIERS = {
-  driving: 1,
+  driving:   1,
+  motorbike: 0.9,
   cycling: 2.5,
   walking: 8.0,
 }
@@ -52,17 +55,19 @@ export const TRAFFIC_COLORS = {
 
 // ─── Build URL ────────────────────────────────────────────────────────────────
 function buildUrl(fromLat, fromLng, toLat, toLng, travelMode, routeType, maxAlternatives = 0) {
-  return (
+  const isVehicular = travelMode === 'car' || travelMode === 'motorcycle'
+  let url =
     `${BASE_URL}/calculateRoute/` +
     `${fromLat},${fromLng}:${toLat},${toLng}/json` +
     `?key=${getApiKey()}` +
     `&travelMode=${travelMode}` +
     `&routeType=${routeType}` +
-    `&traffic=true` +
     `&maxAlternatives=${maxAlternatives}` +
-    `&instructionsType=tagged` +
-    `&sectionType=traffic`   // returns per-segment traffic data for polyline coloring
-  )
+    `&instructionsType=tagged`
+  if (isVehicular) {
+    url += `&traffic=true&sectionType=traffic`
+  }
+  return url
 }
 
 // ─── OSRM fallback (free, no API key) ────────────────────────────────────────
@@ -114,37 +119,53 @@ async function getRouteFromOSRM(fromLat, fromLng, toLat, toLng, mode = 'driving'
   const coords  = `${fromLng},${fromLat};${toLng},${toLat}`
   const params  = new URLSearchParams({ overview: 'full', geometries: 'geojson', steps: 'true', alternatives: 'true' })
   
-  let endpointIdx = 0
-  if (mode === 'cycling') endpointIdx = 2
-  else if (mode === 'walking') endpointIdx = 3
+  // Strict profile and endpoint selection — never route pedestrians/cyclists through car engines
+  let endpointsToTry = []
+  let profile = 'driving'
+
+  if (mode === 'walking') {
+    endpointsToTry = ['https://routing.openstreetmap.de/routed-foot/route/v1']
+    profile = 'foot'
+  } else if (mode === 'cycling') {
+    endpointsToTry = ['https://routing.openstreetmap.de/routed-bike/route/v1']
+    profile = 'bike'
+  } else {
+    // driving or motorbike
+    endpointsToTry = [
+      'https://router.project-osrm.org/route/v1',
+      'https://routing.openstreetmap.de/routed-car/route/v1',
+    ]
+    profile = 'car'
+  }
   
   let lastErr = null
   
-  // Try up to 2 endpoints for redundancy
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (const currentBase of endpointsToTry) {
     try {
-      const currentBase = attempt === 0
-        ? (OSRM_ENDPOINTS[endpointIdx] || OSRM_ENDPOINTS[0])
-        : (mode === 'driving' ? OSRM_ENDPOINTS[1] : OSRM_ENDPOINTS[0])
-      const profile = (attempt === 0 && endpointIdx > 0)
-        ? (mode === 'cycling' ? 'bike' : mode === 'walking' ? 'foot' : 'car')
-        : 'driving'
-      
-      const res = await fetch(`${currentBase}/${profile}/${coords}?${params}`, { signal: AbortSignal.timeout(5000) })
+      const res = await fetch(`${currentBase}/${profile}/${coords}?${params}`, { signal: AbortSignal.timeout(4500) })
       if (!res.ok) throw new Error(`OSRM error ${res.status}`)
       const data = await res.json()
       if (data.code !== 'Ok' || !data.routes?.length) throw new Error('OSRM no routes')
 
-      const mult = (profile === 'driving') ? (MODE_MULTIPLIERS[mode] || 1) : 1
+      // Duration: for walking, cycling, and motorbike, ensure accurate realistic travel speeds
       return data.routes.map((route, idx) => {
-        const adjDur = route.duration * mult
+        let adjDur = route.duration
+        if (mode === 'walking') {
+          adjDur = Math.round(route.distance / 1.33)
+        } else if (mode === 'cycling') {
+          adjDur = Math.round(route.distance / 4.1)
+        } else if (mode === 'motorbike') {
+          // Motorbikes in Indian urban traffic: nimble, ~32 km/h average (8.9 m/s)
+          adjDur = Math.round(route.distance / 8.9)
+        }
         const steps  = (route.legs?.[0]?.steps || []).map(s => ({
           name:        s.name || '',
           instruction: s.maneuver?.instruction || formatOsrmStep(s),
           distance:    s.distance,
-          duration:    s.duration * mult,
+          duration:    s.duration || 0,
           type:        s.maneuver?.type || 'straight',
           icon:        getStepIcon(s.maneuver?.type + ' ' + (s.maneuver?.modifier || '')),
+          point:       s.maneuver?.location ? [s.maneuver.location[1], s.maneuver.location[0]] : null,
         }))
 
         const rawSummary = route.legs?.[0]?.summary || ''
@@ -251,43 +272,60 @@ export function areRoutesDuplicate(r1, r2) {
 
 /**
  * Fetches an alternative route via an intermediate waypoint on a nearby street corridor.
+ * Strictly avoids using car routing for pedestrians or cyclists.
  */
 async function fetchOSRMViaWaypoint(fromLat, fromLng, wpLat, wpLng, toLat, toLng, mode = 'driving') {
   const coords = `${fromLng},${fromLat};${wpLng},${wpLat};${toLng},${toLat}`
   const params = new URLSearchParams({ overview: 'full', geometries: 'geojson', steps: 'true' })
+  const straightM = Math.hypot(toLat - fromLat, toLng - fromLng) * 111000
   
-  let endpoint = OSRM_ENDPOINTS[0]
+  let endpointsToTry = []
   let profile = 'driving'
-  let backupBase = OSRM_ENDPOINTS[1]
   if (mode === 'cycling') {
-    endpoint = OSRM_ENDPOINTS[2]
+    endpointsToTry = ['https://routing.openstreetmap.de/routed-bike/route/v1']
     profile = 'bike'
-    backupBase = OSRM_ENDPOINTS[0]
   } else if (mode === 'walking') {
-    endpoint = OSRM_ENDPOINTS[3]
+    endpointsToTry = ['https://routing.openstreetmap.de/routed-foot/route/v1']
     profile = 'foot'
-    backupBase = OSRM_ENDPOINTS[0]
+  } else {
+    endpointsToTry = [
+      'https://router.project-osrm.org/route/v1',
+      'https://routing.openstreetmap.de/routed-car/route/v1',
+    ]
+    profile = 'car'
   }
 
-  const bases = [endpoint, backupBase]
-  for (const base of bases) {
+  for (const base of endpointsToTry) {
     try {
-      const prof = base.includes('openstreetmap.de') ? (mode === 'cycling' ? 'bike' : mode === 'walking' ? 'foot' : 'car') : 'driving'
-      const res = await fetch(`${base}/${prof}/${coords}?${params}`, { signal: AbortSignal.timeout(4000) })
+      const res = await fetch(`${base}/${profile}/${coords}?${params}`, { signal: AbortSignal.timeout(3500) })
       if (!res.ok) continue
       const data = await res.json()
       if (data.code !== 'Ok' || !data.routes?.length) continue
 
       const r = data.routes[0]
-      const mult = (prof === 'driving') ? (MODE_MULTIPLIERS[mode] || 1) : 1
-      const adjDur = r.duration * mult
+
+      // Reject excessive detours (e.g. going 1.6x longer than straight-line distance)
+      if (r.distance > straightM * 1.55) {
+        continue
+      }
+
+      let adjDur = r.duration
+      if (mode === 'walking') {
+        adjDur = Math.round(r.distance / 1.33)
+      } else if (mode === 'cycling') {
+        adjDur = Math.round(r.distance / 4.1)
+      } else if (mode === 'motorbike') {
+        adjDur = Math.round(r.distance / 8.9)
+      }
+
       const steps = (r.legs?.flatMap(l => l.steps || []) || []).map(s => ({
         name: s.name || '',
         instruction: s.maneuver?.instruction || formatOsrmStep(s),
         distance: s.distance,
-        duration: s.duration * mult,
+        duration: mode === 'walking' ? Math.round(s.distance / 1.33) : mode === 'cycling' ? Math.round(s.distance / 4.1) : mode === 'motorbike' ? Math.round(s.distance / 8.9) : s.duration,
         type: s.maneuver?.type || 'straight',
         icon: getStepIcon(s.maneuver?.type + ' ' + (s.maneuver?.modifier || '')),
+        point: s.maneuver?.location ? [s.maneuver.location[1], s.maneuver.location[0]] : null,
       }))
 
       const roadNames = []
@@ -380,9 +418,11 @@ function synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, to
 
   const offsetMeters = variantIdx === 0
     ? 0
-    : (isWalk || isBike)
-    ? (variantIdx === 1 ? 280 : 380)
-    : (variantIdx === 1 ? 480 : 680)
+    : isWalk
+    ? (variantIdx === 1 ? 120 : 180)
+    : isBike
+    ? (variantIdx === 1 ? 150 : 220)
+    : (variantIdx === 1 ? 220 : 350)
   const offsetDeg = offsetMeters / 111000
   const sign = variantIdx === 2 ? 1 : -1
 
@@ -429,34 +469,49 @@ function synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, to
 
   let durationSec = 0
   if (isWalk) {
-    durationSec = Math.round((totalMeters / 1.3) + (variantIdx * 90))
+    durationSec = Math.round(totalMeters / 1.33) // Real human walking pace: 4.8 km/h (1.33 m/s)
   } else if (isBike) {
-    durationSec = Math.round((totalMeters / 4.0) + (variantIdx * 60))
+    durationSec = Math.round(totalMeters / 4.16) // Real cycling pace: 15 km/h (4.16 m/s)
+  } else if (mode === 'motorbike') {
+    durationSec = Math.round(totalMeters / 8.9) // Real motorbike pace: 32 km/h (8.9 m/s)
   } else {
-    const baseDur = baseRoute?.duration || Math.round(totalMeters / 10)
-    durationSec = Math.round(baseDur * (variantIdx === 0 ? 1.0 : variantIdx === 1 ? 1.08 : 1.15))
+    // Proportional to physical road distance relative to base route
+    if (baseRoute?.duration && baseRoute?.distance) {
+      durationSec = Math.round(baseRoute.duration * (totalMeters / baseRoute.distance))
+    } else {
+      durationSec = Math.round(totalMeters / 9.72) // 35 km/h urban driving
+    }
   }
+
+  const baseRoadParts = (baseRoute?.viaRoads || '')
+    .replace(/^via\s+/i, '')
+    .split(/\s*(?:&|\/)\s*/)
+    .map(s => s.trim())
+    .filter(Boolean)
+
+  const roadA = baseRoadParts[0] || ''
+  const roadB = baseRoadParts[1] || ''
 
   let viaRoads = ''
   let steps = []
   if (isWalk) {
     if (variantIdx === 0) {
-      viaRoads = 'via Main Corridor Sidewalk & Footway'
+      viaRoads = baseRoute?.viaRoads || (roadA ? `via ${roadA}` : 'via Pedestrian Walkway')
       steps = [
-        { instruction: 'Head onto main arterial sidewalk', distance: Math.round(totalMeters * 0.2), icon: 'straight' },
-        { instruction: 'Follow illuminated pedestrian footway', distance: Math.round(totalMeters * 0.6), icon: 'straight' },
+        { instruction: `Head along ${roadA || 'main street'}`, distance: Math.round(totalMeters * 0.3), icon: 'straight' },
+        { instruction: 'Continue along illuminated pedestrian path', distance: Math.round(totalMeters * 0.5), icon: 'straight' },
         { instruction: 'Arrive at destination', distance: Math.round(totalMeters * 0.2), icon: 'arrive' },
       ]
     } else if (variantIdx === 1) {
-      viaRoads = 'via Residential Streets & Colony Lanes'
+      viaRoads = roadB ? `via ${roadB} & Local Link` : (roadA ? `via ${roadA} & Parallel Lane` : 'via Residential Street & Colony Lane')
       steps = [
-        { instruction: 'Depart onto local neighborhood walking lane', distance: Math.round(totalMeters * 0.15), icon: 'straight' },
-        { instruction: 'Turn into quiet residential street away from traffic', distance: Math.round(totalMeters * 0.45), icon: 'turn-left' },
-        { instruction: 'Follow tree-lined colony road', distance: Math.round(totalMeters * 0.30), icon: 'straight' },
+        { instruction: 'Depart onto quiet residential walking lane', distance: Math.round(totalMeters * 0.25), icon: 'straight' },
+        { instruction: `Turn toward ${roadB || 'neighborhood connector'}`, distance: Math.round(totalMeters * 0.45), icon: 'turn-left' },
+        { instruction: 'Follow paved walking route', distance: Math.round(totalMeters * 0.20), icon: 'straight' },
         { instruction: 'Arrive at destination', distance: Math.round(totalMeters * 0.10), icon: 'arrive' },
       ]
     } else {
-      viaRoads = 'via Neighborhood Connector & By-lanes'
+      viaRoads = roadA ? `via ${roadA} (Inner Connector)` : 'via Neighborhood Pathway & By-lane'
       steps = [
         { instruction: 'Head toward local market connector lane', distance: Math.round(totalMeters * 0.20), icon: 'straight' },
         { instruction: 'Turn onto neighborhood secondary link', distance: Math.round(totalMeters * 0.50), icon: 'turn-right' },
@@ -466,14 +521,14 @@ function synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, to
     }
   } else if (isBike) {
     if (variantIdx === 0) {
-      viaRoads = 'via Main Road & Dedicated Cycle Path'
+      viaRoads = baseRoute?.viaRoads || (roadA ? `via ${roadA}` : 'via Main Avenue & Cycle Route')
       steps = [
-        { instruction: 'Head onto main arterial bike path', distance: Math.round(totalMeters * 0.2), icon: 'straight' },
-        { instruction: 'Continue along designated cycle track', distance: Math.round(totalMeters * 0.6), icon: 'straight' },
+        { instruction: `Head onto ${roadA || 'main road'}`, distance: Math.round(totalMeters * 0.2), icon: 'straight' },
+        { instruction: 'Continue along designated cycle route', distance: Math.round(totalMeters * 0.6), icon: 'straight' },
         { instruction: 'Arrive at destination', distance: Math.round(totalMeters * 0.2), icon: 'arrive' },
       ]
     } else if (variantIdx === 1) {
-      viaRoads = 'via Quiet Residential Streets & Greenways'
+      viaRoads = roadB ? `via ${roadB} & Cycle Greenway` : (roadA ? `via ${roadA} & Parallel Route` : 'via Quiet Residential Greenway')
       steps = [
         { instruction: 'Head onto neighborhood cycle-friendly street', distance: Math.round(totalMeters * 0.2), icon: 'straight' },
         { instruction: 'Turn onto local avenue with low motor traffic', distance: Math.round(totalMeters * 0.5), icon: 'turn-left' },
@@ -481,7 +536,7 @@ function synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, to
         { instruction: 'Arrive at destination', distance: Math.round(totalMeters * 0.1), icon: 'arrive' },
       ]
     } else {
-      viaRoads = 'via Local Secondary Connector Link'
+      viaRoads = roadA ? `via ${roadA} (Secondary Connector)` : 'via Local Secondary Link'
       steps = [
         { instruction: 'Depart via local connector road', distance: Math.round(totalMeters * 0.25), icon: 'straight' },
         { instruction: 'Turn into secondary municipal connector', distance: Math.round(totalMeters * 0.45), icon: 'turn-right' },
@@ -491,14 +546,14 @@ function synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, to
     }
   } else {
     if (variantIdx === 0) {
-      viaRoads = 'via Main Arterial Corridor'
+      viaRoads = baseRoute?.viaRoads || (roadA ? `via ${roadA}` : 'via Main Arterial Corridor')
       steps = [
-        { instruction: 'Head onto primary divided arterial corridor', distance: Math.round(totalMeters * 0.2), icon: 'straight' },
+        { instruction: `Head onto ${roadA || 'primary divided arterial'}`, distance: Math.round(totalMeters * 0.2), icon: 'straight' },
         { instruction: 'Follow main roadway toward destination', distance: Math.round(totalMeters * 0.6), icon: 'straight' },
         { instruction: 'Arrive at destination', distance: Math.round(totalMeters * 0.2), icon: 'arrive' },
       ]
     } else if (variantIdx === 1) {
-      viaRoads = 'via Secondary Arterial Bypass'
+      viaRoads = roadB ? `via ${roadB} & Bypass` : (roadA ? `via ${roadA} & Arterial Bypass` : 'via Secondary Arterial Bypass')
       steps = [
         { instruction: 'Depart toward arterial bypass connector', distance: Math.round(totalMeters * 0.2), icon: 'straight' },
         { instruction: 'Turn onto divided bypass link', distance: Math.round(totalMeters * 0.5), icon: 'turn-left' },
@@ -506,7 +561,7 @@ function synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, to
         { instruction: 'Arrive at destination', distance: Math.round(totalMeters * 0.1), icon: 'arrive' },
       ]
     } else {
-      viaRoads = 'via Local Connector & Parallel Avenue'
+      viaRoads = roadA ? `via ${roadA} & Parallel Ave` : 'via Local Connector & Parallel Avenue'
       steps = [
         { instruction: 'Head onto local parallel avenue', distance: Math.round(totalMeters * 0.2), icon: 'straight' },
         { instruction: 'Follow secondary municipal roadway', distance: Math.round(totalMeters * 0.5), icon: 'turn-right' },
@@ -535,31 +590,54 @@ function synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, to
 
 /**
  * Ensures exactly 3 distinct routes are returned, deduplicating any clones
- * and generating alternative street options via nearby corridors.
+ * and filtering out any absurd multi-hour detours.
  */
 export async function ensureThreeDistinctRoutes(candidateRoutes = [], fromLat, fromLng, toLat, toLng, mode = 'driving') {
-  // 1. Remove duplicate routes
+  const straightLineM = Math.hypot(toLat - fromLat, toLng - fromLng) * 111000
+
+  // 1. Identify baseline minimum duration and distance from valid candidates
+  const validCandidates = candidateRoutes.filter(r => r?.geometry?.length >= 2 && r.distance > 0 && r.duration > 0)
+
+  let minDurationSec = Infinity
+  let minDistanceM = Infinity
+  for (const r of validCandidates) {
+    if (r.duration < minDurationSec) minDurationSec = r.duration
+    if (r.distance < minDistanceM) minDistanceM = r.distance
+  }
+
+  // Maximum allowed threshold for alternative routes:
+  // Walking: max 1.30x duration, or minDuration + 12 min (whichever is greater), max 1.35x distance
+  // Cycling: max 1.35x duration, or minDuration + 15 min
+  // Driving/Bike: max 1.40x duration, or minDuration + 18 min
+  const maxDurFactor = mode === 'walking' ? 1.30 : mode === 'cycling' ? 1.35 : 1.40
+  const maxAllowedDurSec = isFinite(minDurationSec)
+    ? Math.max(minDurationSec * maxDurFactor, minDurationSec + 720)
+    : 7200
+  const maxAllowedDistM = isFinite(minDistanceM)
+    ? Math.max(minDistanceM * 1.35, minDistanceM + 1200)
+    : Math.max(straightLineM * 1.6, 3000)
+
+  // Discard any candidate route that is an absurd detour (e.g. 4 hours vs 48 mins)
+  const saneCandidates = validCandidates.filter(r => {
+    if (r.duration > maxAllowedDurSec) {
+      console.warn(`[Routing] Discarded absurd detour: ${r.durationMin} min vs baseline ${Math.round(minDurationSec / 60)} min`)
+      return false
+    }
+    if (r.distance > maxAllowedDistM) {
+      console.warn(`[Routing] Discarded excessive distance: ${r.distanceKm} km vs baseline ${(minDistanceM / 1000).toFixed(1)} km`)
+      return false
+    }
+    return true
+  })
+
+  // 2. Remove duplicate routes
   const distinct = []
-  for (const r of candidateRoutes) {
-    if (!r?.geometry?.length) continue
+  for (const r of saneCandidates) {
     const isDup = distinct.some(d => areRoutesDuplicate(d, r))
     if (!isDup) distinct.push(r)
   }
 
-  // Refine Route 0 name for walking and cycling if needed
-  if (distinct.length > 0 && (mode === 'walking' || mode === 'cycling')) {
-    const r0 = distinct[0]
-    const viaL = (r0.viaRoads || '').toLowerCase()
-    if (!viaL.includes('sidewalk') && !viaL.includes('footway') && !viaL.includes('cycle') && !viaL.includes('residential')) {
-      if (mode === 'walking') {
-        r0.viaRoads = r0.viaRoads ? `${r0.viaRoads} (Main Sidewalk)` : 'via Main Corridor Sidewalk & Footway'
-      } else {
-        r0.viaRoads = r0.viaRoads ? `${r0.viaRoads} (Cycle Track)` : 'via Main Road & Dedicated Cycle Path'
-      }
-    }
-  }
-
-  // 2. If already 3 or more distinct routes, return top 3
+  // If already 3 or more distinct sane routes, return top 3
   if (distinct.length >= 3) {
     return distinct.slice(0, 3).map((r, i) => ({ ...r, index: i }))
   }
@@ -577,55 +655,65 @@ export async function ensureThreeDistinctRoutes(candidateRoutes = [], fromLat, f
   const perpLat = -dLng / len
   const perpLng = dLat / len
 
-  const approxDistM = Math.hypot(toLat - fromLat, toLng - fromLng) * 111000
-  for (let v = 1; v <= 2 && distinct.length < 3; v++) {
-    const baseSign = v === 1 ? -1 : 1
-    const offsetM = (mode === 'walking' || mode === 'cycling')
-      ? 280
-      : Math.min(480, Math.max(220, Math.round(approxDistM * 0.08)))
-    const offsetDeg = offsetM / 111000
-    
-    const midPct = v === 1 ? 0.40 : 0.60
-    const basePt = baseRoute?.geometry?.[Math.floor(baseRoute.geometry.length * midPct)] || [
-      fromLat + dLat * midPct,
-      fromLng + dLng * midPct,
-    ]
+  const needed = 3 - distinct.length
+  if (needed > 0) {
+    const waypoints = []
+    for (let v = 1; v <= 2; v++) {
+      const baseSign = v === 1 ? -1 : 1
+      const offsetM = (mode === 'walking' || mode === 'cycling')
+        ? (v === 1 ? 120 : 180)
+        : (v === 1 ? 200 : 320)
+      const offsetDeg = offsetM / 111000
+      
+      const midPct = v === 1 ? 0.40 : 0.60
+      const basePt = baseRoute?.geometry?.[Math.floor(baseRoute.geometry.length * midPct)] || [
+        fromLat + dLat * midPct,
+        fromLng + dLng * midPct,
+      ]
 
-    // Evaluate hazard exposure on both lateral sides to steer away from crime & accident zones
-    const candA = {
-      lat: basePt[0] + perpLat * offsetDeg * baseSign,
-      lng: basePt[1] + perpLng * offsetDeg * baseSign,
-      hazard: evaluatePointHazardExposure(basePt[0] + perpLat * offsetDeg * baseSign, basePt[1] + perpLng * offsetDeg * baseSign),
-    }
-    const candB = {
-      lat: basePt[0] + perpLat * offsetDeg * -baseSign,
-      lng: basePt[1] + perpLng * offsetDeg * -baseSign,
-      hazard: evaluatePointHazardExposure(basePt[0] + perpLat * offsetDeg * -baseSign, basePt[1] + perpLng * offsetDeg * -baseSign),
-    }
-
-    const chosen = candA.hazard.penalty <= candB.hazard.penalty ? candA : candB
-    let wpLat = chosen.lat
-    let wpLng = chosen.lng
-
-    // If candidate point still touches a hazard zone, nudge outward to clear the hazard radius
-    if (chosen.hazard.penalty > 0) {
-      const activeSign = candA.hazard.penalty <= candB.hazard.penalty ? baseSign : -baseSign
-      wpLat += perpLat * offsetDeg * 0.4 * activeSign
-      wpLng += perpLng * offsetDeg * 0.4 * activeSign
-    }
-
-    let newRoute = await fetchOSRMViaWaypoint(fromLat, fromLng, wpLat, wpLng, toLat, toLng, mode)
-    
-    if (!newRoute || distinct.some(d => areRoutesDuplicate(d, newRoute))) {
-      try {
-        newRoute = synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, toLng, mode, v)
-      } catch {
-        newRoute = null
+      const candA = {
+        lat: basePt[0] + perpLat * offsetDeg * baseSign,
+        lng: basePt[1] + perpLng * offsetDeg * baseSign,
+        hazard: evaluatePointHazardExposure(basePt[0] + perpLat * offsetDeg * baseSign, basePt[1] + perpLng * offsetDeg * baseSign),
       }
+      const candB = {
+        lat: basePt[0] + perpLat * offsetDeg * -baseSign,
+        lng: basePt[1] + perpLng * offsetDeg * -baseSign,
+        hazard: evaluatePointHazardExposure(basePt[0] + perpLat * offsetDeg * -baseSign, basePt[1] + perpLng * offsetDeg * -baseSign),
+      }
+
+      const chosen = candA.hazard.penalty <= candB.hazard.penalty ? candA : candB
+      waypoints.push({ wpLat: chosen.lat, wpLng: chosen.lng, v })
     }
 
-    if (newRoute && !distinct.some(d => areRoutesDuplicate(d, newRoute))) {
-      distinct.push(newRoute)
+    // Try fetching via waypoint
+    const fetchedResults = await Promise.allSettled(
+      waypoints.map(wp => fetchOSRMViaWaypoint(fromLat, fromLng, wp.wpLat, wp.wpLng, toLat, toLng, mode))
+    )
+
+    for (let i = 0; i < fetchedResults.length && distinct.length < 3; i++) {
+      const res = fetchedResults[i]
+      let newRoute = res.status === 'fulfilled' ? res.value : null
+      const v = waypoints[i].v
+
+      // Strictly validate duration & distance before accepting waypoint route
+      if (newRoute) {
+        if (newRoute.duration > maxAllowedDurSec || newRoute.distance > maxAllowedDistM) {
+          newRoute = null // Discard excessive detour!
+        }
+      }
+
+      if (!newRoute || distinct.some(d => areRoutesDuplicate(d, newRoute))) {
+        try {
+          newRoute = synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, toLng, mode, v)
+        } catch {
+          newRoute = null
+        }
+      }
+
+      if (newRoute && !distinct.some(d => areRoutesDuplicate(d, newRoute))) {
+        distinct.push(newRoute)
+      }
     }
   }
 
@@ -643,117 +731,144 @@ export async function ensureThreeDistinctRoutes(candidateRoutes = [], fromLat, f
   return distinct.slice(0, 3).map((r, i) => ({ ...r, index: i }))
 }
 
+// ─── Route In-Memory Cache (5-minute TTL) ──────────────────────────────────
+const routeMemoryCache = new Map()
+
 // ─── Main route fetcher — TomTom primary, OSRM fallback ───────────────────────
 export async function getRoute(fromLat, fromLng, toLat, toLng, mode = 'driving') {
-  const candidateRoutes = []
+  if (!isFinite(fromLat) || !isFinite(fromLng) || !isFinite(toLat) || !isFinite(toLng)) return []
 
-  // 1. TRY GOOGLE ROUTES API (Highest Success Rate)
+  const cacheKey = `${mode}_${fromLat.toFixed(4)}_${fromLng.toFixed(4)}_${toLat.toFixed(4)}_${toLng.toFixed(4)}`
+  const cached = routeMemoryCache.get(cacheKey)
+  if (cached && (Date.now() - cached.timestamp < 300000)) {
+    return cached.routes
+  }
+
   try {
-    const googleRoutes = await getRouteFromGoogle(fromLat, fromLng, toLat, toLng, mode)
-    if (googleRoutes && googleRoutes.length > 0) {
-      candidateRoutes.push(...googleRoutes)
-    }
-  } catch (googleErr) {
-    // Expected fallback when Google API key not set
-  }
+    const candidateRoutes = []
 
-  // 2. TRY TOMTOM API if not enough routes
-  if (candidateRoutes.length < 3) {
-    const travelMode = TOMTOM_MODE[mode] || 'car'
+    // 1. TRY GOOGLE ROUTES API (Highest Success Rate)
     try {
-      const [resultA, resultB] = await Promise.allSettled([
-        fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'fastest', 1), { signal: AbortSignal.timeout(6000) }).then(r => {
-          if (!r.ok) throw new Error(`TomTom ${r.status}`)
-          return r.json()
-        }),
-        fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'shortest', 0), { signal: AbortSignal.timeout(6000) }).then(r => {
-          if (!r.ok) throw new Error(`TomTom ${r.status}`)
-          return r.json()
-        }),
-      ])
+      const googleRoutes = await getRouteFromGoogle(fromLat, fromLng, toLat, toLng, mode)
+      if (googleRoutes && googleRoutes.length > 0) {
+        candidateRoutes.push(...googleRoutes)
+      }
+    } catch (googleErr) {
+      // Expected fallback when Google API key not set
+    }
 
-      if (resultA.status === 'fulfilled' && resultA.value.routes?.length) {
-        if (!resultA.value.detailedError && !resultA.value.errorText) {
-          candidateRoutes.push(parseRoute(resultA.value.routes[0], candidateRoutes.length, mode))
-          if (resultA.value.routes[1]) {
-            candidateRoutes.push(parseRoute(resultA.value.routes[1], candidateRoutes.length, mode))
+    // 2. TRY TOMTOM API if not enough routes and valid key is present
+    const tomtomKey = getApiKey()
+    const hasValidTomTomKey = Boolean(tomtomKey && tomtomKey !== 'your_tomtom_api_key_here' && tomtomKey.trim().length > 10)
+
+    if (hasValidTomTomKey && candidateRoutes.length < 3) {
+      const travelMode = TOMTOM_MODE[mode] || 'car'
+      try {
+        const [resultA, resultB] = await Promise.allSettled([
+          fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'fastest', 2), { signal: AbortSignal.timeout(4500) }).then(r => {
+            if (!r.ok) throw new Error(`TomTom ${r.status}`)
+            return r.json()
+          }),
+          fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'shortest', 0), { signal: AbortSignal.timeout(4500) }).then(r => {
+            if (!r.ok) throw new Error(`TomTom ${r.status}`)
+            return r.json()
+          }),
+        ])
+
+        if (resultA.status === 'fulfilled' && resultA.value.routes?.length) {
+          if (!resultA.value.detailedError && !resultA.value.errorText) {
+            for (const raw of resultA.value.routes) {
+              candidateRoutes.push(parseRoute(raw, candidateRoutes.length, mode))
+            }
           }
         }
-      }
-      if (resultB.status === 'fulfilled' && resultB.value.routes?.length && !resultB.value.detailedError) {
-        candidateRoutes.push(parseRoute(resultB.value.routes[0], candidateRoutes.length, mode))
-      }
-    } catch (tomtomErr) {
-      console.warn('[Routing] TomTom failed, falling back to OSRM:', tomtomErr.message)
-    }
-  }
-
-  // 3. FALLBACK / SUPPLEMENT TO OSRM if still fewer than 3
-  if (candidateRoutes.length < 3) {
-    try {
-      const osrmRoutes = await getRouteFromOSRM(fromLat, fromLng, toLat, toLng, mode)
-      if (osrmRoutes && osrmRoutes.length > 0) {
-        candidateRoutes.push(...osrmRoutes)
-      }
-    } catch (osrmErr) {
-      console.warn('[Routing] OSRM primary query failed:', osrmErr.message)
-    }
-  }
-
-  // 4. INTELLIGENT ROAD SNAPPING FALLBACK
-  // If zero routes were found, user start coordinate may be off-road, inside a building,
-  // railway quarter, courtyard, or pedestrian footway where car engines refuse to start.
-  // Snap to the nearest vehicle-accessible road and route from there, prepending the access walk.
-  if (candidateRoutes.length === 0) {
-    try {
-      const snapped = await findNearestRoadCoordinate(fromLat, fromLng, mode)
-      if (snapped && snapped.isSnapped) {
-        console.info(`[Routing] Snapped ${mode} from off-road (${snapped.distance}m to ${snapped.roadName || 'road network'})`)
-
-        const travelMode = TOMTOM_MODE[mode] || 'car'
-        const snappedTomTom = await fetch(buildUrl(snapped.lat, snapped.lng, toLat, toLng, travelMode, 'fastest', 1), { signal: AbortSignal.timeout(5000) })
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
-
-        const snappedCandidates = []
-        if (snappedTomTom?.routes?.length && !snappedTomTom.detailedError) {
-          snappedCandidates.push(parseRoute(snappedTomTom.routes[0], 0, mode))
-          if (snappedTomTom.routes[1]) {
-            snappedCandidates.push(parseRoute(snappedTomTom.routes[1], 1, mode))
+        if (resultB.status === 'fulfilled' && resultB.value.routes?.length && !resultB.value.detailedError) {
+          for (const raw of resultB.value.routes) {
+            candidateRoutes.push(parseRoute(raw, candidateRoutes.length, mode))
           }
         }
-
-        if (!snappedCandidates.length) {
-          const snappedOsrm = await getRouteFromOSRM(snapped.lat, snapped.lng, toLat, toLng, mode).catch(() => [])
-          if (snappedOsrm?.length) snappedCandidates.push(...snappedOsrm)
-        }
-
-        for (const sr of snappedCandidates) {
-          // Prepend original GPS position so user sees the route starting from their exact location
-          sr.geometry = [[fromLat, fromLng], ...sr.geometry]
-          sr.distance += snapped.distance
-          sr.duration += Math.round(snapped.distance / (mode === 'walking' ? 1.3 : mode === 'cycling' ? 4.0 : 5.0))
-          sr.distanceKm = (sr.distance / 1000).toFixed(1)
-          sr.durationMin = Math.max(1, Math.round(sr.duration / 60))
-          sr.steps = [
-            {
-              instruction: `Head ${snapped.distance}m toward ${snapped.roadName || 'main road'} to start ${mode === 'driving' ? 'driving' : mode}`,
-              distance: snapped.distance,
-              icon: 'straight',
-            },
-            ...sr.steps,
-          ]
-          candidateRoutes.push(sr)
-        }
+      } catch (tomtomErr) {
+        console.warn('[Routing] TomTom failed, falling back to OSRM:', tomtomErr.message)
       }
-    } catch (snapErr) {
-      console.warn('[Routing] Snapping fallback failed:', snapErr.message)
     }
-  }
 
-  // 5. Ensure EXACTLY 3 DISTINCT ROUTES with nearby streets for walk/bike/drive
-  const finalRoutes = await ensureThreeDistinctRoutes(candidateRoutes, fromLat, fromLng, toLat, toLng, mode)
-  return finalRoutes.map((r, i) => ({ ...r, index: i }))
+    // 3. FALLBACK / SUPPLEMENT TO OSRM if still fewer than 3
+    if (candidateRoutes.length < 3) {
+      try {
+        const osrmRoutes = await getRouteFromOSRM(fromLat, fromLng, toLat, toLng, mode)
+        if (osrmRoutes && osrmRoutes.length > 0) {
+          candidateRoutes.push(...osrmRoutes)
+        }
+      } catch (osrmErr) {
+        console.warn('[Routing] OSRM primary query failed:', osrmErr.message)
+      }
+    }
+
+    // 4. INTELLIGENT ROAD SNAPPING FALLBACK
+    // If zero routes were found, user start coordinate may be off-road, inside a building,
+    // railway quarter, courtyard, or pedestrian footway where car engines refuse to start.
+    // Snap to the nearest vehicle-accessible road and route from there, prepending the access walk.
+    if (candidateRoutes.length === 0) {
+      try {
+        const snapped = await findNearestRoadCoordinate(fromLat, fromLng, mode)
+        if (snapped && snapped.isSnapped) {
+          console.info(`[Routing] Snapped ${mode} from off-road (${snapped.distance}m to ${snapped.roadName || 'road network'})`)
+
+          const travelMode = TOMTOM_MODE[mode] || 'car'
+          const snappedTomTom = await fetch(buildUrl(snapped.lat, snapped.lng, toLat, toLng, travelMode, 'fastest', 1), { signal: AbortSignal.timeout(5000) })
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
+
+          const snappedCandidates = []
+          if (snappedTomTom?.routes?.length && !snappedTomTom.detailedError) {
+            snappedCandidates.push(parseRoute(snappedTomTom.routes[0], 0, mode))
+            if (snappedTomTom.routes[1]) {
+              snappedCandidates.push(parseRoute(snappedTomTom.routes[1], 1, mode))
+            }
+          }
+
+          if (!snappedCandidates.length) {
+            const snappedOsrm = await getRouteFromOSRM(snapped.lat, snapped.lng, toLat, toLng, mode).catch(() => [])
+            if (snappedOsrm?.length) snappedCandidates.push(...snappedOsrm)
+          }
+
+          for (const sr of snappedCandidates) {
+            // Prepend original GPS position so user sees the route starting from their exact location
+            sr.geometry = [[fromLat, fromLng], ...sr.geometry]
+            sr.distance += snapped.distance
+            sr.duration += Math.round(snapped.distance / (mode === 'walking' ? 1.3 : mode === 'cycling' ? 4.0 : 5.0))
+            sr.distanceKm = (sr.distance / 1000).toFixed(1)
+            sr.durationMin = Math.max(1, Math.round(sr.duration / 60))
+            sr.steps = [
+              {
+                instruction: `Head ${snapped.distance}m toward ${snapped.roadName || 'main road'} to start ${mode === 'driving' ? 'driving' : mode}`,
+                distance: snapped.distance,
+                icon: 'straight',
+              },
+              ...sr.steps,
+            ]
+            candidateRoutes.push(sr)
+          }
+        }
+      } catch (snapErr) {
+        console.warn('[Routing] Snapping fallback failed:', snapErr.message)
+      }
+    }
+
+    // 5. Ensure EXACTLY 3 DISTINCT ROUTES with nearby streets for walk/bike/drive
+    const finalRoutes = await ensureThreeDistinctRoutes(candidateRoutes, fromLat, fromLng, toLat, toLng, mode)
+    const mapped = finalRoutes.map((r, i) => ({ ...r, index: i }))
+    routeMemoryCache.set(cacheKey, { timestamp: Date.now(), routes: mapped })
+    return mapped
+  } catch (fatalErr) {
+    console.error('[Routing] Fatal error during route calculation, generating fail-safe synthetic corridors:', fatalErr)
+    const emergencyRoutes = [
+      synthesizeStreetAlternativeRoute(null, fromLat, fromLng, toLat, toLng, mode, 0),
+      synthesizeStreetAlternativeRoute(null, fromLat, fromLng, toLat, toLng, mode, 1),
+      synthesizeStreetAlternativeRoute(null, fromLat, fromLng, toLat, toLng, mode, 2),
+    ].map((r, i) => ({ ...r, index: i }))
+    return emergencyRoutes
+  }
 }
 
 
@@ -774,6 +889,65 @@ export async function getReroutedRoute(fromLat, fromLng, toLat, toLng, mode = 'd
   }
 }
 
+// ─── Clean and abbreviate road names to Google Maps standard ──────────────────
+export function cleanRoadName(name) {
+  if (!name) return ''
+  return name
+    .replace(/\bRoad\b/gi, 'Rd')
+    .replace(/\bStreet\b/gi, 'St')
+    .replace(/\bAvenue\b/gi, 'Ave')
+    .replace(/\bHighway\b/gi, 'Hwy')
+    .replace(/\bLane\b/gi, 'Ln')
+    .replace(/\bDrive\b/gi, 'Dr')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Extracts and formats prominent Google Maps-style corridor names.
+ * Weights each street by the actual meters traveled along that segment,
+ * includes highway indicators (NH12, SH2), and joins top arteries with ' & '.
+ * Example: "via Krishnanagar Rd (NH12) & Sankar Gachhi Rd"
+ */
+export function formatCorridorFromInstructions(instructions, totalLength = 1000) {
+  if (!instructions || !instructions.length) return ''
+
+  const roadDistances = new Map()
+  const roadDisplayNames = new Map()
+
+  for (let i = 0; i < instructions.length; i++) {
+    const inst = instructions[i]
+    const nextOffset = i + 1 < instructions.length ? instructions[i + 1].routeOffsetInMeters : totalLength
+    const dist = Math.max(0, (nextOffset || 0) - (inst.routeOffsetInMeters || 0))
+
+    let rawStreet = inst.street ? cleanRoadName(inst.street) : ''
+    let withNums = rawStreet
+    if (inst.roadNumbers && inst.roadNumbers.length) {
+      const nums = inst.roadNumbers.join(', ')
+      withNums = rawStreet ? `${rawStreet} (${nums})` : nums
+    }
+
+    if (!withNums) continue
+
+    const baseKey = (rawStreet || withNums).replace(/\s*\([^)]*\)/g, '').trim().toLowerCase()
+    if (!baseKey) continue
+
+    roadDistances.set(baseKey, (roadDistances.get(baseKey) || 0) + dist)
+
+    const existingDisplay = roadDisplayNames.get(baseKey) || ''
+    if (withNums.length > existingDisplay.length) {
+      roadDisplayNames.set(baseKey, withNums)
+    }
+  }
+
+  const sorted = Array.from(roadDistances.entries()).sort((a, b) => b[1] - a[1])
+  if (!sorted.length) return ''
+
+  const topRoads = sorted.map(([baseKey]) => roadDisplayNames.get(baseKey)).filter(Boolean)
+  if (topRoads.length === 1) return `via ${topRoads[0]}`
+  return `via ${topRoads.slice(0, 2).join(' & ')}`
+}
+
 // ─── Parse a raw TomTom route into our internal format ────────────────────────
 function parseRoute(route, index, mode) {
   const summary = route.summary
@@ -787,10 +961,6 @@ function parseRoute(route, index, mode) {
   const steps = parseInstructions(route.guidance?.instructions || [])
 
   // Traffic sections — map TomTom indices to our geometry array
-  // sectionType=traffic returns one section per congested segment:
-  //   startPointIndex / endPointIndex = indices into the flat geometry array
-  //   simpleCategory: NO_DELAY | MINOR_DELAY | SIGNIFICANT_DELAY | MAJOR_DELAY
-  //   effectiveSpeedInKmh / freeFlowSpeedInKmh = speed ratio for color picking
   const trafficSections = (route.sections || [])
     .filter(s => s.sectionType === 'TRAFFIC')
     .map(s => ({
@@ -802,13 +972,8 @@ function parseRoute(route, index, mode) {
       delaySeconds:    s.delayInSeconds       || 0,
     }))
 
-  const roadNames = []
-  for (const s of steps) {
-    if (s.street && !roadNames.includes(s.street)) roadNames.push(s.street)
-  }
-  const viaRoads = roadNames.length
-    ? `via ${roadNames.slice(0, 2).join(' / ')}`
-    : (index === 0 ? 'via Main Arterial' : 'via Secondary Corridor')
+  const corridor = formatCorridorFromInstructions(route.guidance?.instructions || [], summary.lengthInMeters)
+  const viaRoads = corridor || (index === 0 ? 'via Main Corridor' : index === 1 ? 'via Parallel Link' : 'via Secondary Avenue')
 
   return {
     index,
@@ -830,15 +995,23 @@ function parseRoute(route, index, mode) {
 
 // ─── Instructions parser ──────────────────────────────────────────────────────
 function parseInstructions(instructions) {
-  return instructions.map(inst => ({
-    instruction: (inst.message || '').replace(/<[^>]+>/g, '').trim() || maneuverText(inst.maneuver),
-    distance:    inst.routeOffsetInMeters ?? 0,
-    type:        inst.maneuver || 'straight',
-    icon:        getStepIcon(inst.maneuver),
-    laneInfo:    inst.laneInfo ? { lanes: inst.laneInfo.lanes || [], targetLane: inst.laneInfo.targetLane } : null,
-    point:       inst.point ? [inst.point.latitude, inst.point.longitude] : null,
-    street:      inst.street || '',
-  }))
+  return instructions.map(inst => {
+    let streetName = inst.street ? cleanRoadName(inst.street) : ''
+    if (inst.roadNumbers && inst.roadNumbers.length) {
+      const nums = inst.roadNumbers.join(', ')
+      streetName = streetName ? `${streetName} (${nums})` : nums
+    }
+    return {
+      instruction: (inst.message || '').replace(/<[^>]+>/g, '').trim() || maneuverText(inst.maneuver),
+      distance:    inst.routeOffsetInMeters ?? 0,
+      type:        inst.maneuver || 'straight',
+      icon:        getStepIcon(inst.maneuver),
+      laneInfo:    inst.laneInfo ? { lanes: inst.laneInfo.lanes || [], targetLane: inst.laneInfo.targetLane } : null,
+      point:       inst.point ? [inst.point.latitude, inst.point.longitude] : null,
+      street:      streetName,
+      roadNumbers: inst.roadNumbers || [],
+    }
+  })
 }
 
 function maneuverText(maneuver) {

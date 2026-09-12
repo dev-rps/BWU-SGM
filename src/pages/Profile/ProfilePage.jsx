@@ -21,7 +21,7 @@ import { loadContacts, saveContacts, generateId } from '../../services/contactsS
 
 
 import MedicalProfileSurvey from './MedicalProfileSurvey'
-import { loadMedicalProfile, calculateProfileCompletion } from '../../services/medicalService'
+import { loadMedicalProfile, calculateProfileCompletion, hasMedicalData } from '../../services/medicalService'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const AVATAR_COLORS = [
@@ -226,12 +226,29 @@ export default function ProfilePage() {
 
   // ── Load Medical Profile ───────────────────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-      const uid = authUser?.id || user?.uid || user?.id
-      if (!uid) return
-      loadMedicalProfile(uid).then(setMedicalProfile).catch(() => {})
-    })
-  }, [showMedicalSurvey])
+    let active = true
+    const fetchMed = async () => {
+      let uid = user?.uid || user?.id || ''
+      if (!uid) {
+        try {
+          const { data } = await supabase.auth.getUser()
+          uid = data?.user?.id || ''
+        } catch {}
+      }
+      const prof = await loadMedicalProfile(uid)
+      if (active) setMedicalProfile(prof)
+    }
+
+    fetchMed()
+
+    const handleUpdate = () => { fetchMed() }
+    window.addEventListener('sg_medical_profile_updated', handleUpdate)
+
+    return () => {
+      active = false
+      window.removeEventListener('sg_medical_profile_updated', handleUpdate)
+    }
+  }, [showMedicalSurvey, user])
 
   // Close menu on outside click
   useEffect(() => {
@@ -674,15 +691,26 @@ export default function ProfilePage() {
               <span className="material-symbols-outlined icon-filled text-rose-500">medical_services</span>
             </div>
             <p className="text-sm font-black text-[#191c1e]">Medical Profile</p>
-            {medicalProfile?.bloodGroup ? (
-              <p className="text-xs text-[#737686] mt-0.5 font-bold">Blood: <span className="text-rose-500">{medicalProfile.bloodGroup}</span></p>
-            ) : (
-              <p className="text-xs text-rose-500 mt-0.5 font-bold">Setup Required</p>
-            )}
+            {(() => {
+              const comp = calculateProfileCompletion(medicalProfile)
+              const hasData = hasMedicalData(medicalProfile)
+              if (comp > 0 || hasData) {
+                const displayComp = Math.max(comp, 15)
+                return (
+                  <p className="text-xs text-emerald-600 mt-0.5 font-bold flex items-center gap-1.5">
+                    <span>{displayComp}% Completed</span>
+                    {medicalProfile?.bloodGroup && (
+                      <span className="text-rose-500 font-black">({medicalProfile.bloodGroup})</span>
+                    )}
+                  </p>
+                )
+              }
+              return <p className="text-xs text-rose-500 mt-0.5 font-bold">Setup Required</p>
+            })()}
             <div className="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
               <div 
-                className="h-full bg-rose-500 rounded-full transition-all" 
-                style={{ width: `${calculateProfileCompletion(medicalProfile)}%` }}
+                className="h-full bg-emerald-500 rounded-full transition-all" 
+                style={{ width: `${Math.max(calculateProfileCompletion(medicalProfile), hasMedicalData(medicalProfile) ? 15 : 0)}%` }}
               />
             </div>
           </button>

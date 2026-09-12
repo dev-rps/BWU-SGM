@@ -200,57 +200,112 @@ export const FLOOD_SEVERITY_CONFIG = {
 // Distance within which a flood zone affects a route's safety score
 export const FLOOD_ROUTE_PROXIMITY_METERS = 200
 
+// In-memory cache for live flood data (30 minutes TTL)
+let floodDataCache = null
+let floodDataCacheTimestamp = 0
+
 // ─── Live flood data fetcher from Open-Meteo (GloFAS) ─────────────────────────
 /**
- * Fetches current river discharge for India-wide monitoring points.
+ * Fetches current river discharge for India monitoring points with caching
+ * and concurrency limiting to avoid Open-Meteo 429 Too Many Requests errors.
  * Open-Meteo Flood API: https://flood-api.open-meteo.com/v1/flood
- * Free, no API key required, uses GloFAS reanalysis + forecast data.
- *
- * Returns array of monitoring points with:
- *   { ...point, currentDischarge, floodRisk: 'low'|'moderate'|'high', trend }
  */
-export async function fetchLiveFloodData() {
-  const results = await Promise.allSettled(
-    RIVER_MONITORING_POINTS.map(async (point) => {
-      const url =
-        `https://flood-api.open-meteo.com/v1/flood` +
-        `?latitude=${point.lat}&longitude=${point.lng}` +
-        `&daily=river_discharge,river_discharge_mean,river_discharge_median` +
-        `&past_days=14&forecast_days=3`
+export async function fetchLiveFloodData(userLat, userLng) {
+  const now = Date.now()
+  // 1. Return memory cache if fresh (< 30 mins)
+  if (floodDataCache && (now - floodDataCacheTimestamp < 30 * 60 * 1000)) {
+    return floodDataCache
+  }
 
-      const res  = await fetch(url)
-      if (!res.ok) throw new Error(`Open-Meteo error ${res.status}`)
-      const data = await res.json()
+  // 2. Check sessionStorage
+  try {
+    const stored = sessionStorage.getItem('sgm_live_flood_cache')
+    const storedTime = sessionStorage.getItem('sgm_live_flood_time')
+    if (stored && storedTime && (now - Number(storedTime) < 30 * 60 * 1000)) {
+      floodDataCache = JSON.parse(stored)
+      floodDataCacheTimestamp = Number(storedTime)
+      return floodDataCache
+    }
+  } catch {}
 
-      const dischargeArr = data.daily?.river_discharge || []
-      const medianArr    = data.daily?.river_discharge_median || []
+  // Prioritize points: if user coordinates provided, sort by distance and limit to 5 closest
+  let targetPoints = RIVER_MONITORING_POINTS
+  if (userLat != null && userLng != null && isFinite(userLat) && isFinite(userLng)) {
+    targetPoints = [...RIVER_MONITORING_POINTS].sort((a, b) => {
+      const distA = Math.hypot(a.lat - userLat, a.lng - userLng)
+      const distB = Math.hypot(b.lat - userLat, b.lng - userLng)
+      return distA - distB
+    }).slice(0, 6)
+  } else {
+    // Default to top 6 representative points
+    targetPoints = RIVER_MONITORING_POINTS.slice(0, 6)
+  }
 
-      const currentDischarge = [...dischargeArr].reverse().find(v => v !== null) || 0
-      const medianDischarge  = medianArr.length ? medianArr[Math.floor(medianArr.length / 2)] : 0
+  // Process in small batches of 2 with small delay to stay well under Open-Meteo rate limits
+  const results = []
+  for (let i = 0; i < targetPoints.length; i += 2) {
+    const chunk = targetPoints.slice(i, i + 2)
+    const chunkPromises = chunk.map(async (point) => {
+      try {
+        const url =
+          `https://flood-api.open-meteo.com/v1/flood` +
+          `?latitude=${point.lat}&longitude=${point.lng}` +
+          `&daily=river_discharge,river_discharge_mean,river_discharge_median` +
+          `&past_days=14&forecast_days=3`
 
-      let floodRisk = 'low'
-      if (currentDischarge > point.thresholdHigh)          floodRisk = 'high'
-      else if (currentDischarge > point.thresholdModerate) floodRisk = 'moderate'
+        const res = await fetch(url, { signal: AbortSignal.timeout(4000) })
+        if (!res.ok) return null
+        const data = await res.json()
 
-      const recent = dischargeArr.slice(-4).filter(v => v !== null)
-      const trend  = recent.length >= 2
-        ? (recent[recent.length - 1] > recent[0] ? 'rising' : 'falling')
-        : 'stable'
+        const dischargeArr = data.daily?.river_discharge || []
+        const medianArr    = data.daily?.river_discharge_median || []
 
-      return {
-        ...point,
-        currentDischarge: Math.round(currentDischarge),
-        medianDischarge:  Math.round(medianDischarge),
-        floodRisk,
-        trend,
-        lastUpdated: new Date().toISOString(),
+        const currentDischarge = [...dischargeArr].reverse().find(v => v !== null) || 0
+        const medianDischarge  = medianArr.length ? medianArr[Math.floor(medianArr.length / 2)] : 0
+
+        let floodRisk = 'low'
+        if (currentDischarge > point.thresholdHigh)          floodRisk = 'high'
+        else if (currentDischarge > point.thresholdModerate) floodRisk = 'moderate'
+
+        const recent = dischargeArr.slice(-4).filter(v => v !== null)
+        const trend  = recent.length >= 2
+          ? (recent[recent.length - 1] > recent[0] ? 'rising' : 'falling')
+          : 'stable'
+
+        return {
+          ...point,
+          currentDischarge: Math.round(currentDischarge),
+          medianDischarge:  Math.round(medianDischarge),
+          floodRisk,
+          trend,
+          lastUpdated: new Date().toISOString(),
+        }
+      } catch {
+        return null
       }
     })
-  )
+
+    const settled = await Promise.all(chunkPromises)
+    for (const item of settled) {
+      if (item) results.push(item)
+    }
+
+    // Small courteous pause between batches to protect against burst limit
+    if (i + 2 < targetPoints.length) {
+      await new Promise(r => setTimeout(r, 120))
+    }
+  }
+
+  if (results.length > 0) {
+    floodDataCache = results
+    floodDataCacheTimestamp = now
+    try {
+      sessionStorage.setItem('sgm_live_flood_cache', JSON.stringify(results))
+      sessionStorage.setItem('sgm_live_flood_time', String(now))
+    } catch {}
+  }
 
   return results
-    .filter(r => r.status === 'fulfilled')
-    .map(r => r.value)
 }
 
 // ─── Check if current date is monsoon season ──────────────────────────────────

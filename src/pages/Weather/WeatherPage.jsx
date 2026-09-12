@@ -45,24 +45,29 @@ export default function WeatherPage() {
           {weather.current.name}
         </h2>
 
-        <p>
-          🌡 Temperature: {weather.current.main.temp}°C
+        <p className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-[16px] text-amber-500">device_thermostat</span>
+          <span>Temperature: {weather.current.main.temp}°C</span>
         </p>
 
-        <p>
-          🤒 Feels Like: {weather.current.main.feels_like}°C
+        <p className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-[16px] text-orange-500">thermostat</span>
+          <span>Feels Like: {weather.current.main.feels_like}°C</span>
         </p>
 
-        <p>
-          🌥 Condition: {weather.current.weather[0].description}
+        <p className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-[16px] text-sky-500">cloud</span>
+          <span>Condition: {weather.current.weather[0].description}</span>
         </p>
 
-        <p>
-          💧 Humidity: {weather.current.main.humidity}%
+        <p className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-[16px] text-blue-500">humidity_mid</span>
+          <span>Humidity: {weather.current.main.humidity}%</span>
         </p>
 
-        <p>
-          💨 Wind: {weather.current.wind.speed} m/s
+        <p className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-[16px] text-teal-500">air</span>
+          <span>Wind: {weather.current.wind.speed} m/s</span>
         </p>
       </div>
     </div>

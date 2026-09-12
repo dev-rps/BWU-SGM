@@ -253,7 +253,12 @@ function MapMarkers({ validReports, mapCenter, selectedId, onSelectId }) {
   return (
     <>
       <Marker position={mapCenter} icon={userIcon}>
-        <Popup><p className="text-xs font-bold">📍 Your Location</p></Popup>
+        <Popup>
+          <p className="text-xs font-bold flex items-center gap-1">
+            <span className="material-symbols-outlined text-[13px] text-[#004ac6]">my_location</span>
+            <span>Your Location</span>
+          </p>
+        </Popup>
       </Marker>
       {validReports.map(r => {
         const lat    = r.latitude ?? r.lat
@@ -277,7 +282,12 @@ function MapMarkers({ validReports, mapCenter, selectedId, onSelectId }) {
                   </span>
                 )}
                 {r.description && <p className="text-[10px] text-[#737686] mt-1">{r.description}</p>}
-                {(r.locationName || r.location) && <p className="text-[9px] text-[#737686] mt-1">📍 {r.locationName || r.location}</p>}
+                {(r.locationName || r.location) && (
+                  <p className="text-[9px] text-[#737686] mt-1 flex items-center gap-0.5">
+                    <span className="material-symbols-outlined text-[11px] text-[#737686]">location_on</span>
+                    <span>{r.locationName || r.location}</span>
+                  </p>
+                )}
               </div>
             </Popup>
           </Marker>

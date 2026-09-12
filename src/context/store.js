@@ -102,6 +102,13 @@ export const useAppStore = create((set, get) => ({
     set({ selectedRouteIdx: idx })
   },
 
+  // Transport Mode (driving | motorbike | cycling | walking)
+  transportMode: loadSession('sg_transport_mode', 'driving'),
+  setTransportMode: (mode) => {
+    saveSession('sg_transport_mode', mode)
+    set({ transportMode: mode })
+  },
+
   // Nearby places
   nearbyPlaces: [],
   setNearbyPlaces: (places) => set({ nearbyPlaces: places }),

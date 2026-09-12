@@ -96,7 +96,7 @@ export default function SearchPage() {
     setError('')
     debounceRef.current = setTimeout(async () => {
       try {
-        const r = await searchPlaces(val)
+        const r = await searchPlaces(val, userLocation?.lat, userLocation?.lng)
         setResults(r)
       } catch {
         setError('Search unavailable. Try again.')
