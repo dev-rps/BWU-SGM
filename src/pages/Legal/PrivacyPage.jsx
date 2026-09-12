@@ -37,8 +37,8 @@ export default function PrivacyPage() {
             <h2 className="text-base font-bold text-slate-900 mb-2">1. Introduction</h2>
             <p>
               Welcome to <strong>Safety Guardian</strong> ("we", "our", or "us"), available at{' '}
-              <a href="https://bwu-sgm.vercel.app" className="text-blue-600 underline hover:text-blue-700">
-                https://bwu-sgm.vercel.app
+              <a href="https://safetyguardian.xyz" className="text-blue-600 underline hover:text-blue-700">
+                https://safetyguardian.xyz
               </a>.
               Your privacy and personal safety are fundamental to our mission. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our web application and mobile services.
             </p>
@@ -106,7 +106,7 @@ export default function PrivacyPage() {
         <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
           <span>&copy; {new Date().getFullYear()} Safety Guardian. All rights reserved.</span>
           <div className="flex gap-4">
-            <a href="https://bwu-sgm.vercel.app" className="hover:text-slate-600 transition-colors">Home</a>
+            <a href="https://safetyguardian.xyz" className="hover:text-slate-600 transition-colors">Home</a>
             <a href="/terms" className="hover:text-slate-600 transition-colors">Terms of Service</a>
           </div>
         </div>

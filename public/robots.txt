@@ -1,5 +1,5 @@
 # Safety Guardian - robots.txt
-# https://bwu-sgm.vercel.app
+# https://safetyguardian.xyz
 
 User-agent: *
 Allow: /
@@ -20,4 +20,4 @@ Disallow: /dev/
 Disallow: /api/
 
 # Sitemap location
-Sitemap: https://bwu-sgm.vercel.app/sitemap.xml
+Sitemap: https://safetyguardian.xyz/sitemap.xml

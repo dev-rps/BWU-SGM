@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
-const BASE_URL = 'https://bwu-sgm.vercel.app';
+const BASE_URL = 'https://safetyguardian.xyz';
 const DEFAULT_TITLE = 'Safety Guardian — Real-time Safe Navigation & Emergency Assistance';
 const DEFAULT_DESC = 'Navigate West Bengal safely with real-time safety scores, AI route analysis, community hazard reports, and instant emergency SOS assistance.';
 

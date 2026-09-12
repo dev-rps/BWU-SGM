@@ -36,7 +36,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-base font-bold text-slate-900 mb-2">1. Acceptance of Terms</h2>
             <p>
-              By accessing or using Safety Guardian at <a href="https://bwu-sgm.vercel.app" className="text-blue-600 underline">https://bwu-sgm.vercel.app</a>, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, you may not use our services.
+              By accessing or using Safety Guardian at <a href="https://safetyguardian.xyz" className="text-blue-600 underline">https://safetyguardian.xyz</a>, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, you may not use our services.
             </p>
           </section>
 
@@ -66,7 +66,7 @@ export default function TermsPage() {
         <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
           <span>&copy; {new Date().getFullYear()} Safety Guardian. All rights reserved.</span>
           <div className="flex gap-4">
-            <a href="https://bwu-sgm.vercel.app" className="hover:text-slate-600 transition-colors">Home</a>
+            <a href="https://safetyguardian.xyz" className="hover:text-slate-600 transition-colors">Home</a>
             <a href="/privacy" className="hover:text-slate-600 transition-colors">Privacy Policy</a>
           </div>
         </div>
