@@ -137,7 +137,7 @@ function speakText(text, settings) {
   })
 }
 
-// â”€â”€â”€ Intro Screen (shown once) â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Intro Screen (shown once) ──────────────────────────────────────────────
 function IntroScreen({ onDone }) {
   const [phase, setPhase] = useState(0)
 
@@ -148,7 +148,7 @@ function IntroScreen({ onDone }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center"
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-between"
       style={{ background: '#f8f9fc' }}
     >
       <style>{`
@@ -161,8 +161,8 @@ function IntroScreen({ onDone }) {
         .intro-btn  { animation: floatUp 0.8s 0.6s ease-out both; }
       `}</style>
 
-      <div className="flex-1 flex flex-col items-center justify-center w-full px-8">
-        <div className="relative flex items-center justify-center intro-blob mb-10" style={{ width: 240, height: 240 }}>
+      <div className="flex-1 flex flex-col items-center justify-center w-full px-8 pt-4">
+        <div className="relative flex items-center justify-center intro-blob mb-8" style={{ width: 220, height: 220 }}>
           <div
             className="absolute"
             style={{
@@ -177,7 +177,7 @@ function IntroScreen({ onDone }) {
             alt="Momo"
             className="relative z-10"
             style={{
-              width: 140, height: 140,
+              width: 130, height: 130,
               borderRadius: '50%',
               objectFit: 'cover',
               boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
@@ -190,21 +190,21 @@ function IntroScreen({ onDone }) {
             <h1 className="text-[26px] font-medium text-[#111827] leading-tight tracking-tight">
               Hi there! I'm <span className="text-[#4f46e5]">Momo</span> 
             </h1>
-            <p className="text-[20px] text-[#374151] leading-snug font-normal px-2">
+            <p className="text-[18px] text-[#374151] leading-snug font-normal px-2">
               I'm here to help you stay safe and secure during any emergency.
             </p>
           </div>
         )}
       </div>
 
-      <div className="w-full px-6 pb-6">
+      <div className="w-full max-w-md px-6 pb-28 md:pb-24">
         {phase >= 1 && (
           <button
             onClick={onDone}
-            className="intro-btn w-full py-4 rounded-[28px] font-medium text-white text-[17px] active:scale-95 transition-transform"
+            className="intro-btn w-full py-4 rounded-[28px] font-medium text-white text-[17px] active:scale-95 transition-transform shadow-xl"
             style={{
               background: 'linear-gradient(90deg, #6366f1, #3b82f6)',
-              boxShadow: '0 10px 25px rgba(59,130,246,0.25)',
+              boxShadow: '0 10px 25px rgba(59,130,246,0.3)',
             }}
           >
             Let&apos;s Talk!
