@@ -396,7 +396,8 @@ export default function ProfilePage() {
   }
 
   // ── Logout ────────────────────────────────────────────────────────────────
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try { await supabase.auth.signOut() } catch (_) {}
     setIsLoggedIn(false)
     setHasPermissions(false)
     setEmergencyContacts([])

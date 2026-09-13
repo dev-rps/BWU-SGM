@@ -20,18 +20,21 @@ export const signup = async (name, email, password) => {
 
   if (error) throw error
 
-  // The Postgres trigger `on_auth_user_created` automatically initializes `public.profiles`.
-  // Also ensure profile fields are synced immediately:
-  if (data.user) {
-    await supabase.from('profiles').upsert({
-      id: data.user.id,
-      full_name: name,
-      email: email,
-      updated_at: new Date().toISOString(),
-    })
+  // If a session was established (e.g. auto-confirmed), sync profile safely
+  if (data?.session && data?.user) {
+    try {
+      await supabase.from('profiles').upsert({
+        id: data.user.id,
+        full_name: name,
+        email: email,
+        updated_at: new Date().toISOString(),
+      })
+    } catch (e) {
+      console.warn('[Profile upsert warning]:', e)
+    }
   }
 
-  return data.user
+  return data
 }
 
 // Login
@@ -42,7 +45,33 @@ export const login = async (email, password) => {
   })
 
   if (error) throw error
+
+  // Safely ensure profile is synced once authenticated
+  if (data?.user) {
+    try {
+      const fullName = data.user.user_metadata?.full_name || data.user.user_metadata?.name || ''
+      await supabase.from('profiles').upsert({
+        id: data.user.id,
+        full_name: fullName,
+        email: data.user.email,
+        updated_at: new Date().toISOString(),
+      })
+    } catch (e) {
+      console.warn('[Profile upsert warning]:', e)
+    }
+  }
+
   return data.user
+}
+
+// Resend Email Confirmation
+export const resendConfirmationEmail = async (email) => {
+  const { data, error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+  })
+  if (error) throw error
+  return data
 }
 
 export const GOOGLE_CLIENT_ID =

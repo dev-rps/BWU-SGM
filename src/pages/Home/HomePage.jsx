@@ -413,7 +413,8 @@ export default function HomePage() {
     { icon: 'person',     label: 'Profile',  path: '/profile', color: '#737686' },
   ]
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try { await supabase.auth.signOut() } catch (_) {}
     setIsLoggedIn(false)
     setHasPermissions(false)
     setEmergencyContacts([])
