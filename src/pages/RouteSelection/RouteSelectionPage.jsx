@@ -1887,10 +1887,10 @@ export default function RouteSelectionPage() {
 
       {/* ════════ MINIMIZED STATE: CONFIRM DESTINATION BADGE ════════ */}
       {isMinimized && destination?.name && (
-        <div className="absolute top-3 left-3 sm:left-auto md:left-52 md:top-4 z-20 pointer-events-auto flex items-center gap-2 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg border border-slate-200/90 max-w-[calc(100vw-180px)] sm:max-w-md animate-fade-in">
-          <div className="w-2.5 h-2.5 rotate-45 bg-rose-500 ring-2 ring-rose-200 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Confirming Destination</p>
+        <div className="absolute top-3 md:top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-auto flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-full shadow-md border border-slate-200/90 max-w-[calc(100vw-210px)] sm:max-w-xs md:max-w-sm animate-fade-in">
+          <div className="w-2 h-2 rotate-45 bg-rose-500 ring-2 ring-rose-200 shrink-0" />
+          <div className="min-w-0 flex items-center gap-1.5">
+            <span className="text-[9.5px] font-extrabold text-slate-400 uppercase tracking-wider shrink-0 hidden sm:inline">Destination:</span>
             <p className="text-xs font-bold text-slate-800 truncate" title={destination.name}>
               {destination.name}
             </p>
