@@ -54,8 +54,188 @@ export const TRAFFIC_COLORS = {
 }
 
 // ─── Build URL ────────────────────────────────────────────────────────────────
+// Hooghly River bridge corridors connecting Howrah and Kolkata
+export const HOOGHLY_BRIDGES = [
+  {
+    id: 'howrah_bridge',
+    name: 'Howrah Bridge (Rabindra Setu)',
+    waypoint: [22.5855, 88.3468],
+    minLat: 22.578, maxLat: 22.593, minLng: 88.338, maxLng: 88.354,
+    keywords: ['rabindra setu', 'howrah bridge', 'brabourne', 'mg road'],
+  },
+  {
+    id: 'vidyasagar_setu',
+    name: 'Vidyasagar Setu (2nd Hooghly Bridge)',
+    waypoint: [22.5583, 88.3308],
+    minLat: 22.550, maxLat: 22.568, minLng: 88.318, maxLng: 88.344,
+    keywords: ['vidyasagar setu', '2nd hooghly bridge', 'second hooghly bridge', 'kona expressway', 'khidirpur'],
+  },
+  {
+    id: 'bally_bridge',
+    name: 'Bally Bridge (Vivekananda Setu)',
+    waypoint: [22.6542, 88.3585],
+    minLat: 22.646, maxLat: 22.664, minLng: 88.348, maxLng: 88.368,
+    keywords: ['vivekananda setu', 'bally bridge', 'nivedita setu', 'belgharia expressway'],
+  },
+]
+
+/**
+ * Checks if a journey spans across the Hooghly River (Howrah / West Bank <-> Kolkata / East Bank).
+ */
+export function isCrossingHooghlyRiver(fromLat, fromLng, toLat, toLng) {
+  const inRange = (lat) => lat >= 22.48 && lat <= 22.70
+  if (!inRange(fromLat) || !inRange(toLat)) return false
+
+  // West bank (Howrah, Shibpur, Salkia, Bally, etc.): lng <= 88.352
+  // East bank (Kolkata, BBD Bagh, Esplanade, Shyambazar, etc.): lng >= 88.354
+  const isWest = (lng) => lng <= 88.352
+  const isEast = (lng) => lng >= 88.354
+
+  return (isWest(fromLng) && isEast(toLng)) || (isEast(fromLng) && isWest(toLng))
+}
+
+/**
+ * Strictly checks if a route uses a ferry boat crossing across the river.
+ * Passenger ferries are ONLY permitted in walking mode; vehicular modes (driving, bike, cycle)
+ * must use the physical road bridges (Howrah Bridge, Vidyasagar Setu, Bally Bridge).
+ */
+export function isFerryRoute(route, mode = 'driving') {
+  if (mode === 'walking') return false
+  if (!route) return false
+
+  const checkText = (text) => {
+    if (!text || typeof text !== 'string') return false
+    const t = text.toLowerCase()
+    return (
+      t.includes('launch ferry route') ||
+      t.includes('ferry route') ||
+      t.includes('take the ferry') ||
+      t.includes('board the ferry') ||
+      t.includes('steamer route') ||
+      t.includes('boat route') ||
+      (t.includes('ferry') && !t.includes('approach') && !t.includes('bridge') && !t.includes('bypass'))
+    )
+  }
+
+  if (checkText(route.viaRoads)) return true
+
+  const steps = route.steps || []
+  for (const s of steps) {
+    if (s.icon === 'directions_ferry') return true
+    if (typeof s.type === 'string' && s.type.toLowerCase().includes('ferry')) return true
+    if (typeof s.maneuver === 'string' && s.maneuver.toLowerCase().includes('ferry')) return true
+    if (checkText(s.instruction)) return true
+    if (checkText(s.street)) return true
+  }
+
+  // Geometry check: if route crosses the Hooghly River, it MUST cross via a bridge
+  const geom = route.geometry || []
+  if (geom.length >= 2) {
+    const startPt = geom[0]
+    const endPt = geom[geom.length - 1]
+    if (isCrossingHooghlyRiver(startPt[0], startPt[1], endPt[0], endPt[1])) {
+      const touchesBridge = HOOGHLY_BRIDGES.some(b => {
+        return geom.some(([lat, lng]) =>
+          lat >= b.minLat && lat <= b.maxLat && lng >= b.minLng && lng <= b.maxLng
+        )
+      })
+      if (!touchesBridge) {
+        return true // Jumped across the river without crossing a bridge -> Ferry!
+      }
+    }
+  }
+
+  return false
+}
+
+/**
+ * Calculates realistic, traffic-aware travel times and ETAs for all transport modes in Indian urban conditions.
+ *
+ * Rules:
+ *   1. Driving (Car): uses live traffic-aware travel time from TomTom (18-28 km/h city average with delay).
+ *   2. Motorbike: two-wheelers filter through congestion queues, skip ~75% of car delays, and travel ~22-30%
+ *      faster than cars in city traffic (average 30-36 km/h).
+ *   3. Cycling: realistic urban cycling pace (~13.5 km/h / 3.75 m/s) + signal waits. Must NEVER be faster than
+ *      car or motorbike on standard trips (>= 800m).
+ *   4. Walking: realistic pedestrian pace (~4.7 km/h / 1.30 m/s).
+ */
+export function calculateRealisticTravelTime(lengthMeters, mode, rawTomTomSeconds = 0, rawDelaySeconds = 0) {
+  const distM = Math.max(10, lengthMeters)
+
+  // 1. CAR (driving):
+  if (mode === 'driving') {
+    const carSec = rawTomTomSeconds > 0 ? rawTomTomSeconds : Math.round(distM / 6.94 + 60)
+    const durMin = Math.max(1, Math.round(carSec / 60))
+    const delayMin = Math.round((rawDelaySeconds || 0) / 60)
+    return {
+      duration: carSec,
+      durationMin: durMin,
+      trafficDelay: rawDelaySeconds || 0,
+      trafficDelayMin: delayMin,
+    }
+  }
+
+  // 2. MOTORBIKE / TWO-WHEELER (motorbike):
+  if (mode === 'motorbike') {
+    const baseCarSec = rawTomTomSeconds > 0 ? rawTomTomSeconds : Math.round(distM / 6.94 + 60)
+    const carDelay = Math.max(0, rawDelaySeconds || (baseCarSec - Math.round(distM / 9.72)))
+    const freeFlowSec = Math.max(30, baseCarSec - carDelay)
+
+    // Motorbike suffers only ~25% of the queue delay cars suffer
+    const bikeDelaySec = Math.round(carDelay * 0.25)
+    // Motorbike cruising in traffic is ~14% faster than four-wheelers
+    const bikeCruiseSec = Math.round(freeFlowSec * 0.86)
+    let bikeSec = bikeCruiseSec + bikeDelaySec
+
+    // Ensure motorbike is reliably ~22% to 30% faster than car in city conditions
+    bikeSec = Math.min(bikeSec, Math.round(baseCarSec * 0.74))
+    // Realistic physical minimum: cannot exceed ~48 km/h (13.3 m/s) average city speed
+    bikeSec = Math.max(Math.round(distM / 13.3), bikeSec, 45)
+
+    const durMin = Math.max(1, Math.round(bikeSec / 60))
+    return {
+      duration: bikeSec,
+      durationMin: durMin,
+      trafficDelay: bikeDelaySec,
+      trafficDelayMin: Math.round(bikeDelaySec / 60),
+    }
+  }
+
+  // 3. BICYCLE / CYCLE (cycling):
+  if (mode === 'cycling') {
+    const cycleBaseSec = Math.round(distM / 3.75)
+    const cycleSignalSec = Math.round((distM / 1000) * 15)
+    let cycleSec = cycleBaseSec + cycleSignalSec
+
+    // If car time is known, ensure cycle is realistically slower than car and motorbike
+    if (rawTomTomSeconds > 0 && distM >= 800) {
+      const minCycleVsCar = Math.round(rawTomTomSeconds * 1.25)
+      cycleSec = Math.max(cycleSec, minCycleVsCar)
+    }
+    const durMin = Math.max(1, Math.round(cycleSec / 60))
+    return {
+      duration: cycleSec,
+      durationMin: durMin,
+      trafficDelay: 0,
+      trafficDelayMin: 0,
+    }
+  }
+
+  // 4. WALKING (walking):
+  const walkSec = rawTomTomSeconds > 0 && rawTomTomSeconds > distM / 1.5
+    ? rawTomTomSeconds
+    : Math.round(distM / 1.30)
+  const durMin = Math.max(1, Math.round(walkSec / 60))
+  return {
+    duration: walkSec,
+    durationMin: durMin,
+    trafficDelay: 0,
+    trafficDelayMin: 0,
+  }
+}
+
 function buildUrl(fromLat, fromLng, toLat, toLng, travelMode, routeType, maxAlternatives = 0) {
-  const isVehicular = travelMode === 'car' || travelMode === 'motorcycle'
+  const isVehicular = travelMode === 'car' || travelMode === 'motorcycle' || travelMode === 'bicycle'
   let url =
     `${BASE_URL}/calculateRoute/` +
     `${fromLat},${fromLng}:${toLat},${toLng}/json` +
@@ -65,7 +245,7 @@ function buildUrl(fromLat, fromLng, toLat, toLng, travelMode, routeType, maxAlte
     `&maxAlternatives=${maxAlternatives}` +
     `&instructionsType=tagged`
   if (isVehicular) {
-    url += `&traffic=true&sectionType=traffic`
+    url += `&traffic=true&sectionType=traffic&avoid=ferries`
   }
   return url
 }
@@ -147,65 +327,63 @@ async function getRouteFromOSRM(fromLat, fromLng, toLat, toLng, mode = 'driving'
       const data = await res.json()
       if (data.code !== 'Ok' || !data.routes?.length) throw new Error('OSRM no routes')
 
-      // Duration: for walking, cycling, and motorbike, ensure accurate realistic travel speeds
-      return data.routes.map((route, idx) => {
-        let adjDur = route.duration
-        if (mode === 'walking') {
-          adjDur = Math.round(route.distance / 1.33)
-        } else if (mode === 'cycling') {
-          adjDur = Math.round(route.distance / 4.1)
-        } else if (mode === 'motorbike') {
-          // Motorbikes in Indian urban traffic: nimble, ~32 km/h average (8.9 m/s)
-          adjDur = Math.round(route.distance / 8.9)
-        }
-        const steps  = (route.legs?.[0]?.steps || []).map(s => ({
-          name:        s.name || '',
-          instruction: s.maneuver?.instruction || formatOsrmStep(s),
-          distance:    s.distance,
-          duration:    s.duration || 0,
-          type:        s.maneuver?.type || 'straight',
-          icon:        getStepIcon(s.maneuver?.type + ' ' + (s.maneuver?.modifier || '')),
-          point:       s.maneuver?.location ? [s.maneuver.location[1], s.maneuver.location[0]] : null,
-        }))
+      return data.routes
+        .map((route, idx) => {
+          const steps  = (route.legs?.[0]?.steps || []).map(s => ({
+            name:        s.name || '',
+            instruction: s.maneuver?.instruction || formatOsrmStep(s),
+            distance:    s.distance,
+            duration:    s.duration || 0,
+            type:        s.maneuver?.type || 'straight',
+            icon:        getStepIcon(s.maneuver?.type + ' ' + (s.maneuver?.modifier || '')),
+            point:       s.maneuver?.location ? [s.maneuver.location[1], s.maneuver.location[0]] : null,
+          }))
 
-        const rawSummary = route.legs?.[0]?.summary || ''
-        let viaRoads = ''
-        if (rawSummary) {
-          viaRoads = `via ${rawSummary}`
-        } else {
-          const roadNames = []
-          for (const s of steps) {
-            const n = s.name?.trim()
-            if (n && n !== 'the road' && !roadNames.includes(n)) roadNames.push(n)
-          }
-          if (roadNames.length) {
-            viaRoads = `via ${roadNames.slice(0, 2).join(' / ')}`
-          } else if (mode === 'walking') {
-            viaRoads = idx === 0 ? 'via Main Corridor Sidewalk' : idx === 1 ? 'via Residential Streets & Colony Lanes' : 'via Neighborhood Connector & By-lanes'
-          } else if (mode === 'cycling') {
-            viaRoads = idx === 0 ? 'via Main Road & Cycle Path' : idx === 1 ? 'via Quiet Residential Streets' : 'via Local Secondary Connector'
+          const geom = route.geometry.coordinates.map(([lng, lat]) => [lat, lng])
+          const rawSummary = route.legs?.[0]?.summary || ''
+          let viaRoads = ''
+          if (rawSummary) {
+            viaRoads = `via ${rawSummary}`
           } else {
-            viaRoads = idx === 0 ? 'via Main Corridor' : idx === 1 ? 'via Arterial Bypass' : 'via Secondary Connector'
+            const roadNames = []
+            for (const s of steps) {
+              const n = s.name?.trim()
+              if (n && n !== 'the road' && !roadNames.includes(n)) roadNames.push(n)
+            }
+            if (roadNames.length) {
+              viaRoads = `via ${roadNames.slice(0, 2).join(' / ')}`
+            } else if (mode === 'walking') {
+              viaRoads = idx === 0 ? 'via Main Corridor Sidewalk' : idx === 1 ? 'via Residential Streets & Colony Lanes' : 'via Neighborhood Connector & By-lanes'
+            } else if (mode === 'cycling') {
+              viaRoads = idx === 0 ? 'via Main Road & Cycle Path' : idx === 1 ? 'via Quiet Residential Streets' : 'via Local Secondary Connector'
+            } else {
+              viaRoads = idx === 0 ? 'via Main Corridor' : idx === 1 ? 'via Arterial Bypass' : 'via Secondary Connector'
+            }
           }
-        }
 
-        return {
-          index:          idx,
-          mode,
-          geometry:       route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
-          steps,
-          viaRoads,
-          trafficSections: [],
-          distance:       route.distance,
-          duration:       adjDur,
-          distanceKm:     (route.distance / 1000).toFixed(1),
-          durationMin:    Math.max(1, Math.round(adjDur / 60)),
-          trafficDelay:   0,
-          trafficDelayMin: 0,
-          liveEtaSeconds: adjDur,
-          arrivalTime:    null,
-        }
-      })
+          if (isFerryRoute({ steps, geometry: geom, viaRoads }, mode)) {
+            return null
+          }
+
+          const timing = calculateRealisticTravelTime(route.distance, mode, route.duration, 0)
+          return {
+            index:          idx,
+            mode,
+            geometry:       geom,
+            steps,
+            viaRoads,
+            trafficSections: [],
+            distance:       route.distance,
+            duration:       timing.duration,
+            distanceKm:     (route.distance / 1000).toFixed(1),
+            durationMin:    timing.durationMin,
+            trafficDelay:   0,
+            trafficDelayMin: 0,
+            liveEtaSeconds: timing.duration,
+            arrivalTime:    null,
+          }
+        })
+        .filter(Boolean)
     } catch (err) {
       lastErr = err
     }
@@ -309,25 +487,17 @@ async function fetchOSRMViaWaypoint(fromLat, fromLng, wpLat, wpLng, toLat, toLng
         continue
       }
 
-      let adjDur = r.duration
-      if (mode === 'walking') {
-        adjDur = Math.round(r.distance / 1.33)
-      } else if (mode === 'cycling') {
-        adjDur = Math.round(r.distance / 4.1)
-      } else if (mode === 'motorbike') {
-        adjDur = Math.round(r.distance / 8.9)
-      }
-
       const steps = (r.legs?.flatMap(l => l.steps || []) || []).map(s => ({
         name: s.name || '',
         instruction: s.maneuver?.instruction || formatOsrmStep(s),
         distance: s.distance,
-        duration: mode === 'walking' ? Math.round(s.distance / 1.33) : mode === 'cycling' ? Math.round(s.distance / 4.1) : mode === 'motorbike' ? Math.round(s.distance / 8.9) : s.duration,
+        duration: s.duration,
         type: s.maneuver?.type || 'straight',
         icon: getStepIcon(s.maneuver?.type + ' ' + (s.maneuver?.modifier || '')),
         point: s.maneuver?.location ? [s.maneuver.location[1], s.maneuver.location[0]] : null,
       }))
 
+      const geom = r.geometry.coordinates.map(([lng, lat]) => [lat, lng])
       const roadNames = []
       for (const s of steps) {
         const n = s.name?.trim()
@@ -345,19 +515,24 @@ async function fetchOSRMViaWaypoint(fromLat, fromLng, wpLat, wpLng, toLat, toLng
           : 'via Secondary Connector & Local Avenue'
       }
 
+      if (isFerryRoute({ steps, geometry: geom, viaRoads }, mode)) {
+        continue
+      }
+
+      const timing = calculateRealisticTravelTime(r.distance, mode, r.duration, 0)
       return {
         mode,
-        geometry: r.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
+        geometry: geom,
         steps,
         viaRoads,
         trafficSections: [],
         distance: r.distance,
-        duration: adjDur,
+        duration: timing.duration,
         distanceKm: (r.distance / 1000).toFixed(1),
-        durationMin: Math.max(1, Math.round(adjDur / 60)),
+        durationMin: timing.durationMin,
         trafficDelay: 0,
         trafficDelayMin: 0,
-        liveEtaSeconds: adjDur,
+        liveEtaSeconds: timing.duration,
         arrivalTime: null,
       }
     } catch {}
@@ -467,21 +642,11 @@ function synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, to
   }
   totalMeters = Math.round(totalMeters)
 
-  let durationSec = 0
-  if (isWalk) {
-    durationSec = Math.round(totalMeters / 1.33) // Real human walking pace: 4.8 km/h (1.33 m/s)
-  } else if (isBike) {
-    durationSec = Math.round(totalMeters / 4.16) // Real cycling pace: 15 km/h (4.16 m/s)
-  } else if (mode === 'motorbike') {
-    durationSec = Math.round(totalMeters / 8.9) // Real motorbike pace: 32 km/h (8.9 m/s)
-  } else {
-    // Proportional to physical road distance relative to base route
-    if (baseRoute?.duration && baseRoute?.distance) {
-      durationSec = Math.round(baseRoute.duration * (totalMeters / baseRoute.distance))
-    } else {
-      durationSec = Math.round(totalMeters / 9.72) // 35 km/h urban driving
-    }
-  }
+  const baseDuration = baseRoute?.duration && baseRoute?.distance
+    ? Math.round(baseRoute.duration * (totalMeters / baseRoute.distance))
+    : 0
+  const timing = calculateRealisticTravelTime(totalMeters, mode, baseDuration, baseRoute?.trafficDelay || 0)
+  const durationSec = timing.duration
 
   const baseRoadParts = (baseRoute?.viaRoads || '')
     .replace(/^via\s+/i, '')
@@ -592,11 +757,51 @@ function synthesizeStreetAlternativeRoute(baseRoute, fromLat, fromLng, toLat, to
  * Ensures exactly 3 distinct routes are returned, deduplicating any clones
  * and filtering out any absurd multi-hour detours.
  */
+
+/**
+ * Queries routes across the 3 Hooghly River bridges (Howrah Bridge, Vidyasagar Setu, Bally Bridge)
+ * when origin and destination are on opposite sides of the river.
+ */
+async function fetchBridgeCrossingRoutes(fromLat, fromLng, toLat, toLng, mode = 'driving') {
+  const travelMode = TOMTOM_MODE[mode] || 'car'
+  const key = getApiKey()
+  if (!key) return []
+
+  const promises = HOOGHLY_BRIDGES.map(async (bridge) => {
+    try {
+      const url = `${BASE_URL}/calculateRoute/${fromLat},${fromLng}:${bridge.waypoint[0]},${bridge.waypoint[1]}:${toLat},${toLng}/json?key=${key}&travelMode=${travelMode}&routeType=fastest&maxAlternatives=0&instructionsType=tagged&avoid=ferries&traffic=true&sectionType=traffic`
+      const res = await fetch(url, { signal: AbortSignal.timeout(4500) })
+      if (!res.ok) return null
+      const data = await res.json()
+      if (!data.routes?.length || data.detailedError) return null
+
+      const parsed = parseRoute(data.routes[0], 0, mode)
+      if (isFerryRoute(parsed, mode)) return null
+
+      // Ensure prominent bridge attribution in viaRoads
+      if (!parsed.viaRoads.toLowerCase().includes(bridge.name.toLowerCase().split(' ')[0])) {
+        parsed.viaRoads = `via ${bridge.name} & ${parsed.viaRoads.replace(/^via\s+/i, '')}`
+      }
+      return parsed
+    } catch {
+      return null
+    }
+  })
+
+  const results = await Promise.allSettled(promises)
+  return results
+    .filter(r => r.status === 'fulfilled' && r.value)
+    .map(r => r.value)
+}
+
 export async function ensureThreeDistinctRoutes(candidateRoutes = [], fromLat, fromLng, toLat, toLng, mode = 'driving') {
   const straightLineM = Math.hypot(toLat - fromLat, toLng - fromLng) * 111000
 
-  // 1. Identify baseline minimum duration and distance from valid candidates
-  const validCandidates = candidateRoutes.filter(r => r?.geometry?.length >= 2 && r.distance > 0 && r.duration > 0)
+  // 1. Strictly filter out any candidate route that uses a ferry when mode !== 'walking'
+  const nonFerryCandidates = candidateRoutes.filter(r => !isFerryRoute(r, mode))
+
+  // 2. Identify baseline minimum duration and distance from valid non-ferry candidates
+  const validCandidates = nonFerryCandidates.filter(r => r?.geometry?.length >= 2 && r.distance > 0 && r.duration > 0)
 
   let minDurationSec = Infinity
   let minDistanceM = Infinity
@@ -635,6 +840,20 @@ export async function ensureThreeDistinctRoutes(candidateRoutes = [], fromLat, f
   for (const r of saneCandidates) {
     const isDup = distinct.some(d => areRoutesDuplicate(d, r))
     if (!isDup) distinct.push(r)
+  }
+
+  // If crossing the Hooghly River in vehicular mode and fewer than 3 distinct routes, fetch via physical road bridges
+  if (mode !== 'walking' && isCrossingHooghlyRiver(fromLat, fromLng, toLat, toLng) && distinct.length < 3) {
+    try {
+      const bridgeRoutes = await fetchBridgeCrossingRoutes(fromLat, fromLng, toLat, toLng, mode)
+      for (const br of bridgeRoutes) {
+        if (!isFerryRoute(br, mode) && !distinct.some(d => areRoutesDuplicate(d, br))) {
+          distinct.push(br)
+        }
+      }
+    } catch (brErr) {
+      console.warn('[Routing] Bridge query error:', brErr.message)
+    }
   }
 
   // If already 3 or more distinct sane routes, return top 3
@@ -764,7 +983,7 @@ export async function getRoute(fromLat, fromLng, toLat, toLng, mode = 'driving')
     if (hasValidTomTomKey && candidateRoutes.length < 3) {
       const travelMode = TOMTOM_MODE[mode] || 'car'
       try {
-        const [resultA, resultB] = await Promise.allSettled([
+        const queries = [
           fetch(buildUrl(fromLat, fromLng, toLat, toLng, travelMode, 'fastest', 2), { signal: AbortSignal.timeout(4500) }).then(r => {
             if (!r.ok) throw new Error(`TomTom ${r.status}`)
             return r.json()
@@ -773,18 +992,29 @@ export async function getRoute(fromLat, fromLng, toLat, toLng, mode = 'driving')
             if (!r.ok) throw new Error(`TomTom ${r.status}`)
             return r.json()
           }),
-        ])
+        ]
 
-        if (resultA.status === 'fulfilled' && resultA.value.routes?.length) {
-          if (!resultA.value.detailedError && !resultA.value.errorText) {
-            for (const raw of resultA.value.routes) {
-              candidateRoutes.push(parseRoute(raw, candidateRoutes.length, mode))
-            }
+        // If crossing Hooghly River in vehicular mode, immediately include bridge corridor queries
+        if (mode !== 'walking' && isCrossingHooghlyRiver(fromLat, fromLng, toLat, toLng)) {
+          for (const b of HOOGHLY_BRIDGES) {
+            queries.push(
+              fetch(`${BASE_URL}/calculateRoute/${fromLat},${fromLng}:${b.waypoint[0]},${b.waypoint[1]}:${toLat},${toLng}/json?key=${getApiKey()}&travelMode=${travelMode}&routeType=fastest&maxAlternatives=0&instructionsType=tagged&avoid=ferries&traffic=true&sectionType=traffic`, { signal: AbortSignal.timeout(4500) })
+                .then(r => r.ok ? r.json() : null)
+                .catch(() => null)
+            )
           }
         }
-        if (resultB.status === 'fulfilled' && resultB.value.routes?.length && !resultB.value.detailedError) {
-          for (const raw of resultB.value.routes) {
-            candidateRoutes.push(parseRoute(raw, candidateRoutes.length, mode))
+
+        const queryResults = await Promise.allSettled(queries)
+
+        for (const res of queryResults) {
+          if (res.status === 'fulfilled' && res.value?.routes?.length && !res.value.detailedError) {
+            for (const raw of res.value.routes) {
+              const parsed = parseRoute(raw, candidateRoutes.length, mode)
+              if (!isFerryRoute(parsed, mode)) {
+                candidateRoutes.push(parsed)
+              }
+            }
           }
         }
       } catch (tomtomErr) {
@@ -975,20 +1205,34 @@ function parseRoute(route, index, mode) {
   const corridor = formatCorridorFromInstructions(route.guidance?.instructions || [], summary.lengthInMeters)
   const viaRoads = corridor || (index === 0 ? 'via Main Corridor' : index === 1 ? 'via Parallel Link' : 'via Secondary Avenue')
 
+  const timing = calculateRealisticTravelTime(
+    summary.lengthInMeters,
+    mode,
+    summary.travelTimeInSeconds,
+    summary.trafficDelayInSeconds || 0
+  )
+
+  const origDuration = summary.travelTimeInSeconds || 1
+  const scaleRatio = timing.duration / origDuration
+  const adjustedSteps = steps.map(s => ({
+    ...s,
+    duration: Math.max(1, Math.round((s.duration || 0) * scaleRatio)),
+  }))
+
   return {
     index,
     mode,
     geometry,
-    steps,
+    steps: adjustedSteps,
     viaRoads,
     trafficSections,        // used by buildTrafficSegments() in the UI
     distance:         summary.lengthInMeters,
-    duration:         summary.travelTimeInSeconds,
+    duration:         timing.duration,
     distanceKm:       (summary.lengthInMeters / 1000).toFixed(1),
-    durationMin:      Math.round(summary.travelTimeInSeconds / 60),
-    trafficDelay:     summary.trafficDelayInSeconds    || 0,
-    trafficDelayMin:  Math.round((summary.trafficDelayInSeconds || 0) / 60),
-    liveEtaSeconds:   summary.travelTimeInSeconds,
+    durationMin:      timing.durationMin,
+    trafficDelay:     timing.trafficDelay,
+    trafficDelayMin:  timing.trafficDelayMin,
+    liveEtaSeconds:   timing.duration,
     arrivalTime:      summary.arrivalTime || null,
   }
 }

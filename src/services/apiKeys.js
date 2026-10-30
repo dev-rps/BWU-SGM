@@ -1,5 +1,5 @@
 export const getOpenWeatherKey = () => {
-  const envVal = import.meta.env.VITE_OPENWEATHER_API_KEY
+  const envVal = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_OPENWEATHER_API_KEY) || (typeof process !== 'undefined' && process.env?.VITE_OPENWEATHER_API_KEY)
   if (!envVal || envVal === 'your_openweather_api_key_here') {
     console.warn('[Safety Guardian] VITE_OPENWEATHER_API_KEY is not configured.')
     return ''
@@ -8,7 +8,7 @@ export const getOpenWeatherKey = () => {
 }
 
 export const getTomTomKey = () => {
-  const envVal = import.meta.env.VITE_TOMTOM_API_KEY
+  const envVal = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_TOMTOM_API_KEY) || (typeof process !== 'undefined' && process.env?.VITE_TOMTOM_API_KEY)
   if (!envVal || envVal === 'your_tomtom_api_key_here') {
     console.warn('[Safety Guardian] VITE_TOMTOM_API_KEY is not configured.')
     return ''
@@ -17,7 +17,7 @@ export const getTomTomKey = () => {
 }
 
 export const getGeminiKey = () => {
-  const envVal = import.meta.env.VITE_GEMINI_API_KEY
+  const envVal = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY)
   if (!envVal || envVal === 'your_gemini_api_key_here') {
     console.warn('[Safety Guardian] VITE_GEMINI_API_KEY is not configured.')
     return ''

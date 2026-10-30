@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState, useMemo, useRef, Fragment } from 'react'
-import { MapContainer, TileLayer, Marker, Polyline, Popup, Circle, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Polyline, Popup, Circle, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../../context/store'
@@ -313,12 +313,12 @@ function createRouteMapBadge(route, isSelected, mode, index = 0) {
 }
 
 // ─── Map Camera Controller: Preserves User Zoom Level on Route Selection ──────
-function MapController({ selectedGeometry, startLoc, destLoc, fitTrigger, recenterTrigger, sheetState }) {
+function MapController({ selectedGeometry, startLoc, destLoc, fitTrigger, recenterTrigger, isMinimized }) {
   const map = useMap()
 
-  // Only fit bounds on initial route fetch or when user clicks the "fit route" button (fitTrigger > 0)
+  // Only fit bounds on initial route fetch, when user clicks the "fit route" button, or when minimize toggles
   useEffect(() => {
-    if (!map || !fitTrigger) return
+    if (!map) return
     let points = selectedGeometry && selectedGeometry.length > 1
       ? selectedGeometry
       : (destLoc && isFinite(destLoc.lat) && isFinite(destLoc.lng) && startLoc && isFinite(startLoc.lat) && isFinite(startLoc.lng)
@@ -329,10 +329,12 @@ function MapController({ selectedGeometry, startLoc, destLoc, fitTrigger, recent
       const validPoints = points.filter(p => Array.isArray(p) && p.length >= 2 && isFinite(p[0]) && isFinite(p[1]))
       if (validPoints.length >= 2) {
         try {
-          const bottomPad = sheetState === 'expanded' ? 240 : sheetState === 'half' ? 180 : 80
+          const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768
+          const bottomPad = isMinimized ? 60 : (isDesktop ? 40 : 200)
+          const leftPad = isMinimized ? 30 : (isDesktop ? 440 : 20)
           map.fitBounds(validPoints, {
-            paddingTopLeft: [15, 50],
-            paddingBottomRight: [15, bottomPad],
+            paddingTopLeft: [leftPad, 50],
+            paddingBottomRight: [20, bottomPad],
             maxZoom: 18,
             animate: true,
           })
@@ -341,7 +343,7 @@ function MapController({ selectedGeometry, startLoc, destLoc, fitTrigger, recent
         }
       }
     }
-  }, [fitTrigger, map])
+  }, [fitTrigger, isMinimized, map])
 
   useEffect(() => {
     if (!map || !recenterTrigger || !startLoc || !isFinite(startLoc.lat) || !isFinite(startLoc.lng)) return
@@ -837,7 +839,8 @@ export default function RouteSelectionPage() {
     setTransportModeState(m)
     if (setStoreTransportMode) setStoreTransportMode(m)
   }
-  const [sheetState,       setSheetState]       = useState('half') // 'collapsed' | 'half' | 'expanded'
+  const [isMinimized,      setIsMinimized]      = useState(false)  // Slide down on mobile, slide left on desktop
+  const touchStartYRef                          = useRef(null)     // Touch swipe detection for mobile minimize
   const [showDetails,      setShowDetails]      = useState(false)  // Details collapsed by default, opens only on user click
   const cardsTrackRef                           = useRef(null)     // Horizontal cards track ref
   const isProgrammaticScrollRef                 = useRef(false)    // Prevents jitter/jumping when clicking map badges
@@ -871,6 +874,33 @@ export default function RouteSelectionPage() {
   }
 
 
+
+  const handleTouchStart = (e) => {
+    if (e.touches && e.touches[0]) {
+      touchStartYRef.current = e.touches[0].clientY
+    }
+  }
+
+  const handleTouchEnd = (e) => {
+    if (touchStartYRef.current !== null && e.changedTouches && e.changedTouches[0]) {
+      const deltaY = e.changedTouches[0].clientY - touchStartYRef.current
+      if (deltaY > 40) {
+        setIsMinimized(true)
+      }
+    }
+    touchStartYRef.current = null
+  }
+
+  // Keyboard shortcut: Esc minimizes panel to inspect map
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !isMinimized && !isStartingNav) {
+        setIsMinimized(true)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isMinimized, isStartingNav])
 
   // ── Acquire Real Live GPS Location on Mount ───────────────────────────────
   useEffect(() => {
@@ -1500,7 +1530,7 @@ export default function RouteSelectionPage() {
             destLoc={destLoc}
             fitTrigger={fitTrigger}
             recenterTrigger={recenterTrigger}
-            sheetState={sheetState}
+            isMinimized={isMinimized}
           />
 
           {/* ════════ LAYERED ROUTE RENDERING WITH STRICT GREEN / BLUE / RED COLORS ════════ */}
@@ -1738,11 +1768,21 @@ export default function RouteSelectionPage() {
           })}
 
           {startLoc && isFinite(startLoc.lat) && isFinite(startLoc.lng) && (
-            <Marker position={[startLoc.lat, startLoc.lng]} icon={userPuckIcon} zIndexOffset={2000} />
+            <Marker position={[startLoc.lat, startLoc.lng]} icon={userPuckIcon} zIndexOffset={2000}>
+              <Popup><div className="text-xs font-bold text-slate-800">{startLocation?.name || 'Start Location'}</div></Popup>
+              <Tooltip direction="bottom" offset={[0, 15]}>
+                <span className="text-xs font-semibold text-slate-800">{startLocation?.name || 'Start'}</span>
+              </Tooltip>
+            </Marker>
           )}
           {destLoc && isFinite(destLoc.lat) && isFinite(destLoc.lng) && (
             <Marker position={[destLoc.lat, destLoc.lng]} icon={destIcon} zIndexOffset={2000}>
               <Popup><div className="text-xs font-bold text-slate-800">{destination?.name || 'Destination'}</div></Popup>
+              <Tooltip direction="top" offset={[0, -28]} permanent>
+                <div className="text-xs font-bold text-slate-900 max-w-[160px] truncate">
+                  {destination?.name || 'Destination'}
+                </div>
+              </Tooltip>
             </Marker>
           )}
         </MapContainer>
@@ -1845,79 +1885,157 @@ export default function RouteSelectionPage() {
         </button>
       </div>
 
-      {/* ════════ UNIFIED STITCH ROUTE PREVIEW & SELECTION PANEL ════════ */}
-      <div className={`absolute left-0 right-0 bottom-0 z-30 transition-all duration-300 ease-in-out md:w-[425px] md:left-4 md:right-auto md:bottom-4 md:top-4 md:flex md:flex-col md:max-h-[calc(100vh-32px)] pointer-events-auto ${
-        sheetState === 'collapsed' ? 'translate-y-[calc(100%-82px)] md:translate-y-0' :
-        sheetState === 'half' ? 'translate-y-0 md:translate-y-0' :
-        'translate-y-0 md:translate-y-0'
-      }`}>
-        <div className={`bg-white/95 backdrop-blur-md rounded-t-3xl md:rounded-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.18)] md:shadow-[0_8px_30px_rgba(0,0,0,0.18)] border border-slate-200/90 flex flex-col transition-all duration-300 overflow-hidden ${
-          sheetState === 'collapsed' ? 'h-[85px]' :
-          sheetState === 'half' ? 'h-auto max-h-[82vh] md:max-h-[calc(100vh-32px)]' :
-          'h-auto max-h-[92vh] md:max-h-[calc(100vh-32px)]'
-        }`}>
-          {/* Drag handle (Mobile only) */}
-          <div
-            className="flex flex-col items-center pt-2 pb-1 cursor-pointer select-none md:hidden"
-            onClick={() => setSheetState(s => s === 'collapsed' ? 'half' : s === 'half' ? 'collapsed' : 'half')}
-          >
-            <div className="w-10 h-1.5 rounded-full bg-slate-300 hover:bg-slate-400 transition-colors" />
+      {/* ════════ MINIMIZED STATE: CONFIRM DESTINATION BADGE ════════ */}
+      {isMinimized && destination?.name && (
+        <div className="absolute top-3 left-3 sm:left-auto md:left-52 md:top-4 z-20 pointer-events-auto flex items-center gap-2 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg border border-slate-200/90 max-w-[calc(100vw-180px)] sm:max-w-md animate-fade-in">
+          <div className="w-2.5 h-2.5 rotate-45 bg-rose-500 ring-2 ring-rose-200 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Confirming Destination</p>
+            <p className="text-xs font-bold text-slate-800 truncate" title={destination.name}>
+              {destination.name}
+            </p>
           </div>
+        </div>
+      )}
 
-          {/* STATE 1: COLLAPSED PEEK BAR (Mobile only) */}
-          {sheetState === 'collapsed' && selectedRoute && (
-            <div className="px-4 py-1.5 flex items-center justify-between gap-3 md:hidden">
-              <div
-                className="flex-1 min-w-0 cursor-pointer"
-                onClick={() => setSheetState('half')}
-              >
+      {/* ════════ MINIMIZED STATE: DESKTOP FLOATING RESTORE BUTTON (Left) ════════ */}
+      {isMinimized && (
+        <button
+          type="button"
+          onClick={() => setIsMinimized(false)}
+          className="hidden md:flex items-center gap-3 px-4 py-2.5 bg-white/95 backdrop-blur-md text-slate-800 rounded-2xl shadow-xl border border-slate-200/90 hover:bg-white hover:shadow-2xl hover:border-blue-300 active:scale-95 transition-all z-30 cursor-pointer font-bold text-xs group animate-fade-in absolute top-4 left-4 pointer-events-auto"
+          title="Slide route preview panel back in"
+          aria-label="Restore route preview panel"
+        >
+          <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xs">
+            <span className="material-symbols-outlined text-[19px] transition-transform group-hover:translate-x-0.5">chevron_right</span>
+          </div>
+          <div className="text-left pr-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-900 font-black text-xs">Show Routes</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+            {selectedRoute && (
+              <p className="text-[10px] text-slate-500 font-semibold truncate max-w-[200px]">
+                {selectedRoute.rankLabel} · {fmtDuration(selectedRoute.durationMin)} · <strong className="text-emerald-600">{selectedRoute.safetyScore || 75}/100</strong>
+              </p>
+            )}
+          </div>
+        </button>
+      )}
+
+      {/* ════════ MINIMIZED STATE: MOBILE FLOATING RESTORE PILL (Bottom) ════════ */}
+      {isMinimized && (
+        <div className="md:hidden absolute bottom-5 left-0 right-0 flex justify-center z-30 pointer-events-none px-4 animate-slide-up">
+          <button
+            type="button"
+            onClick={() => setIsMinimized(false)}
+            className="pointer-events-auto flex items-center justify-between gap-3 w-full max-w-[380px] px-4 py-3 bg-slate-900/95 text-white rounded-2xl shadow-2xl backdrop-blur-md border border-slate-700/60 active:scale-98 transition-all cursor-pointer font-bold text-xs"
+            aria-label="Restore route preview sheet"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[20px]">keyboard_arrow_up</span>
+              </div>
+              <div className="text-left min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getRouteColor(selectedRoute, selectedRouteIdx) }} />
-                  <span className="text-xs font-black text-slate-900 truncate">
-                    {selectedRoute.rankLabel} · {fmtDuration(selectedRoute.durationMin)}
-                  </span>
-                  <span className="text-[9px] font-bold text-slate-500">
-                    {safeNum(selectedRoute.distanceKm, 0) > 0 ? `(${safeNum(selectedRoute.distanceKm, 0).toFixed(1)} km)` : ''}
-                  </span>
+                  <span className="text-white font-extrabold text-xs truncate">Show Route Preview</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 </div>
-                <p className="text-[8.5px] text-slate-400 font-medium truncate mt-0.5">
-                  {selectedRoute.viaRoads} · <strong className="text-emerald-700 font-black inline-flex items-center gap-0.5"><span className="material-symbols-outlined text-[12px]">shield</span>{selectedRoute.safetyScore || 75}/100</strong>
+                <p className="text-[11px] text-slate-300 font-medium truncate">
+                  {selectedRoute ? `${selectedRoute.rankLabel} · ${fmtDuration(selectedRoute.durationMin)}` : 'Tap to expand routes'}
                 </p>
               </div>
-
-              <button
-                onClick={handleStartJourney}
-                className="h-9 px-4 rounded-xl bg-[#1B4332] hover:bg-[#143427] text-white font-black text-xs shadow-md active:scale-95 transition-all flex items-center gap-1 flex-shrink-0"
-              >
-                <span>Start</span>
-                <span className="material-symbols-outlined text-[14px]">navigation</span>
-              </button>
             </div>
-          )}
 
-          {/* UNIFIED STITCH CONTENT: Attached seamlessly with ZERO GAP & PERFECT ALIGNMENT */}
-          {(sheetState !== 'collapsed' || (typeof window !== 'undefined' && window.innerWidth >= 768)) && (
-            <div className="px-3.5 pb-3.5 pt-1 flex flex-col overflow-y-auto max-h-[82vh] md:max-h-[calc(100vh-32px)] custom-scrollbar gap-2.5">
-              
-              {/* 1. STITCH MAIN HEADER: Back + Preview Routes + Safety Active Chip */}
-              <div className="flex items-center justify-between gap-2 flex-shrink-0 pt-0.5">
-                <div className="flex items-center gap-2.5">
-                  <button
-                    onClick={() => navigate(-1)}
-                    aria-label="Go Back"
-                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 active:scale-95 transition-all flex items-center justify-center text-slate-700 flex-shrink-0 cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                  </button>
-                  <h1 className="text-base font-bold tracking-tight text-slate-900 truncate">Preview Routes</h1>
-                </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {selectedRoute && (
+                <span className="text-[10.5px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-black">
+                  {selectedRoute.safetyScore || 75}/100
+                </span>
+              )}
+              <span className="text-xs font-black text-blue-400 flex items-center gap-0.5">
+                <span>Expand</span>
+                <span className="material-symbols-outlined text-[14px]">arrow_upward</span>
+              </span>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* ════════ UNIFIED STITCH ROUTE PREVIEW & SELECTION PANEL ════════ */}
+      <div className={`absolute left-0 right-0 bottom-0 z-30 transition-transform duration-300 ease-in-out md:w-[425px] md:left-4 md:right-auto md:bottom-4 md:top-4 md:flex md:flex-col md:max-h-[calc(100vh-32px)] ${
+        isMinimized
+          ? 'translate-y-full md:translate-y-0 md:-translate-x-[calc(100%+32px)] pointer-events-none'
+          : 'translate-y-0 md:translate-x-0 md:translate-y-0 pointer-events-auto'
+      }`}>
+        {/* Desktop Slide Left Button on outer edge */}
+        <button
+          type="button"
+          onClick={() => setIsMinimized(true)}
+          className="hidden md:flex absolute -right-3.5 top-12 w-7 h-12 bg-white border border-slate-200/90 shadow-md rounded-r-xl items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-slate-50 active:scale-95 transition-all cursor-pointer z-40 group"
+          title="Slide left to view map"
+          aria-label="Slide left to view map"
+        >
+          <span className="material-symbols-outlined text-[18px] transition-transform group-hover:-translate-x-0.5">chevron_left</span>
+        </button>
+
+        <div className="bg-white/95 backdrop-blur-md rounded-t-3xl md:rounded-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.18)] md:shadow-[0_8px_30px_rgba(0,0,0,0.18)] border border-slate-200/90 flex flex-col overflow-hidden max-h-[85vh] md:max-h-[calc(100vh-32px)]">
+          {/* Drag handle (Mobile only - tap or swipe down to view map) */}
+          <div
+            className="flex flex-col items-center pt-2.5 pb-1 cursor-pointer select-none md:hidden group"
+            onClick={() => setIsMinimized(true)}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            title="Slide down to view map"
+          >
+            <div className="w-10 h-1.5 rounded-full bg-slate-300 group-hover:bg-slate-400 group-active:bg-slate-500 transition-colors" />
+            <div className="flex items-center gap-0.5 text-[9.5px] text-slate-400 font-bold mt-1">
+              <span>Slide down to view map</span>
+              <span className="material-symbols-outlined text-[13px]">expand_more</span>
+            </div>
+          </div>
+
+          <div
+            className="px-3.5 pb-3.5 pt-1 flex flex-col overflow-y-auto max-h-[82vh] md:max-h-[calc(100vh-32px)] custom-scrollbar gap-2.5"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* 1. STITCH MAIN HEADER: Back + Preview Routes + View Map / Minimize + Safety Active Chip */}
+            <div className="flex items-center justify-between gap-2 flex-shrink-0 pt-0.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <button
+                  onClick={() => navigate(-1)}
+                  aria-label="Go Back"
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 active:scale-95 transition-all flex items-center justify-center text-slate-700 flex-shrink-0 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                </button>
+                <h1 className="text-base font-bold tracking-tight text-slate-900 truncate">Preview Routes</h1>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* Minimize / View Map Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsMinimized(true)}
+                  title="Minimize panel to view map (Slide down on mobile, left on desktop)"
+                  aria-label="Minimize panel to confirm location on map"
+                  className="h-7 px-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 active:scale-95 transition-all flex items-center gap-1 text-[11px] font-bold cursor-pointer border border-blue-200/80 shadow-2xs group"
+                >
+                  <span className="material-symbols-outlined text-[15px] md:hidden transition-transform group-hover:translate-y-0.5">keyboard_arrow_down</span>
+                  <span className="material-symbols-outlined text-[15px] hidden md:inline-block transition-transform group-hover:-translate-x-0.5">chevron_left</span>
+                  <span>View Map</span>
+                </button>
 
                 {/* Live Safety Active Status Chip */}
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold flex-shrink-0">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold flex-shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Safety Active</span>
+                  <span className="hidden sm:inline">Safety Active</span>
+                  <span className="sm:hidden">Active</span>
                 </div>
               </div>
+            </div>
 
               {/* 2. STITCH ORIGIN & DESTINATION INPUT CARD (With connecting line and swap button) */}
               <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-2 relative shadow-xs flex-shrink-0">
@@ -2255,7 +2373,6 @@ export default function RouteSelectionPage() {
                 <span>Start Navigation</span>
               </button>
             </div>
-          )}
         </div>
       </div>
       {/* Cinematic Start Navigation Launch Overlay */}
