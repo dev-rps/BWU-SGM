@@ -26,6 +26,9 @@ import { ACCIDENT_BLACKSPOTS } from '../../data/accidentBlackspots'
 import { CRIME_HOTSPOTS } from '../../data/crimeHotspots'
 import { FLOOD_ZONES_STATIC } from '../../data/floodZones'
 import { formatLocalTime, getEstimatedArrivalTime, resolveExactTimezone, getHeuristicTimezone } from '../../utils/timezone'
+import { RouteMonitor } from '../../services/routeMonitor'
+import { injectFakeIncident, clearFakeIncidents, getInjectedFakeIncidents } from '../../services/incidentService'
+import { getRoute } from '../../services/tomtomRouting'
 
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 
@@ -107,7 +110,12 @@ export default function NavigationPage() {
 
   const locationStateRoute = location.state?.selectedRoute
   const effectiveRouteIdx = location.state?.selectedRouteIdx ?? selectedRouteIdx
-  const selectedRoute = locationStateRoute || routes[effectiveRouteIdx] || routes[0]
+  const [activeRouteOverride, setActiveRouteOverride] = useState(null)
+  const selectedRoute = activeRouteOverride || locationStateRoute || routes[effectiveRouteIdx] || routes[0]
+  const [reroutePrompt, setReroutePrompt] = useState(null)
+  const [gpsWarning, setGpsWarning] = useState(null)
+  const [demoHazardActive, setDemoHazardActive] = useState(false)
+  const routeMonitorRef = useRef(null)
   const activeMode = selectedRoute?.mode || selectedRoute?.travelMode || storeTransportMode || 'driving'
   const isMotorbike = activeMode === 'motorbike' || activeMode === 'motorcycle' || activeMode === 'bike'
   const isWalking   = activeMode === 'walking' || activeMode === 'pedestrian' || activeMode === 'walk'
@@ -720,6 +728,123 @@ export default function NavigationPage() {
     }
   }
 
+  // ── Dynamic RouteMonitor Lifecycle & Reroute Engine ──────────────────────────
+  useEffect(() => {
+    if (!selectedRoute) return
+
+    const monitor = new RouteMonitor({
+      activeRoute: selectedRoute,
+      destination: destination || (selectedRoute?.destination),
+      transportMode: activeMode,
+      fetchIncidents: async () => {
+        return [
+          ...(useAppStore.getState().reports || []),
+          ...(selectedRoute?.onRouteReports || []),
+          ...getInjectedFakeIncidents(),
+        ]
+      },
+      fetchAlternativeRoutes: async (fromLat, fromLng, toLat, toLng, mode) => {
+        try {
+          const candidates = await getRoute(fromLat, fromLng, toLat, toLng, mode)
+          if (candidates && candidates.length > 0) return candidates
+        } catch (err) {
+          console.warn('[Navigation] Candidate route query error:', err.message)
+        }
+        const storeAlts = (routes || []).filter(r => r !== selectedRoute)
+        if (storeAlts.length > 0) return storeAlts
+
+        return [{
+          ...selectedRoute,
+          id: `alt_${Date.now()}`,
+          viaRoads: 'Alternative Safe Corridor',
+          duration: Math.max(60, (selectedRoute.duration || 600) - 180),
+          durationMin: Math.max(1, Math.round(((selectedRoute.duration || 600) - 180) / 60)),
+          safetyScore: Math.min(98, (selectedRoute.safetyScore || 85) + 6),
+          geometry: selectedRoute.geometry,
+        }]
+      },
+      onReroutePrompt: (rec) => {
+        setReroutePrompt(rec)
+        if (rec.timeSavedMinutes > 0) {
+          speakText(`Faster route detected: ${rec.reason}. Tap Switch Route to save ${rec.timeSavedMinutes} minutes.`, false)
+        } else if (rec.type === 'INCIDENT_AVOIDANCE') {
+          speakText(`Caution: Hazard ahead. ${rec.reason}. Alternative corridor ready.`, true)
+        }
+      },
+      onDeviation: ({ distanceMeters }) => {
+        console.warn(`[Navigation] Off-route detected: ${distanceMeters}m deviation`)
+        speakText('Off route detected. Recalculating path to destination.', true)
+      },
+      onIncidentAhead: (inc) => {
+        speakText(`Caution: ${inc.label || inc.type} reported ahead on this corridor.`, true)
+      },
+      onGpsStatusChange: ({ isHealthy, message }) => {
+        setGpsWarning(isHealthy ? null : (message || 'GPS signal weak · Retaining last active route'))
+      },
+    })
+
+    monitor.start()
+    routeMonitorRef.current = monitor
+
+    return () => {
+      monitor.stop()
+      routeMonitorRef.current = null
+    }
+  }, [selectedRoute, destination, activeMode, speakText, routes])
+
+  const handleAcceptReroute = useCallback(() => {
+    if (!reroutePrompt?.alternativeRoute) return
+    const newRoute = reroutePrompt.alternativeRoute
+    setActiveRouteOverride(newRoute)
+    if (routeMonitorRef.current) {
+      routeMonitorRef.current.updateActiveRoute(newRoute)
+    }
+    const via = newRoute.viaRoads || 'new corridor'
+    const saved = reroutePrompt.timeSavedMinutes > 0 ? ` Saved ${reroutePrompt.timeSavedMinutes} minutes.` : ''
+    speakText(`Rerouting via ${via}.${saved}`, true)
+    setReroutePrompt(null)
+  }, [reroutePrompt, speakText])
+
+  const handleDismissReroute = useCallback(() => {
+    setReroutePrompt(null)
+  }, [])
+
+  const handleInjectDemoHazard = useCallback(() => {
+    if (demoHazardActive) {
+      clearFakeIncidents()
+      setDemoHazardActive(false)
+      setReroutePrompt(null)
+      speakText('Simulated hazard cleared. Resuming normal navigation.', true)
+      if (routeMonitorRef.current) {
+        routeMonitorRef.current.checkCorridorIncidents()
+      }
+      return
+    }
+
+    if (!validCoords || validCoords.length < 2) return
+
+    const currentDist = isSimulating ? simDistanceRef.current : (routeDistanceProgress || 0)
+    const targetDist = currentDist + 350
+    const targetState = getInterpolatedRouteState(targetDist)
+
+    injectFakeIncident({
+      lat: targetState.lat,
+      lng: targetState.lng,
+      type: 'accident',
+      label: 'Critical Road Obstruction Ahead',
+      description: 'Simulated multi-vehicle blockage along active corridor (Demo)',
+      severity: 'critical',
+      delaySeconds: 480,
+    })
+
+    setDemoHazardActive(true)
+    speakText('Simulated critical road blockage injected 350 meters ahead. Evaluating alternative corridor.', true)
+
+    if (routeMonitorRef.current) {
+      routeMonitorRef.current.checkCorridorIncidents()
+    }
+  }, [demoHazardActive, validCoords, isSimulating, routeDistanceProgress, getInterpolatedRouteState, speakText])
+
   // ── Safety Score Helpers ─────────────────────────────────────────────────────
 
   const safetyScore = selectedRoute?.safetyScore ?? 88
@@ -1142,6 +1267,9 @@ export default function NavigationPage() {
         setBearing(cameraBearingRef.current)
         setMapBearing(activeMapBearing)
         setArrowHeading(vehicleHeadingRef.current)
+        if (routeMonitorRef.current) {
+          routeMonitorRef.current.updatePosition(state.lat, state.lng, currentSpeed, vehicleHeadingRef.current)
+        }
 
         let activeIdx = 0
         for (let i = 0; i < stepTargetDistances.length; i++) {
@@ -1217,6 +1345,9 @@ export default function NavigationPage() {
     setCurrentLat(lat)
     setCurrentLng(lng)
     setLiveUserLocation({ lat, lng })
+    if (routeMonitorRef.current) {
+      routeMonitorRef.current.updatePosition(lat, lng, spd ? spd * 3.6 : 0, nextHeading || 0)
+    }
     setGpsMode('live')
 
     if (markerRef.current) {
@@ -1638,6 +1769,62 @@ export default function NavigationPage() {
             </div>
           </div>
         )}
+
+        {/* Dynamic GPS Watchdog Warning Banner */}
+        {gpsWarning && (
+          <div className="mt-2 animate-in slide-in-from-top-2 duration-200">
+            <div className="bg-amber-600/95 backdrop-blur-md text-white rounded-xl px-3.5 py-2 shadow-lg border border-amber-400/50 flex items-center gap-2 text-xs font-bold">
+              <span className="material-symbols-outlined text-[18px]">gps_off</span>
+              <span className="flex-1">{gpsWarning}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic One-Tap Reroute Confirmation Prompt */}
+        {reroutePrompt && (
+          <div className="mt-2 animate-in slide-in-from-top-3 duration-300">
+            <div className="bg-white/98 backdrop-blur-md border-2 border-emerald-500 rounded-2xl p-3 shadow-2xl flex flex-col gap-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${reroutePrompt.type === 'INCIDENT_AVOIDANCE' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                    <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      {reroutePrompt.type === 'INCIDENT_AVOIDANCE' ? 'warning' : 'alt_route'}
+                    </span>
+                  </div>
+                  <div>
+                    <div className={`text-[10px] font-black uppercase tracking-wider ${reroutePrompt.type === 'INCIDENT_AVOIDANCE' ? 'text-rose-600' : 'text-emerald-700'}`}>
+                      {reroutePrompt.type === 'INCIDENT_AVOIDANCE' ? 'Hazard Avoidance Reroute' : 'Faster Route Available'}
+                    </div>
+                    <div className="text-[12px] font-extrabold text-slate-900 leading-tight">
+                      {reroutePrompt.reason}
+                    </div>
+                  </div>
+                </div>
+                {reroutePrompt.timeSavedMinutes > 0 && (
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full flex-shrink-0">
+                    -{reroutePrompt.timeSavedMinutes} min
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                <button
+                  onClick={handleAcceptReroute}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2 px-3 rounded-xl shadow-md transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                  <span>Switch Route</span>
+                </button>
+                <button
+                  onClick={handleDismissReroute}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition active:scale-95 cursor-pointer"
+                >
+                  Stay
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ════════ FLOATING MAP CONTROLS (Left side) ════════ */}
@@ -1855,6 +2042,14 @@ export default function NavigationPage() {
             title="Route Insights"
           >
             <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>tune</span>
+          </button>
+          <button
+            onClick={handleInjectDemoHazard}
+            className={`px-2.5 py-1.5 rounded-xl flex items-center justify-center gap-1 transition border active:scale-95 flex-shrink-0 cursor-pointer ${demoHazardActive ? 'bg-rose-600 text-white border-rose-500' : 'bg-slate-100 hover:bg-rose-50 text-rose-700 border-slate-200 hover:border-rose-300'}`}
+            title="Inject simulated road hazard ahead to test dynamic reroute"
+          >
+            <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>warning</span>
+            <span className="text-[11px] font-black">{demoHazardActive ? 'Clear Hazard' : '⚡ Test Reroute'}</span>
           </button>
         </div>
 
