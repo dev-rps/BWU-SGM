@@ -846,10 +846,10 @@ export default function RouteSelectionPage() {
   const isProgrammaticScrollRef                 = useRef(false)    // Prevents jitter/jumping when clicking map badges
   const scrollTimeoutRef                        = useRef(null)     // Smooth debounce for card carousel gestures
   const [expandedCardIdx,  setExpandedCardIdx]  = useState(null)   // per-card safety breakdown toggle
-  const [showCrimes,       setShowCrimes]       = useState(true)
-  const [showFloodRisk,    setShowFloodRisk]    = useState(true)
-  const [showDisasters,    setShowDisasters]    = useState(true)
-  const [showAccidents,    setShowAccidents]    = useState(true)
+  const [showCrimes,       setShowCrimes]       = useState(false)
+  const [showFloodRisk,    setShowFloodRisk]    = useState(false)
+  const [showDisasters,    setShowDisasters]    = useState(false)
+  const [showAccidents,    setShowAccidents]    = useState(false)
   const [showTraffic,      setShowTraffic]      = useState(false)
   const [fitTrigger,       setFitTrigger]       = useState(0)
   const [recenterTrigger,  setRecenterTrigger]  = useState(0)
@@ -1596,117 +1596,7 @@ export default function RouteSelectionPage() {
                     lineJoin: 'round',
                   }}
                 />
-                {(selectedRoute.safetySegments || []).map((seg, sIdx) => {
-                  const validPoints = (seg.points || []).filter(p => Array.isArray(p) && p.length >= 2 && isFinite(p[0]) && isFinite(p[1]))
-                  if (validPoints.length < 2) return null
-                  return (
-                    <Polyline
-                      key={`sel-seg-${selectedRouteIdx}-${sIdx}`}
-                      positions={validPoints}
-                      pathOptions={{
-                        color: seg.color,
-                        weight: 5.5,
-                        opacity: 0.95,
-                        lineCap: 'round',
-                        lineJoin: 'round',
-                      }}
-                    />
-                  )
-                })}
 
-                {/* On-Route Accident Blackspot Overlap Markers */}
-                {(selectedRoute?.onRouteAccidents || []).map((acc, ai) => {
-                  const lat = parseFloat(acc.lat ?? acc.latitude)
-                  const lng = parseFloat(acc.lng ?? acc.longitude ?? acc.lon)
-                  if (!isFinite(lat) || !isFinite(lng)) return null
-                  return (
-                    <Marker
-                      key={`acc-overlap-${acc.id || ai}`}
-                      position={[lat, lng]}
-                      icon={L.divIcon({
-                        className: 'hazard-overlap-marker',
-                        html: `<div style="
-                          background: #B91C1C;
-                          color: white;
-                          border: 2px solid white;
-                          border-radius: 9999px;
-                          padding: 3px 8px;
-                          font-size: 8.5px;
-                          font-weight: 900;
-                          box-shadow: 0 4px 14px rgba(185,28,28,0.6);
-                          display: flex;
-                          align-items: center;
-                          gap: 3px;
-                          white-space: nowrap;
-                        ">
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="white"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
-                          <span>${acc.area || 'Accident Blackspot'}</span>
-                        </div>`,
-                        iconSize: [125, 22],
-                        iconAnchor: [62, 11],
-                      })}
-                    >
-                      <Popup>
-                        <div style={{ minWidth: 175 }}>
-                          <p style={{ fontWeight: 900, fontSize: 11, color: '#B91C1C', display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 12 }}>warning</span>
-                            <span>Active Route Overlap</span>
-                          </p>
-                          <p style={{ fontSize: 10, fontWeight: 800, color: '#1e293b', marginTop: 2 }}>{acc.area || acc.title || 'Accident Blackspot'}</p>
-                          <p style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Distance to route: {acc._dist}m · Penalty: -{acc._penalty} pts</p>
-                          <p style={{ fontSize: 8.5, color: '#64748b', marginTop: 2 }}>High-risk collision zone · Maintain safe distance</p>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  )
-                })}
-
-                {/* On-Route Crime Hotspot Overlap Markers */}
-                {(selectedRoute?.onRouteCrimes || []).map((crime, ci) => {
-                  const lat = parseFloat(crime.lat ?? crime.latitude)
-                  const lng = parseFloat(crime.lng ?? crime.longitude ?? crime.lon)
-                  if (!isFinite(lat) || !isFinite(lng)) return null
-                  return (
-                    <Marker
-                      key={`crime-overlap-${crime.id || ci}`}
-                      position={[lat, lng]}
-                      icon={L.divIcon({
-                        className: 'crime-overlap-marker',
-                        html: `<div style="
-                          background: #E11D48;
-                          color: white;
-                          border: 2px solid white;
-                          border-radius: 9999px;
-                          padding: 3px 8px;
-                          font-size: 8.5px;
-                          font-weight: 900;
-                          box-shadow: 0 4px 14px rgba(225,29,72,0.6);
-                          display: flex;
-                          align-items: center;
-                          gap: 3px;
-                          white-space: nowrap;
-                        ">
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="white"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
-                          <span>${crime.area || 'Crime Hotspot'}</span>
-                        </div>`,
-                        iconSize: [125, 22],
-                        iconAnchor: [62, 11],
-                      })}
-                    >
-                      <Popup>
-                        <div style={{ minWidth: 175 }}>
-                          <p style={{ fontWeight: 900, fontSize: 11, color: '#E11D48', display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 12 }}>shield</span>
-                            <span>Active Route Overlap</span>
-                          </p>
-                          <p style={{ fontSize: 10, fontWeight: 800, color: '#1e293b', marginTop: 2 }}>{crime.area || crime.title || 'Crime Caution Area'}</p>
-                          <p style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Distance to route: {crime._dist}m · Penalty: -{crime._penalty} pts</p>
-                          <p style={{ fontSize: 8.5, color: '#64748b', marginTop: 2 }}>Low light or theft risk · Stay on primary lanes</p>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  )
-                })}
               </Fragment>
             )
           })()}
